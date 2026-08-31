@@ -1,0 +1,5455 @@
+{
+  "inventory": [
+    {
+      "id": 1,
+      "estado": "RESERVADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 2,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 3,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 4,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 5,
+      "estado": "REPARACION",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 6,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 7,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 8,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 9,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 10,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 11,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 12,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 13,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 14,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 15,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 16,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 17,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 18,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 19,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": {
+        "activo": null,
+        "marca": null
+      },
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 20,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 21,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 22,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 23,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 24,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 25,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 26,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 27,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 28,
+      "estado": "INCOMPLETO",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": false,
+      "monitor": null,
+      "hub": true,
+      "observaciones": "FALTA MONITOR, HEADSET DAÑADO 17/08/26",
+      "ultimoMovimiento": "30/07/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 29,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "SE TRASLADA POR FILTRACIONES",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": 111,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 30,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "SE TRASLADA POR FILTRACIONES",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": 112,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 31,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "SE TRASLADA POR FILTRACIONES",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": 113,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 32,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "SE TRASLADA POR FILTRACIONES",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": 84,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 33,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "SE TRASLADA POR FILTRACIONES",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": 93,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 34,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 35,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 36,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SIN EQUIPO",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 37,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": "30/07/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 38,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 39,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 40,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 41,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 42,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 43,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 44,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 45,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 46,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": "30/07/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 47,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": "30/07/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 48,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 49,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 50,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 51,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 52,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 53,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 54,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 55,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 56,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 57,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 58,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 59,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 60,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 61,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 62,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 63,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 64,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 65,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 66,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 67,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 68,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 69,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "POR FILTRACION",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 70,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 71,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 72,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 73,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 74,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 75,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 76,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 77,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 78,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 79,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 80,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 81,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SE TRALADA POR FILTRACIONES ",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 82,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 83,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 84,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": false,
+      "observaciones": " DIADEMA DE HEADSET DAÑADO; SE TRASLADA LA DEL 137 EL 17/08/26",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 85,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 86,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 87,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 88,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 89,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 90,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 91,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 92,
+      "estado": "DISPONIBLE",
+      "marca": "HP",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "HP"
+      },
+      "hub": true,
+      "observaciones": "SE TRALADA POR FILTRACIONES ",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": 81,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 93,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SE TRALADA POR FILTRACIONES ",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 94,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 95,
+      "estado": "DISPONIBLE",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 96,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 97,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 98,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 99,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 100,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 101,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 102,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 103,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 104,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 105,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 106,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 107,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 108,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": false,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 109,
+      "estado": "DISPONIBLE",
+      "marca": "HP",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "HP"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 110,
+      "estado": "DISPONIBLE",
+      "marca": "HP",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "HP"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 111,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SE TRALADA POR FILTRACIONES ",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 112,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SE TRALADA POR FILTRACIONES ",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 113,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "SE TRALADA POR FILTRACIONES ",
+      "ultimoMovimiento": "03/08/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 114,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 115,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 116,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 117,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 118,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 119,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 120,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 121,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 122,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 123,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 124,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 125,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 126,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 127,
+      "estado": "DISPONIBLE",
+      "marca": "HP",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "HP"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 128,
+      "estado": "DISPONIBLE",
+      "marca": "HP",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "HP"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 129,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 130,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 131,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "POR FILTRACION",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 132,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "EQUIPO EN MANTENIMIENTO PC, MOUSE, HEADSET  ENTREGADOS A IT 17/07/26, PC MARCA DELL",
+      "ultimoMovimiento": "29/07/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 133,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 134,
+      "estado": "DISPONIBLE",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 135,
+      "estado": "RESERVADO",
+      "marca": "DELL",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "DELL"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 136,
+      "estado": "RESERVADO",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 137,
+      "estado": "RESERVADO",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": false,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "SE TRASLDADO HEADSET A ESPACIO 84  17/08/26",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 138,
+      "estado": "RESERVADO",
+      "marca": "LENOVO",
+      "modelo": null,
+      "activoPc": null,
+      "mouse": true,
+      "headset": true,
+      "monitor": {
+        "activo": null,
+        "marca": "LENOVO"
+      },
+      "hub": true,
+      "observaciones": "",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 139,
+      "estado": "INHABILITADO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "POR FILTRACIONES",
+      "ultimoMovimiento": null,
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    },
+    {
+      "id": 140,
+      "estado": "VACIO",
+      "marca": null,
+      "modelo": null,
+      "activoPc": null,
+      "mouse": false,
+      "headset": false,
+      "monitor": null,
+      "hub": false,
+      "observaciones": "COMPLEMENTO DE ESPACIOS",
+      "ultimoMovimiento": "30/07/2026",
+      "ubicacionAnterior": null,
+      "categoria": "",
+      "doctor": null,
+      "horario": null
+    }
+  ],
+  "movements": [
+    {
+      "id": "mov-1",
+      "fecha": "24/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 125,
+      "accion": "Reemplazo",
+      "activo": null,
+      "origen": "BODEGA",
+      "destino": "125",
+      "falla": "FALLA EN SCROLL",
+      "obs": "SE SUSTITUYEN UNIDADES POR UNA NUEVA DE RESPALDO"
+    },
+    {
+      "id": "mov-2",
+      "fecha": "24/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 126,
+      "accion": "Reemplazo",
+      "activo": null,
+      "origen": "BODEGA",
+      "destino": "125",
+      "falla": "FALLA EN SCROLL",
+      "obs": "SE SUSTITUYEN UNIDADES POR UNA NUEVA DE RESPALDO"
+    },
+    {
+      "id": "mov-3",
+      "fecha": "25/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 84,
+      "accion": "Cambio",
+      "activo": null,
+      "origen": "84",
+      "destino": "140",
+      "falla": "FALLA EN SCROLL",
+      "obs": "FUNCIONAN POSTERIOR A PERIODO DE INACTIVIDAD"
+    },
+    {
+      "id": "mov-4",
+      "fecha": "26/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 66,
+      "accion": "Cambio",
+      "activo": null,
+      "origen": "66",
+      "destino": "138",
+      "falla": "FALLA EN SCROLL",
+      "obs": "FUNCIONAN POSTERIOR A PERIODO DE INACTIVIDAD"
+    },
+    {
+      "id": "mov-5",
+      "fecha": "26/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 75,
+      "accion": "Cambio",
+      "activo": null,
+      "origen": "75",
+      "destino": "137",
+      "falla": "FALLA EN SCROLL",
+      "obs": "FUNCIONAN POSTERIOR A PERIODO DE INACTIVIDAD"
+    },
+    {
+      "id": "mov-6",
+      "fecha": "26/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 70,
+      "accion": "Cambio",
+      "activo": null,
+      "origen": "70",
+      "destino": "135",
+      "falla": "FALLA EN SCROLL",
+      "obs": "FUNCIONAN POSTERIOR A PERIODO DE INACTIVIDAD"
+    },
+    {
+      "id": "mov-7",
+      "fecha": "28/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 70,
+      "accion": "Reemplazo",
+      "activo": null,
+      "origen": "BODEGA",
+      "destino": "70",
+      "falla": "FALLA EN SCROLL",
+      "obs": "SE SUSTITUYE UNIDAD POR UNA NUEVA DE RESPALDO"
+    },
+    {
+      "id": "mov-8",
+      "fecha": "28/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 99,
+      "accion": "Cambio",
+      "activo": null,
+      "origen": "99",
+      "destino": "135",
+      "falla": "FALLA EN SCROLL",
+      "obs": "FUNCIONAN POSTERIOR A PERIODO DE INACTIVIDAD"
+    },
+    {
+      "id": "mov-9",
+      "fecha": "29/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 81,
+      "accion": "Reemplazo",
+      "activo": null,
+      "origen": "BODEGA",
+      "destino": "81",
+      "falla": "FALLA EN SCROLL",
+      "obs": "SE SUSTITUYE UNIDAD POR UNA NUEVA DE RESPALDO"
+    },
+    {
+      "id": "mov-10",
+      "fecha": "29/07/2026",
+      "equipo": "PC",
+      "espacio": 132,
+      "accion": "Reintegro",
+      "activo": null,
+      "origen": "REPARACION",
+      "destino": "132",
+      "falla": "N/A",
+      "obs": "REINTEGRO DE EQUIPO EN REPARACION"
+    },
+    {
+      "id": "mov-11",
+      "fecha": "30/07/2026",
+      "equipo": "MOUSE",
+      "espacio": 96,
+      "accion": "Reemplazo",
+      "activo": null,
+      "origen": "BODEGA",
+      "destino": "96",
+      "falla": "FALLA EN SCROLL",
+      "obs": "SE SUSTITUYE UNIDAD POR UNA NUEVA DE RESPALDO"
+    },
+    {
+      "id": "mov-12",
+      "fecha": "30/07/2026",
+      "equipo": "PC",
+      "espacio": 44,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "44",
+      "destino": "138",
+      "falla": "N/A",
+      "obs": "AJUSTE DE ESPACIOS ADMINISTRATIVOS"
+    },
+    {
+      "id": "mov-13",
+      "fecha": "30/07/2026",
+      "equipo": "PC",
+      "espacio": 45,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "45",
+      "destino": "137",
+      "falla": "N/A",
+      "obs": "AJUSTE DE ESPACIOS ADMINISTRATIVOS"
+    },
+    {
+      "id": "mov-14",
+      "fecha": "30/07/2026",
+      "equipo": "PC",
+      "espacio": 43,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "43",
+      "destino": "136",
+      "falla": "N/A",
+      "obs": "AJUSTE DE ESPACIOS ADMINISTRATIVOS"
+    },
+    {
+      "id": "mov-15",
+      "fecha": "30/07/2026",
+      "equipo": "PC",
+      "espacio": 42,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "42",
+      "destino": "135",
+      "falla": "N/A",
+      "obs": "AJUSTE DE ESPACIOS ADMINISTRATIVOS"
+    },
+    {
+      "id": "mov-16",
+      "fecha": "30/07/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 28,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "28",
+      "destino": "37",
+      "falla": "N/A",
+      "obs": "OPTIMIZACION DE ESPACIOS"
+    },
+    {
+      "id": "mov-17",
+      "fecha": "30/07/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 29,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "29",
+      "destino": "46",
+      "falla": "N/A",
+      "obs": "OPTIMIZACION DE ESPACIOS"
+    },
+    {
+      "id": "mov-18",
+      "fecha": "30/07/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 30,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "30",
+      "destino": "47",
+      "falla": "N/A",
+      "obs": "OPTIMIZACION DE ESPACIOS"
+    },
+    {
+      "id": "mov-19",
+      "fecha": "30/07/2026",
+      "equipo": "MONITOR",
+      "espacio": 140,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "140",
+      "destino": "56",
+      "falla": "N/A",
+      "obs": "OPTIMIZACION DE ESPACIOS"
+    },
+    {
+      "id": "mov-20",
+      "fecha": "30/07/2026",
+      "equipo": "EQUIPO PARCIAL",
+      "espacio": 140,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "140",
+      "destino": "28",
+      "falla": "N/A",
+      "obs": "OPTIMIZACION DE ESPACIOS ( SE MUEVE: PC, MAUSE, HUB, HEADSET)"
+    },
+    {
+      "id": "mov-21",
+      "fecha": "01/08/2026",
+      "equipo": "HUB",
+      "espacio": 46,
+      "accion": "Mantenimiento",
+      "activo": null,
+      "origen": "46",
+      "destino": "-",
+      "falla": "FALLA INTERNA DE PIEZA",
+      "obs": "IT REALIZANDO MANTENIMIENTO."
+    },
+    {
+      "id": "mov-22",
+      "fecha": "01/08/2026",
+      "equipo": "HUB",
+      "espacio": 46,
+      "accion": "Reintegro",
+      "activo": null,
+      "origen": "46",
+      "destino": "46",
+      "falla": "SOLVENTA FALLA EN PIEZA",
+      "obs": "IT REPORTA PIEZA ESTABA SUCIA Y POSTERIOR A MANTENIMIENTO NO PRESENTA FALLAS"
+    },
+    {
+      "id": "mov-23",
+      "fecha": "02/08/2026",
+      "equipo": "MOUSE",
+      "espacio": 113,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "113",
+      "destino": "132",
+      "falla": "FALLA EN SCROLL",
+      "obs": "FUNCIONA POSTERIOR A PERIODO DE INACTIVIDAD"
+    },
+    {
+      "id": "mov-24",
+      "fecha": "03/08/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 93,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "93",
+      "destino": "33",
+      "falla": "N/A",
+      "obs": "SE TRASLADA POR FILTRACION EN ESPACIO DE ORIGEN"
+    },
+    {
+      "id": "mov-25",
+      "fecha": "04/08/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 81,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "81",
+      "destino": "92",
+      "falla": "N/A",
+      "obs": "SE TRASLADA POR FILTRACION EN ESPACIO DE ORIGEN"
+    },
+    {
+      "id": "mov-26",
+      "fecha": "05/08/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 111,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "111",
+      "destino": "29",
+      "falla": "N/A",
+      "obs": "SE TRASLADA POR FILTRACION EN ESPACIO DE ORIGEN"
+    },
+    {
+      "id": "mov-27",
+      "fecha": "06/08/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 112,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "112",
+      "destino": "30",
+      "falla": "N/A",
+      "obs": "SE TRASLADA POR FILTRACION EN ESPACIO DE ORIGEN"
+    },
+    {
+      "id": "mov-28",
+      "fecha": "07/08/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 113,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "113",
+      "destino": "31",
+      "falla": "N/A",
+      "obs": "SE TRASLADA POR FILTRACION EN ESPACIO DE ORIGEN"
+    },
+    {
+      "id": "mov-29",
+      "fecha": "08/08/2026",
+      "equipo": "EQUIPO TOTAL",
+      "espacio": 84,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "84",
+      "destino": "32",
+      "falla": "N/A",
+      "obs": "SE TRASLADA POR FILTRACION EN ESPACIO DE ORIGEN"
+    },
+    {
+      "id": "mov-30",
+      "fecha": "17/08/2026",
+      "equipo": "HEADSET",
+      "espacio": 84,
+      "accion": "RETIRO",
+      "activo": null,
+      "origen": "84",
+      "destino": "",
+      "falla": "DAÑO DE DIADEMA",
+      "obs": "SE REPORTA IT DADO QUE NO SE TIENE STOP"
+    },
+    {
+      "id": "mov-31",
+      "fecha": "17/08/2026",
+      "equipo": "HEADSET",
+      "espacio": 137,
+      "accion": "Traslado",
+      "activo": null,
+      "origen": "137",
+      "destino": "84",
+      "falla": "N/A",
+      "obs": "SE TRASLADA DE ESTE ESPACIO DADO QUE ES DE USO ADMINISTRATIVO Y SE NECESTA  MANTENER DISPONIBLE ESPACIO 84"
+    },
+    {
+      "id": "mov-32",
+      "fecha": "17/08/2026",
+      "equipo": "HEADSET",
+      "espacio": 28,
+      "accion": "Retiro",
+      "activo": null,
+      "origen": "28",
+      "destino": "",
+      "falla": "CONTROL DE VOLUMEN DAÑADO",
+      "obs": "SE REPORTA IT DADO QUE NO SE TIENE STOP, NO SE REALIZA TRASLADO DADO QUE ESPACIO ESTA INCOMPLETO AL MOMENTO"
+    }
+  ],
+  "doctors": [
+    {
+      "id": 1,
+      "nombre": "ABDIEL JAHAZIAS ALVAREZ AGUILAR",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 2,
+      "nombre": "ALEJANDRO ANTONIO POLANCO GONZALEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 3,
+      "nombre": "AMALIA JEANETH REYES MARTINEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 4,
+      "nombre": "ANDREW EDILMAR PERDOMO RODRIGUEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 5,
+      "nombre": "BRISEYDA SARAI CHAVEZ BENAVIDES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 6,
+      "nombre": "CARLOS ISAAC QUINTANILLA PORTILLO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 7,
+      "nombre": "CARLOS STEVEN MENDEZ RIVERA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 8,
+      "nombre": "CLAUDIA LUCIA MENDEZ SANDOVAL",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 9,
+      "nombre": "ELIZABETH DANIELA REYES GOMEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 10,
+      "nombre": "ESTEFANY IVETH MEJIA SAGASTIZADO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 11,
+      "nombre": "GABRIELA ELISA HERNANDEZ REYES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 12,
+      "nombre": "GERSON ARNULFO MENDEZ DIAZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 13,
+      "nombre": "ISAAC FLORES HERNANDEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 14,
+      "nombre": "JEFFERSON ALEXANDER JIMENEZ MARTINEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 15,
+      "nombre": "JUAN CARLOS BERMUDEZ ROMERO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 16,
+      "nombre": "JUAN JOSE TURCIOS ESCOBAR",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 17,
+      "nombre": "KAREN VANESSA GARCIA GONZALEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 18,
+      "nombre": "KARLA MARICRUZ GONZALEZ MARQUEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 19,
+      "nombre": "KARLA XIOMARA ROMERO MARTINEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 20,
+      "nombre": "LISBETH GISELLE CRUZ ROSALES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 21,
+      "nombre": "LUIS FELIPE RIVAS ROMERO",
+      "tipo": "Planilla",
+      "horario": "07:00 AM - 12:00 PM",
+      "espacio": null
+    },
+    {
+      "id": 22,
+      "nombre": "LUIS MIGUEL RIVERA PENADO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 23,
+      "nombre": "MIGUEL ANTONIO AVILES GARCIA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 24,
+      "nombre": "NEHEMIAS EZEQUIEL FRANCO ARGUERA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 25,
+      "nombre": "VANESSA CAROLINA MONTANO RIVAS.",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 26,
+      "nombre": "YASMIN ENEIDA LOPEZ MORENO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 27,
+      "nombre": "YOSELIN ANAYANCI HERNANDEZ BENITEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 28,
+      "nombre": "ZAIRA REBECA AGUILAR ZEPEDA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 29,
+      "nombre": "ALEJANDRA YANIRA MAYEN LAZO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 30,
+      "nombre": "CINDY LISSETE GIRON DE BAIRES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 31,
+      "nombre": "RICARDO DANIEL CHICAS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 32,
+      "nombre": "CRISTIAN BLADIMIR GUIDO ZAPATA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 33,
+      "nombre": "EMERITA SARAI CRUZ CANIZALEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 34,
+      "nombre": "FABRICIO JOSUE FUNES CANALES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 35,
+      "nombre": "GERARDO ERNESTO OVIEDO DE LA O",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 36,
+      "nombre": "GLENDA MARICELA LUNA FLORES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 37,
+      "nombre": "HEIDI JULISSA BURUCA RIVERA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 38,
+      "nombre": "ISABEL NATHALIE MARTINEZ AVILA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 39,
+      "nombre": "JOHANA DEL CARMEN CIERRA FLORES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 40,
+      "nombre": "JOSUE MANUEL CASTILLO ESCOBAR",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 41,
+      "nombre": "KARLA PATRICIA CARBALLO SIBRIAN",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 42,
+      "nombre": "KARLA XIOMARA HERNANDEZ MARTINEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 43,
+      "nombre": "KATHERINE BEATRIZ BLANCO PORTILLO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 44,
+      "nombre": "KRISSIA ELIZABETH RAMOS RODAS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 45,
+      "nombre": "LUIS MAURICIO HIDALGO RODRIGUEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 46,
+      "nombre": "MARIO ELI RODRIGUEZ AVALOS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 47,
+      "nombre": "MARLON OSWALDO QUINTEROS RENDEROS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 48,
+      "nombre": "MARVIN JOSUE MOLINA ALVAREZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 49,
+      "nombre": "MIRIAN GUMERCINDA GARCIA HERNANDEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 50,
+      "nombre": "ROSA EVA MACHADO MARTINEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 51,
+      "nombre": "SALVADOR EDUARDO CICILIANO TURCIOS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 52,
+      "nombre": "SANTOS BLADIMIR CHAVEZ CASTILLO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 53,
+      "nombre": "SILVIA ANABEL GARCIA JURADO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 54,
+      "nombre": "SINDY MARYORI ALVARADO VELASQUEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 55,
+      "nombre": "WILMER OMAR OTERO SORTO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 56,
+      "nombre": "ZULEYMA ABIGAIL GARCIA REYES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 57,
+      "nombre": "ANA IRMA CAÑAS RAMOS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 58,
+      "nombre": "ANDERSON ERNESTO ALVARADO AGUIRRE",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 59,
+      "nombre": "ANDRES EDUARDO CAMPOS HERNANDEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 60,
+      "nombre": "ANGELICA SUSANA SARMIENTO RAMIREZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 61,
+      "nombre": "AUGUSTO JOSE CASTILLO PERDOMO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 62,
+      "nombre": "BRENDA LISSETH TURCIOS REYES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 63,
+      "nombre": "CARLOS MANUEL GUTIERREZ PANAMEÑO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 64,
+      "nombre": "CARLOS VIRGILIO CLAROS GUTIERREZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 65,
+      "nombre": "CELINA DE JESUS MARTINEZ MENDES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 66,
+      "nombre": "CELSO MAURICIO ARBAIZA PEREZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 67,
+      "nombre": "CINDY VANESSA CUBIAS ARIAS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 68,
+      "nombre": "CLAUDIA DOLORES SANTIN DE ZELAYA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 69,
+      "nombre": "DANIEL ERNESTO RAMOS FUNES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 70,
+      "nombre": "DANIELA CRISTINA CASTELLON CUADRA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 71,
+      "nombre": "DIANA CAROLINA HERNANDEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 72,
+      "nombre": "DOLORES BEATRIZ TINO VASQUEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 73,
+      "nombre": "EDUARDO LUIS SOSA PORTILLO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 74,
+      "nombre": "EDWIN MAURICIO ARIAS BONILLA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 75,
+      "nombre": "ELMER DANIEL RIVAS TORRES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 76,
+      "nombre": "EMERSON NOE ROMERO AVALOS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 77,
+      "nombre": "ENDERSON OBED CRUZ SOSA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 78,
+      "nombre": "ENRIQUE JOSE HERNANDEZ ZELAYA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 79,
+      "nombre": "ERVING STANLEY GONZALEZ BATRES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 80,
+      "nombre": "FABRICIO ERNESTO REYES VARGAS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 81,
+      "nombre": "FATIMA GABRIELA QUINTANILLA CALLES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 82,
+      "nombre": "FREDY SAMUEL LOZANO HERNANDEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 83,
+      "nombre": "GABRIELA CONTRERAS SANTOS",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 84,
+      "nombre": "GLENDA ALIXON DEL RIO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 85,
+      "nombre": "GLENDA MARISOL ARTOLA DE AVILES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 86,
+      "nombre": "GUSTAVO ENRIQUE NAVARRETE AREVALO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 87,
+      "nombre": "HECTOR ANTONIO LLORT AYALA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 88,
+      "nombre": "HOWARD STANLEY DURAN HERNANDEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 89,
+      "nombre": "JAIME ALEXANDER GONZALEZ HERNANDEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 90,
+      "nombre": "JANDINA BEATRIZ CASTRO MEJIA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 91,
+      "nombre": "JENNIFER GABRIELA REYES AMAYA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 92,
+      "nombre": "JENNIFER GYSSEL HERNANDEZ SALMERON",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 93,
+      "nombre": "JENYFFER VANESSA CORDERO GUTIÉRREZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 94,
+      "nombre": "JHOANNA ROSELIA BERRIOS DE FLORES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 95,
+      "nombre": "JONATHAN EDGARDO GARCIA LOPEZ",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 96,
+      "nombre": "JONATHAN ERNESTO ARIAS SORTO",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 97,
+      "nombre": "JORGE ALBERTO LOPEZ MACHUCA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 98,
+      "nombre": "JORGE ISAAC RUIZ BATISTA",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 99,
+      "nombre": "JOSÉ ANTONIO PINEDA BENAVIDES",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 100,
+      "nombre": "JOSE FERNANDO VILLEGAS NAVARRETE",
+      "tipo": "Planilla",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 101,
+      "nombre": "JOSE MOISES VILLALOBOS AMAYA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 102,
+      "nombre": "JOSE SALVADOR REYES SORTO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 103,
+      "nombre": "JOSE SAMUEL CARRANZA PINTO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 104,
+      "nombre": "JOSE TOMAS NAVARRETE CORENA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 105,
+      "nombre": "JUAN JOSE BUSTILLO TREMINIO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 106,
+      "nombre": "KAREM ESMERALDA RENDEROS DE MARQUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 107,
+      "nombre": "KAREN VANESSA ACEVEDO AMAYA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 108,
+      "nombre": "KARINA CONCEPCION FLORES PEREIRA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 109,
+      "nombre": "KARINA LISSETTE GARAY ESTRADA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 110,
+      "nombre": "KRISEIDA JASMIN BONILLA BAIZA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 111,
+      "nombre": "LILIAN JUANA IRIS AGUILAR RIVAS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 112,
+      "nombre": "LILIANA BEATRIZ REYES SORTO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 113,
+      "nombre": "LORENA GOMEZ PEREZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 114,
+      "nombre": "LUCIO LEONEL MESTANZA RAMIREZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 115,
+      "nombre": "LUIS ALBERTO FLORES HERNANDEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 116,
+      "nombre": "MARCOS ANTONIO RODRIGUEZ CRUZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 117,
+      "nombre": "MARIA RENEE BARRERA RODRIGUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 118,
+      "nombre": "MARIO ERNESTO VILLEDA GIRON",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 119,
+      "nombre": "MARIO JOSE AMAYA SARMIENTO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 120,
+      "nombre": "MARITZA JAQUELINE GUEVARA DE MELGAR",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 121,
+      "nombre": "MAYRA PALOSKY PINTO PEÑA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 122,
+      "nombre": "ODALY ELIZABETH GONZALEZ DE MARTINEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 123,
+      "nombre": "OSCAR DAVID CAMPOS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 124,
+      "nombre": "OSCAR MIGUEL QUINTEROS GUEVARA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 125,
+      "nombre": "PATRICIA CAROLINA CABALLERO MORENO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 126,
+      "nombre": "RAFAEL CARDENAS ORTIZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 127,
+      "nombre": "REBECA SARAI MARTINEZ SANTOS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 128,
+      "nombre": "ROBERTO CARLOS RENDEROS PINEDA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 129,
+      "nombre": "ROCIO STEFANY RAMOS GALEAS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 130,
+      "nombre": "RODRIGO EDUARDO ANGEL RAMOS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 131,
+      "nombre": "RODRIGO JOSUE GUZMAN ROSALES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 132,
+      "nombre": "SAIRA MARIELA LAINEZ TORRES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 133,
+      "nombre": "SARA GABRIELA CANALES LOPEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 134,
+      "nombre": "SERGI ROSALY RIVERA SORTO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 135,
+      "nombre": "STEPHANNY GUADALUPE RUIZ LAZO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 136,
+      "nombre": "TATIANA NATALY BERMUDEZ SOTO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 137,
+      "nombre": "VICTOR MANUEL CONTRERAS RUBIO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 138,
+      "nombre": "WILBERTO ANGEL RIVAS RODRIGUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 139,
+      "nombre": "YARIZA LORENA REYES BONILLA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 140,
+      "nombre": "YOSELIN ANAYANCI HERNANDEZ BENITEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 141,
+      "nombre": "MARCO ANTONIO GODINEZ ARAUJO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 142,
+      "nombre": "BLANCA ALICIA VELIZ VASQUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 143,
+      "nombre": "YANCY KARINA REYES CRUZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 144,
+      "nombre": "MARITZA MARISOL SURA DE GUEVARA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 145,
+      "nombre": "RENE MAURICIO REYES TORRES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 146,
+      "nombre": "LAURA CAROLINA VENTURA CRUZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 147,
+      "nombre": "BORIS VLADIMIR FERMAN FERNANDEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 148,
+      "nombre": "SANDRA MARGARITA GUZMAN MATUTE",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 149,
+      "nombre": "SANTIAGO ALBERTO CONTRERAS SOTO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 150,
+      "nombre": "YOSSY LILIBETH RODRIGUEZ SERPAS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 151,
+      "nombre": "ERIKA JULISSA RIOS GARCIA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 152,
+      "nombre": "MADELIN MILENA GARAY DE CHAVEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 153,
+      "nombre": "GERMAN FRANCISCO CRUZ GARCIA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 154,
+      "nombre": "ANA MARISSELA MEDRANO MARTINEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 155,
+      "nombre": "BELARMINA JEANETH SANCHEZ MOLINA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 156,
+      "nombre": "JUAN CARLOS LOPEZ ESCOBAR",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 157,
+      "nombre": "DORIS PATRICIA AVILES ESPINOZA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 158,
+      "nombre": "ELI ALDAIR ALVARADO DIAZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 159,
+      "nombre": "KARLA ELISA HENRIQUEZ BENAVIDES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 160,
+      "nombre": "JOSE MELVIN HERNANDEZ RUIZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 161,
+      "nombre": "YONYS JOEL SALVADOR VELASQUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 162,
+      "nombre": "ALEJANDRO JAVIER LOZANO PORTILLO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 163,
+      "nombre": "DIEGO BENJAMIN RETANA FLORES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 164,
+      "nombre": "FRANCISCO JAVIER CANALES RUBIO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 165,
+      "nombre": "SANDRA FIDELINA HERNANDEZ DE HERNANDEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 166,
+      "nombre": "CARLOS LUIS MELENDEZ MALDONADO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 167,
+      "nombre": "KAREN MERCEDES GOMEZ RODRIGUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 168,
+      "nombre": "ANA BEATRIZ AGUILA GOMEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 169,
+      "nombre": "PAULA MARIA REVELO DE MEMBREÑO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 170,
+      "nombre": "JOHANNA YOSSETTE PEREZ DE COREAS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 171,
+      "nombre": "JOSUE GONZALO BENAVIDES HERNANDEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 172,
+      "nombre": "MONICA ELIZABETH MENDEZ DE RODRIGUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 173,
+      "nombre": "CLAUDIA CAROLINA ALVARADO DE BONILLA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 174,
+      "nombre": "CONSUELO VERONICA GUEVARA VANEGAS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 175,
+      "nombre": "ELIZABETH STEFANI ROSALES TOVAR",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 176,
+      "nombre": "JOSE DAVID GUATEMALA SERRANO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 177,
+      "nombre": "RITA MARIELA SORTO SERPAS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 178,
+      "nombre": "CARMEN ALICIA MERINO ROMERO",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 179,
+      "nombre": "EVELING MARISOL GONZALEZ MEJIA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 180,
+      "nombre": "JOSSELINE CLARIBEL SAGASTUME DE GONZALEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 181,
+      "nombre": "KAREN YAMILETH TREJO MEDINA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 182,
+      "nombre": "JUAN RENE ALFARO MACHUCA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 183,
+      "nombre": "CHRISTIAN JOSUE AVILES CACERES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 184,
+      "nombre": "ZEIDA ROSSEMARY ORELLANA VASQUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 185,
+      "nombre": "JOSUE DANIEL NUÑEZ LOPEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 186,
+      "nombre": "MONICA ESTEFANY RETANA FLORES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 187,
+      "nombre": "RHINA ESTHER TURCIOS RIVAS",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 188,
+      "nombre": "JOSE LUIS BONILLA GOMEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 189,
+      "nombre": "ALEXANDRA JOSE COREAS LOPEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 190,
+      "nombre": "JACQUELINE STEFANY RAMOS TORRES",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 191,
+      "nombre": "MARIO DAVID CORLETO RUIZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 192,
+      "nombre": "JORGE IVAN FLORES RAMIREZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 193,
+      "nombre": "MERLIN ADALY HERNANDEZ VELASQUEZ",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    },
+    {
+      "id": 194,
+      "nombre": "JAKELLYNE AZUCENA JIMENEZ DE SAMAYOA",
+      "tipo": "Servicios Profesionales",
+      "horario": "Turno Rotativo",
+      "espacio": null
+    }
+  ],
+  "staff": [
+    {
+      "nombre": "ABDIEL JAHAZIAS ALVAREZ AGUILAR",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ANA IRMA CAÑAS RAMOS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "EMERSON JOSUE VIGIL HERNANDEZ",
+      "rol": "Supervisor Médico",
+      "categoria": "Supervisores"
+    },
+    {
+      "nombre": "MARCELA FLORITA ARGUETA SOLORZANO",
+      "rol": "Personal Administrativo",
+      "categoria": "Administrativos"
+    },
+    {
+      "nombre": "ALEJANDRO ANTONIO POLANCO GONZALEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ANDERSON ERNESTO ALVARADO AGUIRRE",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SALVADOR RENDEROS BONILLA",
+      "rol": "Supervisor Médico",
+      "categoria": "Supervisores"
+    },
+    {
+      "nombre": "LUISA CAROLINA BARRIOS",
+      "rol": "Personal Administrativo",
+      "categoria": "Administrativos"
+    },
+    {
+      "nombre": "AMALIA JEANETH REYES MARTINEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ANDRES EDUARDO CAMPOS HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ALFREDO ISAAC MARTINEZ AMAYA",
+      "rol": "Supervisor Médico",
+      "categoria": "Supervisores"
+    },
+    {
+      "nombre": "MONICA GISSEL CARRILLO ZELAYA",
+      "rol": "Personal Administrativo",
+      "categoria": "Administrativos"
+    },
+    {
+      "nombre": "ANDREW EDILMAR PERDOMO RODRIGUEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ANGELICA SUSANA SARMIENTO RAMIREZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ROXANA GUADALUPE CANALES RODRIGUEZ",
+      "rol": "Supervisor Médico",
+      "categoria": "Supervisores"
+    },
+    {
+      "nombre": "ELMER ALEXANDER ANDRADE GALVEZ",
+      "rol": "Personal Administrativo",
+      "categoria": "Administrativos"
+    },
+    {
+      "nombre": "BRISEYDA SARAI CHAVEZ BENAVIDES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "AUGUSTO JOSE CASTILLO PERDOMO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "EDWARD JOSUE ZELAYA PRUDENCIO",
+      "rol": "Supervisor Médico",
+      "categoria": "Supervisores"
+    },
+    {
+      "nombre": "ALEJANDRA EMPERATRIZ PARADA VILLEGAS",
+      "rol": "Personal Administrativo",
+      "categoria": "Administrativos"
+    },
+    {
+      "nombre": "CARLOS ISAAC QUINTANILLA PORTILLO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "BRENDA LISSETH TURCIOS REYES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CARLOS STEVEN MENDEZ RIVERA",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "CARLOS MANUEL GUTIERREZ PANAMEÑO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CLAUDIA LUCIA MENDEZ SANDOVAL",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "CARLOS VIRGILIO CLAROS GUTIERREZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ELIZABETH DANIELA REYES GOMEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "CELINA DE JESUS MARTINEZ MENDES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ESTEFANY IVETH MEJIA SAGASTIZADO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "CELSO MAURICIO ARBAIZA PEREZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "GABRIELA ELISA HERNANDEZ REYES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "CINDY VANESSA CUBIAS ARIAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "GERSON ARNULFO MENDEZ DIAZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "CLAUDIA DOLORES SANTIN DE ZELAYA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ISAAC FLORES HERNANDEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "DANIEL ERNESTO RAMOS FUNES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JEFFERSON ALEXANDER JIMENEZ MARTINEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "DANIELA CRISTINA CASTELLON CUADRA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JUAN CARLOS BERMUDEZ ROMERO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "DIANA CAROLINA HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JUAN JOSE TURCIOS ESCOBAR",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "DOLORES BEATRIZ TINO VASQUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KAREN VANESSA GARCIA GONZALEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "EDUARDO LUIS SOSA PORTILLO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KARLA MARICRUZ GONZALEZ MARQUEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "EDWIN MAURICIO ARIAS BONILLA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KARLA XIOMARA ROMERO MARTINEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ELMER DANIEL RIVAS TORRES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LISBETH GISELLE CRUZ ROSALES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "EMERSON NOE ROMERO AVALOS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LUIS FELIPE RIVAS ROMERO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ENDERSON OBED CRUZ SOSA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LUIS MIGUEL RIVERA PENADO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ENRIQUE JOSE HERNANDEZ ZELAYA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MIGUEL ANTONIO AVILES GARCIA",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "ERVING STANLEY GONZALEZ BATRES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "NEHEMIAS EZEQUIEL FRANCO ARGUERA",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "FABRICIO ERNESTO REYES VARGAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "VANESSA CAROLINA MONTANO RIVAS.",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "FATIMA GABRIELA QUINTANILLA CALLES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "YASMIN ENEIDA LOPEZ MORENO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "FREDY SAMUEL LOZANO HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "YOSELIN ANAYANCI HERNANDEZ BENITEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "GABRIELA CONTRERAS SANTOS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ZAIRA REBECA AGUILAR ZEPEDA",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "GLENDA ALIXON DEL RIO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ALEJANDRA YANIRA MAYEN LAZO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "GLENDA MARISOL ARTOLA DE AVILES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CINDY LISSETE GIRON DE BAIRES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "GUSTAVO ENRIQUE NAVARRETE AREVALO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "RICARDO DANIEL CHICAS",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "HECTOR ANTONIO LLORT AYALA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CRISTIAN BLADIMIR GUIDO ZAPATA",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "HOWARD STANLEY DURAN HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "EMERITA SARAI CRUZ CANIZALEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JAIME ALEXANDER GONZALEZ HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "FABRICIO JOSUE FUNES CANALES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JANDINA BEATRIZ CASTRO MEJIA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "GERARDO ERNESTO OVIEDO DE LA O",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JENNIFER GABRIELA REYES AMAYA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "GLENDA MARICELA LUNA FLORES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JENNIFER GYSSEL HERNANDEZ SALMERON",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "HEIDI JULISSA BURUCA RIVERA",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JENYFFER VANESSA CORDERO GUTIÉRREZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ISABEL NATHALIE MARTINEZ AVILA",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JHOANNA ROSELIA BERRIOS DE FLORES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOHANA DEL CARMEN CIERRA FLORES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JONATHAN EDGARDO GARCIA LOPEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOSUE MANUEL CASTILLO ESCOBAR",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JONATHAN ERNESTO ARIAS SORTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KARLA PATRICIA CARBALLO SIBRIAN",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JORGE ALBERTO LOPEZ MACHUCA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KARLA XIOMARA HERNANDEZ MARTINEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JORGE ISAAC RUIZ BATISTA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KATHERINE BEATRIZ BLANCO PORTILLO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JOSÉ ANTONIO PINEDA BENAVIDES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KRISSIA ELIZABETH RAMOS RODAS",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JOSE FERNANDO VILLEGAS NAVARRETE",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LUIS MAURICIO HIDALGO RODRIGUEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JOSE MOISES VILLALOBOS AMAYA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARIO ELI RODRIGUEZ AVALOS",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JOSE SALVADOR REYES SORTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARLON OSWALDO QUINTEROS RENDEROS",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JOSE SAMUEL CARRANZA PINTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARVIN JOSUE MOLINA ALVAREZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JOSE TOMAS NAVARRETE CORENA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MIRIAN GUMERCINDA GARCIA HERNANDEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "JUAN JOSE BUSTILLO TREMINIO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ROSA EVA MACHADO MARTINEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "KAREM ESMERALDA RENDEROS DE MARQUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SALVADOR EDUARDO CICILIANO TURCIOS",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "KAREN VANESSA ACEVEDO AMAYA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SANTOS BLADIMIR CHAVEZ CASTILLO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "KARINA CONCEPCION FLORES PEREIRA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SILVIA ANABEL GARCIA JURADO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "KARINA LISSETTE GARAY ESTRADA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SINDY MARYORI ALVARADO VELASQUEZ",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "KRISEIDA JASMIN BONILLA BAIZA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "WILMER OMAR OTERO SORTO",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "LILIAN JUANA IRIS AGUILAR RIVAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ZULEYMA ABIGAIL GARCIA REYES",
+      "rol": "Médico Planilla",
+      "categoria": "Planilla"
+    },
+    {
+      "nombre": "LILIANA BEATRIZ REYES SORTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LORENA GOMEZ PEREZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LUCIO LEONEL MESTANZA RAMIREZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LUIS ALBERTO FLORES HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARCOS ANTONIO RODRIGUEZ CRUZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARIA RENEE BARRERA RODRIGUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARIO ERNESTO VILLEDA GIRON",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARIO JOSE AMAYA SARMIENTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARITZA JAQUELINE GUEVARA DE MELGAR",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MAYRA PALOSKY PINTO PEÑA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ODALY ELIZABETH GONZALEZ DE MARTINEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "OSCAR DAVID CAMPOS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "OSCAR MIGUEL QUINTEROS GUEVARA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "PATRICIA CAROLINA CABALLERO MORENO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "RAFAEL CARDENAS ORTIZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "REBECA SARAI MARTINEZ SANTOS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ROBERTO CARLOS RENDEROS PINEDA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ROCIO STEFANY RAMOS GALEAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "RODRIGO EDUARDO ANGEL RAMOS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "RODRIGO JOSUE GUZMAN ROSALES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SAIRA MARIELA LAINEZ TORRES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SARA GABRIELA CANALES LOPEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SERGI ROSALY RIVERA SORTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "STEPHANNY GUADALUPE RUIZ LAZO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "TATIANA NATALY BERMUDEZ SOTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "VICTOR MANUEL CONTRERAS RUBIO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "WILBERTO ANGEL RIVAS RODRIGUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "YARIZA LORENA REYES BONILLA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "YOSELIN ANAYANCI HERNANDEZ BENITEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARCO ANTONIO GODINEZ ARAUJO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "BLANCA ALICIA VELIZ VASQUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "YANCY KARINA REYES CRUZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARITZA MARISOL SURA DE GUEVARA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "RENE MAURICIO REYES TORRES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "LAURA CAROLINA VENTURA CRUZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "BORIS VLADIMIR FERMAN FERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SANDRA MARGARITA GUZMAN MATUTE",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SANTIAGO ALBERTO CONTRERAS SOTO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "YOSSY LILIBETH RODRIGUEZ SERPAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ERIKA JULISSA RIOS GARCIA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MADELIN MILENA GARAY DE CHAVEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "GERMAN FRANCISCO CRUZ GARCIA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ANA MARISSELA MEDRANO MARTINEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "BELARMINA JEANETH SANCHEZ MOLINA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JUAN CARLOS LOPEZ ESCOBAR",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "DORIS PATRICIA AVILES ESPINOZA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ELI ALDAIR ALVARADO DIAZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KARLA ELISA HENRIQUEZ BENAVIDES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOSE MELVIN HERNANDEZ RUIZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "YONYS JOEL SALVADOR VELASQUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ALEJANDRO JAVIER LOZANO PORTILLO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "DIEGO BENJAMIN RETANA FLORES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "FRANCISCO JAVIER CANALES RUBIO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "SANDRA FIDELINA HERNANDEZ DE HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CARLOS LUIS MELENDEZ MALDONADO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KAREN MERCEDES GOMEZ RODRIGUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ANA BEATRIZ AGUILA GOMEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "PAULA MARIA REVELO DE MEMBREÑO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOHANNA YOSSETTE PEREZ DE COREAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOSUE GONZALO BENAVIDES HERNANDEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MONICA ELIZABETH MENDEZ DE RODRIGUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CLAUDIA CAROLINA ALVARADO DE BONILLA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CONSUELO VERONICA GUEVARA VANEGAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ELIZABETH STEFANI ROSALES TOVAR",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOSE DAVID GUATEMALA SERRANO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "RITA MARIELA SORTO SERPAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CARMEN ALICIA MERINO ROMERO",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "EVELING MARISOL GONZALEZ MEJIA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOSSELINE CLARIBEL SAGASTUME DE GONZALEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "KAREN YAMILETH TREJO MEDINA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JUAN RENE ALFARO MACHUCA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "CHRISTIAN JOSUE AVILES CACERES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ZEIDA ROSSEMARY ORELLANA VASQUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOSUE DANIEL NUÑEZ LOPEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MONICA ESTEFANY RETANA FLORES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "RHINA ESTHER TURCIOS RIVAS",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JOSE LUIS BONILLA GOMEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "ALEXANDRA JOSE COREAS LOPEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JACQUELINE STEFANY RAMOS TORRES",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MARIO DAVID CORLETO RUIZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JORGE IVAN FLORES RAMIREZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "MERLIN ADALY HERNANDEZ VELASQUEZ",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    },
+    {
+      "nombre": "JAKELLYNE AZUCENA JIMENEZ DE SAMAYOA",
+      "rol": "Médico Servicios Profesionales",
+      "categoria": "Servicios Profesionales"
+    }
+  ]
+}
