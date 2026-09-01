@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
-  LayoutGrid, Droplets, AlertTriangle, Wrench, Warehouse, Sparkles
+  LayoutGrid, Droplets, AlertTriangle, Wrench, Warehouse, Sparkles, UserCheck
 } from "lucide-react";
 import Header from "./components/common/Header";
 import KpiCard from "./components/common/KpiCard";
@@ -9,6 +9,8 @@ import SpaceDetailModal from "./components/map/SpaceDetailModal";
 import WarehouseView from "./components/warehouse/WarehouseView";
 import DoctorsView from "./components/doctors/DoctorsView";
 import HistoryView from "./components/history/HistoryView";
+import AttendanceView from "./components/attendance/AttendanceView";
+import QuickCheckInModal from "./components/attendance/QuickCheckInModal";
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, buildInitialSpaces
@@ -53,6 +55,7 @@ export default function App() {
   const [tab, setTab] = useState("mapa");
   const [selectedSpace, setSelectedSpace] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [checkInModalOpen, setCheckInModalOpen] = useState(false);
 
   // Sincronizar en LocalStorage
   useEffect(() => {
@@ -80,123 +83,200 @@ export default function App() {
     }
   }, [historial]);
 
-  // 2. Conteo de estados
+  // Conteos calculados reactivamente
   const counts = useMemo(() => {
-    const c = Object.fromEntries(Object.keys(ESTADOS).map((k) => [k, 0]));
+    const res = {
+      DISPONIBLE: 0,
+      INCOMPLETO: 0,
+      INHABILITADO: 0,
+      VACIO: 0,
+      REPARACION: 0,
+      RESERVADO: 0,
+      OCUPADO: 0,
+    };
     spaces.forEach((s) => {
-      if (c[s.estado] !== undefined) {
-        c[s.estado] += 1;
+      if (s.doctor) {
+        res.OCUPADO++;
+      } else if (res[s.estado] !== undefined) {
+        res[s.estado]++;
       }
     });
-    return c;
+    return res;
   }, [spaces]);
 
-  // 3. Alertas en tiempo real
+  // Alertas activas
   const alerts = useMemo(() => {
     const list = [];
-    if (counts.INHABILITADO) {
+    const inhabilitados = spaces.filter((s) => s.estado === "INHABILITADO");
+    const vacios = spaces.filter((s) => s.estado === "VACIO");
+    const incompletos = spaces.filter((s) => s.estado === "INCOMPLETO");
+    const reparacion = spaces.filter((s) => s.estado === "REPARACION");
+
+    if (inhabilitados.length > 0) {
       list.push({
-        tone: ESTADOS.INHABILITADO.color,
-        Icon: Droplets,
-        text: `${counts.INHABILITADO} puestos inhabilitados por mantenimiento/filtraciones`,
+        type: "danger",
+        title: `${inhabilitados.length} puestos inhabilitados por filtración`,
+        desc: `Puestos: ${inhabilitados.map((i) => `#${i.id}`).join(", ")}`,
       });
     }
-    if (counts.INCOMPLETO) {
+    if (vacios.length > 0) {
       list.push({
-        tone: ESTADOS.INCOMPLETO.color,
-        Icon: AlertTriangle,
-        text: `${counts.INCOMPLETO} puesto(s) con periféricos o monitor faltante`,
+        type: "warn",
+        title: `${vacios.length} puestos vacíos sin PC`,
+        desc: "Requieren equipamiento de computadoras para habilitarse",
       });
     }
-    if (counts.REPARACION) {
+    if (incompletos.length > 0) {
       list.push({
-        tone: ESTADOS.REPARACION.color,
-        Icon: Wrench,
-        text: `${counts.REPARACION} equipo(s) en taller técnico IT`,
+        type: "warn",
+        title: `${incompletos.length} puestos incompletos`,
+        desc: `Puestos: ${incompletos.map((i) => `#${i.id}`).join(", ")}`,
       });
     }
-    const bajoStock = bodegaStock.filter((b) => b.actual <= 1);
-    if (bajoStock.length) {
+    if (reparacion.length > 0) {
       list.push({
-        tone: "#E11D48",
-        Icon: Warehouse,
-        text: `Stock crítico en bodega: ${bajoStock.map((b) => b.key).join(", ")}`,
+        type: "info",
+        title: `${reparacion.length} puestos en reparación`,
+        desc: `Puestos: ${reparacion.map((i) => `#${i.id}`).join(", ")}`,
       });
     }
     return list;
-  }, [counts, bodegaStock]);
+  }, [spaces]);
 
-  // 4. Handlers de actualización
-  function handleSaveSpace(updated) {
-    const today = new Date().toLocaleDateString("es-SV", { day: "2-digit", month: "2-digit", year: "numeric" });
-    const patch = { ...updated, ultimoMovimiento: today };
-
-    setSpaces((prev) => prev.map((s) => (s.id === updated.id ? patch : s)));
-    setSelectedSpace(null);
+  function handleSaveSpace(updatedSpace) {
+    setSpaces((prev) =>
+      prev.map((s) => (s.id === updatedSpace.id ? updatedSpace : s))
+    );
   }
 
-  function handleRegisterMovement(movement) {
-    setHistorial((prev) => [movement, ...prev]);
-
-    // Actualizar stock de bodega según acción
-    if (movement.origen === "BODEGA" && movement.destino !== "BODEGA") {
-      setBodegaStock((prev) =>
-        prev.map((b) => (b.key === movement.equipo ? { ...b, actual: Math.max(0, b.actual - 1) } : b))
-      );
-    } else if (movement.destino === "BODEGA" && movement.origen !== "BODEGA") {
-      setBodegaStock((prev) =>
-        prev.map((b) => (b.key === movement.equipo ? { ...b, actual: b.actual + 1 } : b))
-      );
-    }
-  }
-
-  function handleAssignDoctor(doctor, spaceId, horario) {
+  function handleAssignDoctor(doctorName, spaceId, horario) {
     setSpaces((prev) =>
       prev.map((s) => {
-        if (s.doctor === doctor && s.id !== spaceId) {
-          return { ...s, estado: "DISPONIBLE", doctor: null, horario: null };
+        if (s.doctor === doctorName && s.id !== spaceId) {
+          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO" };
         }
         if (s.id === spaceId) {
-          return { ...s, estado: "OCUPADO", doctor, horario };
+          return {
+            ...s,
+            doctor: doctorName,
+            horario: horario || s.horario || "07:00 AM – 12:00 PM",
+            estado: "OCUPADO",
+            ultimoMovimiento: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+          };
         }
         return s;
       })
     );
   }
 
-  function handleUnassignDoctor(doctor, spaceId) {
+  function handleUnassignDoctor(doctorName, spaceId) {
     setSpaces((prev) =>
       prev.map((s) => {
-        if (s.id === spaceId || s.doctor === doctor) {
-          return { ...s, estado: "DISPONIBLE", doctor: null, horario: null };
+        if (s.id === spaceId || s.doctor === doctorName) {
+          return {
+            ...s,
+            doctor: null,
+            horario: null,
+            estado: s.marca ? "DISPONIBLE" : "VACIO",
+          };
         }
         return s;
       })
     );
+  }
+
+  function handleConfirmCheckIn({ doctor, spaceId, horario, timestamp }) {
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.doctor && s.doctor.toLowerCase() === doctor.toLowerCase() && s.id !== spaceId) {
+          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO" };
+        }
+        if (s.id === spaceId) {
+          return {
+            ...s,
+            doctor,
+            horario,
+            estado: "OCUPADO",
+            ultimoMovimiento: timestamp,
+          };
+        }
+        return s;
+      })
+    );
+
+    // Registrar en auditoría
+    const newEntry = {
+      id: `checkin-${Date.now()}`,
+      fecha: new Date().toLocaleDateString("es-SV"),
+      equipo: "CHECK-IN",
+      espacio: spaceId,
+      accion: "Check-In",
+      origen: "Auto-Registro Médico",
+      destino: `Puesto #${spaceId}`,
+      falla: "N/A",
+      obs: `Médico ${doctor} realizó auto check-in en Puesto #${spaceId} (${horario})`,
+    };
+
+    setHistorial((prev) => [newEntry, ...prev]);
+  }
+
+  function handleRegisterMovement(movementData) {
+    const { tipo, cantidad, origen, destino, motivo, accion, spaceId, falla, obs } = movementData;
+
+    setBodegaStock((prev) =>
+      prev.map((item) => {
+        if (item.key === tipo) {
+          let delta = 0;
+          if (origen === "BODEGA") delta -= Number(cantidad);
+          if (destino === "BODEGA") delta += Number(cantidad);
+          return {
+            ...item,
+            actual: Math.max(0, item.actual + delta),
+          };
+        }
+        return item;
+      })
+    );
+
+    const newLog = {
+      id: `mov-${Date.now()}`,
+      fecha: new Date().toLocaleDateString("es-SV"),
+      equipo: tipo,
+      espacio: spaceId ? Number(spaceId) : null,
+      accion: accion || "Movimiento",
+      origen: origen || "BODEGA",
+      destino: destino || "Puesto",
+      falla: falla || motivo || "N/A",
+      obs: obs || `Operación de ${cantidad} unidad(es) de ${tipo}`,
+    };
+
+    setHistorial((prev) => [newLog, ...prev]);
   }
 
   function handleSync() {
     setIsSyncing(true);
     setTimeout(() => {
       setIsSyncing(false);
-      alert("✅ Datos sincronizados correctamente con la base central DoctorSV.");
-    }, 800);
+      alert("✅ Sincronización exitosa con la base de datos central de DoctorSV.");
+    }, 900);
   }
 
   return (
-    <div className="min-h-screen w-full bg-slate-50/80 text-slate-900 flex flex-col font-sans">
-      {/* Header oficial DoctorSV */}
+    <div className="min-h-screen bg-[#F4F7FB] text-slate-800 font-sans antialiased selection:bg-[#0095FF] selection:text-white">
+      {/* Header institucional */}
       <Header
         tab={tab}
         setTab={setTab}
         alerts={alerts}
         onSync={handleSync}
         isSyncing={isSyncing}
+        onOpenCheckIn={() => setCheckInModalOpen(true)}
       />
 
-      <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-6 flex-1">
-        {/* Fila superior de KPIs con estilo DoctorSV */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+      {/* Contenedor central */}
+      <main className="mx-auto max-w-[1440px] px-4 sm:px-6 py-6 space-y-6">
+        {/* KPI Header Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           <KpiCard
             label="Total Puestos"
             value={spaces.length}
@@ -220,6 +300,15 @@ export default function App() {
             spaces={spaces}
             counts={counts}
             onSelectSpace={(s) => setSelectedSpace(s)}
+          />
+        )}
+
+        {tab === "asistencia" && (
+          <AttendanceView
+            spaces={spaces}
+            onAssignDoctor={handleAssignDoctor}
+            onUnassignDoctor={handleUnassignDoctor}
+            onOpenCheckIn={() => setCheckInModalOpen(true)}
           />
         )}
 
@@ -269,6 +358,15 @@ export default function App() {
           historial={historial}
           onClose={() => setSelectedSpace(null)}
           onSave={handleSaveSpace}
+        />
+      )}
+
+      {/* Modal de Auto Check-In de Médico */}
+      {checkInModalOpen && (
+        <QuickCheckInModal
+          spaces={spaces}
+          onClose={() => setCheckInModalOpen(false)}
+          onConfirmCheckIn={handleConfirmCheckIn}
         />
       )}
     </div>
