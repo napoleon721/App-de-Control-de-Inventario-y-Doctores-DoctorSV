@@ -1,14 +1,16 @@
 import React, { useState, useMemo } from "react";
 import {
   Search, Filter, DoorOpen, LayoutGrid, Monitor, ShieldCheck, Sparkles,
-  Layers, CheckCircle2, AlertTriangle, Droplets, XCircle, Wrench, Lock, ArrowDown, ArrowUp
+  Layers, CheckCircle2, AlertTriangle, Droplets, XCircle, Wrench, Lock, ArrowDown, ArrowUp,
+  Clock, RefreshCw, UserCheck
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
-import { ESTADOS, MARCAS } from "../../constants/tokens";
+import { ESTADOS, MARCAS, HORARIOS } from "../../constants/tokens";
 
-export default function SpaceMap({ spaces, counts, onSelectSpace }) {
+export default function SpaceMap({ spaces, counts, onSelectSpace, onReleaseShift }) {
   const [query, setQuery] = useState("");
   const [filterEstado, setFilterEstado] = useState("TODOS");
+  const [filterTurno, setFilterTurno] = useState("TODOS");
 
   // Fast map lookup
   const spaceMap = useMemo(() => {
@@ -29,11 +31,12 @@ export default function SpaceMap({ spaces, counts, onSelectSpace }) {
       (space.doctor && space.doctor.toLowerCase().includes(query.toLowerCase())) ||
       (space.marca && space.marca.toLowerCase().includes(query.toLowerCase()));
     const matchesEstado = filterEstado === "TODOS" || space.estado === filterEstado;
+    const matchesTurno = filterTurno === "TODOS" || space.horario === filterTurno;
 
-    const isMatch = matchesQuery && matchesEstado;
+    const isMatch = matchesQuery && matchesEstado && matchesTurno;
 
     return (
-      <div className={`transition-all duration-200 ${isMatch ? "opacity-100 scale-100" : "opacity-20 scale-95 grayscale"}`}>
+      <div className={`transition-all duration-200 ${isMatch ? "opacity-100 scale-100" : "opacity-15 scale-95 grayscale"}`}>
         <ExactCubicle space={space} onClick={onSelectSpace} />
       </div>
     );
@@ -56,9 +59,12 @@ export default function SpaceMap({ spaces, counts, onSelectSpace }) {
   const totalRes = dellRes + lenovoRes + hpRes;
   const grandTotalPc = dellTotal + lenovoTotal + hpTotal;
 
+  // Conteo de puestos ocupados por turno
+  const occupiedSpaces = spaces.filter((s) => s.doctor);
+
   return (
     <div className="flex flex-col gap-6 select-none">
-      {/* Barra Superior de Control y Filtros */}
+      {/* Barra Superior de Control, Filtros y Transición de Turnos */}
       <div className="flex flex-wrap items-center justify-between gap-3.5 bg-white p-4 rounded-3xl border border-slate-200/90 shadow-xs">
         <div className="flex items-center gap-3">
           <span
@@ -72,20 +78,21 @@ export default function SpaceMap({ spaces, counts, onSelectSpace }) {
               Plano de Telemedicina · Sede San Miguel
             </h2>
             <p className="text-[11.5px] text-slate-500 font-medium">
-              Distribución oficial de 140 puestos en 2 alas y sector superior
+              140 puestos · {occupiedSpaces.length} ocupados en tiempo real
             </p>
           </div>
         </div>
 
-        {/* Buscador y Selector de Estado */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Buscador, Filtro por Franja de Horario y Estado */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Buscador */}
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF]/40 focus-within:bg-white transition-all">
             <Search size={14} className="text-slate-400" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar puesto (#, médico, PC)..."
-              className="w-40 sm:w-56 bg-transparent text-[12px] font-medium outline-none placeholder:text-slate-400"
+              className="w-36 sm:w-48 bg-transparent text-[12px] font-medium outline-none placeholder:text-slate-400"
             />
             {query && (
               <button onClick={() => setQuery("")} className="text-[11px] font-bold text-slate-400 hover:text-slate-600">
@@ -94,6 +101,27 @@ export default function SpaceMap({ spaces, counts, onSelectSpace }) {
             )}
           </div>
 
+          {/* Filtro por Franja Horaria / Turno */}
+          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
+            <Clock size={13} className="text-[#0048B5]" />
+            <select
+              value={filterTurno}
+              onChange={(e) => setFilterTurno(e.target.value)}
+              className="bg-transparent text-[12px] outline-none font-bold text-slate-700 cursor-pointer"
+            >
+              <option value="TODOS">Todos los turnos ({occupiedSpaces.length})</option>
+              {HORARIOS.map((h) => {
+                const count = spaces.filter((s) => s.horario === h).length;
+                return (
+                  <option key={h} value={h}>
+                    {h} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Selector de Estado */}
           <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
             <Filter size={13} className="text-slate-400" />
             <select
@@ -109,6 +137,22 @@ export default function SpaceMap({ spaces, counts, onSelectSpace }) {
               ))}
             </select>
           </div>
+
+          {/* Botón de Relevo / Liberación de Turno */}
+          {onReleaseShift && occupiedSpaces.length > 0 && (
+            <button
+              onClick={() => {
+                if (window.confirm(`¿Deseas liberar los ${occupiedSpaces.length} puestos ocupados para el cambio de turno?`)) {
+                  onReleaseShift();
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-slate-700 hover:bg-slate-800 transition shadow-2xs active:scale-95"
+              title="Libera los puestos del turno anterior para dar paso al siguiente turno"
+            >
+              <RefreshCw size={12} />
+              <span>Relevo de Turno</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -60,10 +60,63 @@ export default function SpaceDetailModal({ space, onClose, onSave, historial = [
 
         {/* Content */}
         <div className="space-y-5 p-6">
+          {/* Quick Action Bar for instant incidents & shift change */}
+          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3">
+            <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+              ⚡ Acciones Inmediatas (1 Clic)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  updateField({
+                    estado: "INHABILITADO",
+                    doctor: null,
+                    observaciones: form.observaciones ? `${form.observaciones} | INHABILITADO POR FILTRACIÓN (${new Date().toLocaleDateString("es-SV")})` : `INHABILITADO POR FILTRACIÓN (${new Date().toLocaleDateString("es-SV")})`,
+                  });
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-[11.5px] font-bold text-blue-800 hover:bg-blue-100 transition shadow-2xs active:scale-95"
+              >
+                <Droplets size={13} className="text-blue-600" />
+                <span>💧 Inhabilitar por Filtración</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  updateField({
+                    estado: "REPARACION",
+                    doctor: null,
+                    observaciones: form.observaciones ? `${form.observaciones} | DAÑO / REPARACIÓN IT (${new Date().toLocaleDateString("es-SV")})` : `EQUIPO EN REPARACIÓN IT (${new Date().toLocaleDateString("es-SV")})`,
+                  });
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-purple-300 bg-purple-50 px-3 py-1.5 text-[11.5px] font-bold text-purple-800 hover:bg-purple-100 transition shadow-2xs active:scale-95"
+              >
+                <Wrench size={13} className="text-purple-600" />
+                <span>🔧 Enviar a Reparación</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  updateField({
+                    estado: form.marca ? "DISPONIBLE" : "VACIO",
+                    doctor: null,
+                    horario: null,
+                    observaciones: form.observaciones ? `${form.observaciones} | Turno liberado` : "",
+                  });
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[11.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs active:scale-95"
+              >
+                <span>🔄 Liberar Turno (Desocupar)</span>
+              </button>
+            </div>
+          </div>
+
           {/* Quick State Selector */}
           <div>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Estado Actual del Puesto
+              Estado Detallado del Puesto
             </p>
             <div className="flex flex-wrap gap-1.5">
               {Object.keys(ESTADOS).map((k) => {

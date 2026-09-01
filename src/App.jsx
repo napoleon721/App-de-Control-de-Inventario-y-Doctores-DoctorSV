@@ -220,6 +220,32 @@ export default function App() {
     setHistorial((prev) => [newEntry, ...prev]);
   }
 
+  function handleReleaseShift() {
+    setSpaces((prev) =>
+      prev.map((s) => ({
+        ...s,
+        doctor: null,
+        horario: null,
+        estado: s.marca ? "DISPONIBLE" : "VACIO",
+      }))
+    );
+
+    // Registrar en auditoría
+    const newEntry = {
+      id: `relevo-${Date.now()}`,
+      fecha: new Date().toLocaleDateString("es-SV"),
+      equipo: "TURNO",
+      espacio: null,
+      accion: "Relevo",
+      origen: "Turno Saliente",
+      destino: "Turno Entrante",
+      falla: "N/A",
+      obs: `Relevo general de turno ejecutado: Puestos liberados para asignación del nuevo turno`,
+    };
+
+    setHistorial((prev) => [newEntry, ...prev]);
+  }
+
   function handleRegisterMovement(movementData) {
     const { tipo, cantidad, origen, destino, motivo, accion, spaceId, falla, obs } = movementData;
 
@@ -300,6 +326,7 @@ export default function App() {
             spaces={spaces}
             counts={counts}
             onSelectSpace={(s) => setSelectedSpace(s)}
+            onReleaseShift={handleReleaseShift}
           />
         )}
 
