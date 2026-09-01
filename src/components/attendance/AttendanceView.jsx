@@ -5,14 +5,7 @@ import {
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
-import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND } from "../../constants/tokens";
-
-const SUPERVISORES_PRESET = [
-  { id: "sup-1", nombre: "Dr. Ugalde (Supervisor General)", bloqueInicio: 37, bloqueFin: 76, totalPuestos: 40, horario: "07:00 AM – 12:00 PM" },
-  { id: "sup-2", nombre: "EMERSON JOSUE VIGIL HERNANDEZ", bloqueInicio: 71, bloqueFin: 104, totalPuestos: 34, horario: "07:00 AM – 12:00 PM" },
-  { id: "sup-3", nombre: "SALVADOR RENDEROS BONILLA", bloqueInicio: 105, bloqueFin: 140, totalPuestos: 36, horario: "12:00 MD – 06:00 PM" },
-  { id: "sup-4", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", bloqueInicio: 1, bloqueFin: 36, totalPuestos: 36, horario: "06:00 AM – 02:00 PM" },
-];
+import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 
 export default function AttendanceView({
   spaces,
@@ -20,7 +13,7 @@ export default function AttendanceView({
   onUnassignDoctor,
   onOpenCheckIn
 }) {
-  const [selectedSupId, setSelectedSupId] = useState(SUPERVISORES_PRESET[0].id);
+  const [selectedSupId, setSelectedSupId] = useState(SUPERVISORES_OFICIALES[0].id);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("TODOS");
 
@@ -37,7 +30,7 @@ export default function AttendanceView({
   });
 
   const currentSupervisor = useMemo(() => {
-    return SUPERVISORES_PRESET.find((s) => s.id === selectedSupId) || SUPERVISORES_PRESET[0];
+    return SUPERVISORES_OFICIALES.find((s) => s.id === selectedSupId) || SUPERVISORES_OFICIALES[0];
   }, [selectedSupId]);
 
   // Doctors programmed for this supervisor's batch
@@ -171,12 +164,21 @@ export default function AttendanceView({
               onChange={(e) => setSelectedSupId(e.target.value)}
               className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-[13px] font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs"
             >
-              {SUPERVISORES_PRESET.map((s) => (
+              {SUPERVISORES_OFICIALES.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.nombre} ({s.totalPuestos} puestos)
+                  {s.nombre} · Puesto #{s.puesto} ({s.totalPuestos} médicos)
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="border-l border-slate-200 pl-3">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+              Estación Física del Supervisor
+            </span>
+            <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-sky-700 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200">
+              <span>🔒 Puesto #{currentSupervisor.puesto}</span>
+            </div>
           </div>
 
           <div className="border-l border-slate-200 pl-3">

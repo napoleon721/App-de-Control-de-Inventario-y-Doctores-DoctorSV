@@ -1,5 +1,5 @@
 import React from "react";
-import { Monitor, AlertTriangle, Droplets, Wrench, Lock, XCircle, User } from "lucide-react";
+import { Monitor, AlertTriangle, Droplets, Wrench, Lock, XCircle, User, Shield } from "lucide-react";
 
 export default function ExactCubicle({ space, onClick }) {
   if (!space) return <div className="h-[46px] w-[50px]" />;
@@ -9,7 +9,8 @@ export default function ExactCubicle({ space, onClick }) {
   const isRevisado = space.estado === "REPARACION";
   const isReservado = space.estado === "RESERVADO";
   const isIncompleto = space.estado === "INCOMPLETO";
-  const isOcupado = space.estado === "OCUPADO" || !!space.doctor;
+  const isSupervisor = [135, 136, 137, 138, 1].includes(space.id) || space.categoria === "Supervisores";
+  const isOcupado = (space.estado === "OCUPADO" || !!space.doctor) && !isSupervisor;
 
   // Exact refined color styles matching the architectural floor plan with premium aesthetics
   let bgGradient = "linear-gradient(180deg, #2D8A4E 0%, #1E6B39 100%)"; // Verde Disponible
@@ -47,13 +48,13 @@ export default function ExactCubicle({ space, onClick }) {
     shadowGlow = "rgba(168, 85, 247, 0.3)";
     tagText = "NO PC";
     TagIcon = Wrench;
-  } else if (isReservado) {
+  } else if (isReservado || isSupervisor) {
     bgGradient = "linear-gradient(180deg, #38BDF8 0%, #0284C7 100%)"; // Celeste
     textColor = "#0F172A";
     borderColor = "#0369A1";
     shadowGlow = "rgba(56, 189, 248, 0.3)";
-    tagText = space.marca || "RESERVADO";
-    TagIcon = Lock;
+    tagText = isSupervisor ? `SUP · ${space.marca || "PC"}` : (space.marca || "RESERVADO");
+    TagIcon = isSupervisor ? Shield : Lock;
   }
 
   return (
@@ -67,14 +68,16 @@ export default function ExactCubicle({ space, onClick }) {
       }}
       className="group relative flex flex-col justify-between items-center h-[46px] w-[50px] sm:w-[54px] rounded-[5px] border border-black/25 p-1 shadow-2xs hover:scale-110 hover:z-30 hover:shadow-lg transition-all duration-150 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-white"
     >
-      {/* Top row: Number */}
+      {/* Top row: Number & Status Pulse */}
       <div className="w-full flex items-center justify-between px-0.5 leading-none">
         <span className="text-[11.5px] font-extrabold font-heading tracking-tight drop-shadow-xs">
           {space.id}
         </span>
-        {isOcupado && (
+        {isSupervisor ? (
+          <span className="h-2 w-2 rounded-full bg-cyan-200 ring-1 ring-slate-900/40" title={`Puesto de Supervisión: ${space.doctor || 'Supervisor'}`} />
+        ) : isOcupado ? (
           <span className="h-2 w-2 rounded-full bg-emerald-300 ring-1 ring-white/80 animate-pulse" title={`Asignado a: ${space.doctor}`} />
-        )}
+        ) : null}
       </div>
 
       {/* Bottom row: Hardware Tag & Micro Icon */}

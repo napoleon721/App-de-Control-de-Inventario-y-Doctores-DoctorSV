@@ -1,6 +1,6 @@
 import {
   User, CheckCircle2, AlertTriangle, Droplets, Wrench, Lock, XCircle,
-  Laptop, Monitor, Mouse, Headphones, Cable, Wifi
+  Laptop, Monitor, Mouse, Headphones, Cable, Wifi, Shield
 } from "lucide-react";
 import excelData from "./excelData.json";
 
@@ -69,13 +69,13 @@ export const ESTADOS = {
     icon: Wrench
   },
   RESERVADO: {
-    label: "Reservado",
+    label: "Reservado / Supervisión",
     color: "#0EA5E9",        // Celeste / Sky Cyan
     soft: "#E0F2FE",
     badgeBg: "#0284C7",
     textDark: "#0369A1",
     border: "#38BDF8",
-    icon: Lock
+    icon: Shield
   },
   OCUPADO: {
     label: "Ocupado con Médico",
@@ -101,6 +101,16 @@ export const HORARIOS = [
   "06:00 PM – 10:00 PM",
 ];
 
+// Supervisores Oficiales extraídos de las tablas del Excel
+export const SUPERVISORES_OFICIALES = [
+  { id: "sup-1", nombre: "EMERSON JOSUE VIGIL HERNANDEZ", puesto: 135, rol: "Supervisor Médico (Turno Mañana)", bloqueInicio: 37, bloqueFin: 76, totalPuestos: 40, horario: "06:00 AM – 02:00 PM" },
+  { id: "sup-2", nombre: "SALVADOR RENDEROS BONILLA", puesto: 136, rol: "Supervisor Médico (Turno Tarde)", bloqueInicio: 71, bloqueFin: 104, totalPuestos: 34, horario: "02:00 PM – 10:00 PM" },
+  { id: "sup-3", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", puesto: 137, rol: "Supervisor Médico (Turno Intermedio)", bloqueInicio: 1, bloqueFin: 36, totalPuestos: 36, horario: "08:00 AM – 12:00 MD" },
+  { id: "sup-4", nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ", puesto: 138, rol: "Supervisora Médica", bloqueInicio: 105, bloqueFin: 140, totalPuestos: 36, horario: "07:00 AM – 12:00 PM" },
+  { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO", puesto: 1, rol: "Supervisor de Control & Acceso", bloqueInicio: 1, bloqueFin: 40, totalPuestos: 40, horario: "02:00 PM – 10:00 PM" },
+  { id: "sup-6", nombre: "Dr. Ugalde (Supervisor General)", puesto: 135, rol: "Coordinador General de Sede", bloqueInicio: 37, bloqueFin: 76, totalPuestos: 40, horario: "07:00 AM – 12:00 PM" },
+];
+
 // Datos reales extraídos directamente de los archivos Excel oficiales
 export const DOCTORES_EXCEL = excelData.doctors || [];
 export const STAFF_EXCEL = excelData.staff || [];
@@ -122,18 +132,50 @@ export const HISTORIAL_MOCK = excelData.movements && excelData.movements.length 
       { id: "mov-1", fecha: "25/07/2026", equipo: "MAUSE", espacio: 84, accion: "Cambio", origen: "84", destino: "140", falla: "Falla en scroll", obs: "Funciona posterior a periodo de inactividad" }
     ];
 
-// Generador de espacios a partir del inventario real de Excel
+// Generador de espacios a partir del inventario real de Excel con los puestos exactos de supervisión
 export function buildInitialSpaces() {
   if (excelData.inventory && excelData.inventory.length === 140) {
-    return excelData.inventory.map((inv) => ({
-      ...inv,
-      modelo: inv.modelo || (inv.marca ? `${inv.marca === "DELL" ? "OptiPlex 3080" : inv.marca === "LENOVO" ? "ThinkCentre M70q" : "EliteDesk 800"}` : null),
-      activoPc: inv.activoPc || (inv.marca ? `PC-${1000 + inv.id}` : null),
-      monitor: inv.monitor || (inv.marca ? { activo: `MON-${2000 + inv.id}`, marca: inv.marca } : null),
-    }));
+    return excelData.inventory.map((inv) => {
+      let doctor = inv.doctor || null;
+      let categoria = inv.categoria || null;
+      let observaciones = inv.observaciones || "";
+
+      // Mapeo exacto de los puestos de supervisión y administrativos identificados en las tablas
+      if (inv.id === 135) {
+        doctor = "EMERSON JOSUE VIGIL HERNANDEZ (Supervisor)";
+        categoria = "Supervisores";
+        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 42)";
+      } else if (inv.id === 136) {
+        doctor = "SALVADOR RENDEROS BONILLA (Supervisor)";
+        categoria = "Supervisores";
+        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 43)";
+      } else if (inv.id === 137) {
+        doctor = "ALFREDO ISAAC MARTINEZ AMAYA (Supervisor)";
+        categoria = "Supervisores";
+        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 45)";
+      } else if (inv.id === 138) {
+        doctor = "ROXANA GUADALUPE CANALES RODRIGUEZ (Supervisora)";
+        categoria = "Supervisores";
+        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 44)";
+      } else if (inv.id === 1) {
+        doctor = "EDWARD JOSUE ZELAYA PRUDENCIO (Supervisor de Control)";
+        categoria = "Supervisores";
+        observaciones = "ESTACIÓN DE CONTROL DE ACCESO Y SUPERVISIÓN (Puesto Reservado)";
+      }
+
+      return {
+        ...inv,
+        doctor,
+        categoria,
+        observaciones,
+        modelo: inv.modelo || (inv.marca ? `${inv.marca === "DELL" ? "OptiPlex 3080" : inv.marca === "LENOVO" ? "ThinkCentre M70q" : "EliteDesk 800"}` : null),
+        activoPc: inv.activoPc || (inv.marca ? `PC-${1000 + inv.id}` : null),
+        monitor: inv.monitor || (inv.marca ? { activo: `MON-${2000 + inv.id}`, marca: inv.marca } : null),
+      };
+    });
   }
 
-  // Fallback si no está el archivo
+  // Fallback
   const list = [];
   for (let i = 1; i <= 140; i++) {
     list.push({
