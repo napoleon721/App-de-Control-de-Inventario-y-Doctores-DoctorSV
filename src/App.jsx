@@ -6,11 +6,13 @@ import Header from "./components/common/Header";
 import KpiCard from "./components/common/KpiCard";
 import SpaceMap from "./components/map/SpaceMap";
 import SpaceDetailModal from "./components/map/SpaceDetailModal";
+import ClaimSpaceModal from "./components/map/ClaimSpaceModal";
 import WarehouseView from "./components/warehouse/WarehouseView";
 import DoctorsView from "./components/doctors/DoctorsView";
 import HistoryView from "./components/history/HistoryView";
 import AttendanceView from "./components/attendance/AttendanceView";
 import QuickCheckInModal from "./components/attendance/QuickCheckInModal";
+import AuthPortal from "./components/auth/AuthPortal";
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, buildInitialSpaces
@@ -52,10 +54,22 @@ export default function App() {
     }
   });
 
+  // 2. Sesión multi-usuario (Doctor Master vs Doctor Operativo)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_ACTIVE_USER_V2");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [tab, setTab] = useState("mapa");
   const [selectedSpace, setSelectedSpace] = useState(null);
+  const [claimModalSpace, setClaimModalSpace] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
+  const [authPortalOpen, setAuthPortalOpen] = useState(false);
 
   // Sincronizar en LocalStorage
   useEffect(() => {
@@ -82,6 +96,30 @@ export default function App() {
       console.error("Error saving historial:", e);
     }
   }, [historial]);
+
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem("DOCTORSV_ACTIVE_USER_V2", JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem("DOCTORSV_ACTIVE_USER_V2");
+      }
+    } catch (e) {
+      console.error("Error saving user session:", e);
+    }
+  }, [currentUser]);
+
+  // Si el médico entra y ya tenía un cubículo asignado en el mapa, auto-vincular
+  useEffect(() => {
+    if (currentUser?.role === "DOCTOR" && !currentUser.spaceId) {
+      const existing = spaces.find(
+        (s) => s.doctor && s.doctor.toLowerCase() === currentUser.name.toLowerCase()
+      );
+      if (existing) {
+        setCurrentUser((prev) => (prev ? { ...prev, spaceId: existing.id } : null));
+      }
+    }
+  }, [spaces, currentUser]);
 
   // Conteos calculados reactivamente
   const counts = useMemo(() => {
@@ -185,6 +223,104 @@ export default function App() {
     );
   }
 
+  // Flujo exclusivo de Doctor: Asignación interactiva al hacer clic en un puesto del mapa
+  function handleClaimSpace(space) {
+    if (!currentUser) return;
+    const docName = currentUser.name;
+    const shift = currentUser.shift;
+    const timeNow = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
+    setSpaces((prev) =>
+      prev.map((s) => {
+        // Liberar puesto anterior si tenía uno asignado
+        if (s.doctor && s.doctor.toLowerCase() === docName.toLowerCase() && s.id !== space.id) {
+          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO" };
+        }
+        if (s.id === space.id) {
+          return {
+            ...s,
+            doctor: docName,
+            horario: shift,
+            estado: "OCUPADO",
+            ultimoMovimiento: timeNow,
+          };
+        }
+        return s;
+      })
+    );
+
+    setCurrentUser((prev) => (prev ? { ...prev, spaceId: space.id } : null));
+
+    // Auditoría
+    const newLog = {
+      id: `claim-${Date.now()}`,
+      fecha: new Date().toLocaleDateString("es-SV"),
+      equipo: space.marca || "PC",
+      espacio: space.id,
+      accion: "Ocupación de Puesto",
+      origen: "Plano de Ubicaciones",
+      destino: `Puesto #${space.id}`,
+      falla: "N/A",
+      obs: `Dr(a). ${docName} inició su turno y tomó posesión del Puesto #${space.id} (${shift})`,
+    };
+    setHistorial((prev) => [newLog, ...prev]);
+  }
+
+  // Liberar el puesto de trabajo del doctor (dejándolo DISPONIBLE para el siguiente turno)
+  function handleReleaseMySpace() {
+    if (!currentUser) return;
+    const currentSpaceId = currentUser.spaceId;
+    const docName = currentUser.name;
+
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.id === currentSpaceId || (s.doctor && s.doctor.toLowerCase() === docName.toLowerCase())) {
+          return {
+            ...s,
+            doctor: null,
+            horario: null,
+            estado: s.marca ? "DISPONIBLE" : "VACIO",
+          };
+        }
+        return s;
+      })
+    );
+
+    if (currentSpaceId) {
+      const newLog = {
+        id: `release-${Date.now()}`,
+        fecha: new Date().toLocaleDateString("es-SV"),
+        equipo: "PC",
+        espacio: currentSpaceId,
+        accion: "Fin de Jornada",
+        origen: `Puesto #${currentSpaceId}`,
+        destino: "DISPONIBLE",
+        falla: "N/A",
+        obs: `Dr(a). ${docName} finalizó su jornada de trabajo. El Puesto #${currentSpaceId} quedó DISPONIBLE.`,
+      };
+      setHistorial((prev) => [newLog, ...prev]);
+    }
+
+    setCurrentUser((prev) => (prev ? { ...prev, spaceId: null } : null));
+  }
+
+  // Deslogueo completo: libera el puesto si estaba ocupado y abre el portal
+  function handleLogout() {
+    if (currentUser?.role === "DOCTOR" && currentUser?.spaceId) {
+      handleReleaseMySpace();
+    }
+    setCurrentUser(null);
+    setAuthPortalOpen(true);
+  }
+
+  function handleSpaceClick(space) {
+    if (currentUser?.role === "DOCTOR") {
+      setClaimModalSpace(space);
+    } else {
+      setSelectedSpace(space);
+    }
+  }
+
   function handleConfirmCheckIn({ doctor, spaceId, horario, timestamp }) {
     setSpaces((prev) =>
       prev.map((s) => {
@@ -204,7 +340,6 @@ export default function App() {
       })
     );
 
-    // Registrar en auditoría
     const newEntry = {
       id: `checkin-${Date.now()}`,
       fecha: new Date().toLocaleDateString("es-SV"),
@@ -230,7 +365,6 @@ export default function App() {
       }))
     );
 
-    // Registrar en auditoría
     const newEntry = {
       id: `relevo-${Date.now()}`,
       fecha: new Date().toLocaleDateString("es-SV"),
@@ -287,6 +421,8 @@ export default function App() {
     }, 900);
   }
 
+  const isDoctorRole = currentUser?.role === "DOCTOR";
+
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-800 font-sans antialiased selection:bg-[#0095FF] selection:text-white">
       {/* Header institucional */}
@@ -297,40 +433,47 @@ export default function App() {
         onSync={handleSync}
         isSyncing={isSyncing}
         onOpenCheckIn={() => setCheckInModalOpen(true)}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onOpenAuthPortal={() => setAuthPortalOpen(true)}
       />
 
       {/* Contenedor central */}
       <main className="mx-auto max-w-[1440px] px-4 sm:px-6 py-6 space-y-6">
-        {/* KPI Header Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <KpiCard
-            label="Total Puestos"
-            value={spaces.length}
-            tone="#0048B5"
-            Icon={LayoutGrid}
-          />
-          {Object.keys(ESTADOS).map((k) => (
+        {/* KPI Header Bar (Solo visible para Doctor Master o sin sesión, para dar vista limpia al doctor) */}
+        {!isDoctorRole && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <KpiCard
-              key={k}
-              label={ESTADOS[k].label}
-              value={counts[k] || 0}
-              tone={ESTADOS[k].color}
-              Icon={ESTADOS[k].icon}
+              label="Total Puestos"
+              value={spaces.length}
+              tone="#0048B5"
+              Icon={LayoutGrid}
             />
-          ))}
-        </div>
+            {Object.keys(ESTADOS).map((k) => (
+              <KpiCard
+                key={k}
+                label={ESTADOS[k].label}
+                value={counts[k] || 0}
+                tone={ESTADOS[k].color}
+                Icon={ESTADOS[k].icon}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Contenido según pestaña activa */}
-        {tab === "mapa" && (
+        {(tab === "mapa" || isDoctorRole) && (
           <SpaceMap
             spaces={spaces}
             counts={counts}
-            onSelectSpace={(s) => setSelectedSpace(s)}
+            onSelectSpace={handleSpaceClick}
             onReleaseShift={handleReleaseShift}
+            currentUser={currentUser}
+            onReleaseMySpace={handleReleaseMySpace}
           />
         )}
 
-        {tab === "asistencia" && (
+        {!isDoctorRole && tab === "asistencia" && (
           <AttendanceView
             spaces={spaces}
             onAssignDoctor={handleAssignDoctor}
@@ -339,7 +482,7 @@ export default function App() {
           />
         )}
 
-        {tab === "bodega" && (
+        {!isDoctorRole && tab === "bodega" && (
           <WarehouseView
             bodegaStock={bodegaStock}
             spaces={spaces}
@@ -347,7 +490,7 @@ export default function App() {
           />
         )}
 
-        {tab === "medicos" && (
+        {!isDoctorRole && tab === "medicos" && (
           <DoctorsView
             spaces={spaces}
             onAssignDoctor={handleAssignDoctor}
@@ -355,7 +498,7 @@ export default function App() {
           />
         )}
 
-        {tab === "historial" && (
+        {!isDoctorRole && tab === "historial" && (
           <HistoryView
             historial={historial}
             spaces={spaces}
@@ -369,7 +512,11 @@ export default function App() {
             <img src="/logo.png" alt="DoctorSV" className="h-5 object-contain" />
             <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
               <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-medium">Sistema de Gestión de Telemedicina · Sede San Miguel</span>
+              <span className="font-medium">
+                {isDoctorRole
+                  ? `Estación de Dr(a). ${currentUser.name} · Sede San Miguel`
+                  : "Sistema de Gestión de Telemedicina · Sede San Miguel"}
+              </span>
             </div>
           </div>
           <span className="font-heading font-bold tracking-wide text-slate-600">
@@ -378,7 +525,7 @@ export default function App() {
         </footer>
       </main>
 
-      {/* Modal de edición de espacio */}
+      {/* Modal de edición de espacio (Master) */}
       {selectedSpace && (
         <SpaceDetailModal
           space={selectedSpace}
@@ -388,12 +535,43 @@ export default function App() {
         />
       )}
 
-      {/* Modal de Auto Check-In de Médico */}
+      {/* Modal interactivo para que el doctor ocupe o libere su puesto */}
+      {claimModalSpace && (
+        <ClaimSpaceModal
+          space={claimModalSpace}
+          currentUser={currentUser}
+          onClose={() => setClaimModalSpace(null)}
+          onConfirmClaim={handleClaimSpace}
+          onReleaseMySpace={() => {
+            handleReleaseMySpace();
+            setClaimModalSpace(null);
+          }}
+        />
+      )}
+
+      {/* Modal de Auto Check-In de Médico (Master) */}
       {checkInModalOpen && (
         <QuickCheckInModal
           spaces={spaces}
           onClose={() => setCheckInModalOpen(false)}
           onConfirmCheckIn={handleConfirmCheckIn}
+        />
+      )}
+
+      {/* Portal de Acceso Multi-Usuario (Doctor Master vs Doctor Operativo) */}
+      {(authPortalOpen || !currentUser) && (
+        <AuthPortal
+          onLoginMaster={() => {
+            setCurrentUser({ role: "MASTER", name: "Doctor Master (Admin)", shift: "Turno Completo" });
+            setAuthPortalOpen(false);
+          }}
+          onLoginDoctor={(doctorData) => {
+            setCurrentUser(doctorData);
+            setAuthPortalOpen(false);
+            setTab("mapa");
+          }}
+          onClose={currentUser ? () => setAuthPortalOpen(false) : null}
+          isModal={!!currentUser}
         />
       )}
     </div>

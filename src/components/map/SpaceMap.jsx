@@ -2,12 +2,19 @@ import React, { useState, useMemo } from "react";
 import {
   Search, Filter, DoorOpen, LayoutGrid, Monitor, ShieldCheck, Sparkles,
   Layers, CheckCircle2, AlertTriangle, Droplets, XCircle, Wrench, Lock, ArrowDown, ArrowUp,
-  Clock, RefreshCw, UserCheck
+  Clock, RefreshCw, UserCheck, LogOut, Laptop, User
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
 import { ESTADOS, MARCAS, HORARIOS } from "../../constants/tokens";
 
-export default function SpaceMap({ spaces, counts, onSelectSpace, onReleaseShift }) {
+export default function SpaceMap({
+  spaces,
+  counts,
+  onSelectSpace,
+  onReleaseShift,
+  currentUser,
+  onReleaseMySpace,
+}) {
   const [query, setQuery] = useState("");
   const [filterEstado, setFilterEstado] = useState("TODOS");
   const [filterTurno, setFilterTurno] = useState("TODOS");
@@ -34,9 +41,14 @@ export default function SpaceMap({ spaces, counts, onSelectSpace, onReleaseShift
     const matchesTurno = filterTurno === "TODOS" || space.horario === filterTurno;
 
     const isMatch = matchesQuery && matchesEstado && matchesTurno;
+    const isMyAssignedSpace = currentUser?.spaceId === space.id;
 
     return (
-      <div className={`transition-all duration-200 ${isMatch ? "opacity-100 scale-100" : "opacity-15 scale-95 grayscale"}`}>
+      <div
+        className={`transition-all duration-200 ${
+          isMatch ? "opacity-100 scale-100" : "opacity-15 scale-95 grayscale"
+        } ${isMyAssignedSpace ? "ring-4 ring-amber-400 ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md" : ""}`}
+      >
         <ExactCubicle space={space} onClick={onSelectSpace} />
       </div>
     );
@@ -138,8 +150,8 @@ export default function SpaceMap({ spaces, counts, onSelectSpace, onReleaseShift
             </select>
           </div>
 
-          {/* Botón de Relevo / Liberación de Turno */}
-          {onReleaseShift && occupiedSpaces.length > 0 && (
+          {/* Botón de Relevo / Liberación de Turno (Solo para Master/Admin) */}
+          {currentUser?.role !== "DOCTOR" && onReleaseShift && occupiedSpaces.length > 0 && (
             <button
               onClick={() => {
                 if (window.confirm(`¿Deseas liberar los ${occupiedSpaces.length} puestos ocupados para el cambio de turno?`)) {
@@ -155,6 +167,51 @@ export default function SpaceMap({ spaces, counts, onSelectSpace, onReleaseShift
           )}
         </div>
       </div>
+
+      {/* Banner Exclusivo de Doctor Operativo: Puesto Asignado & Guía de Liberación */}
+      {currentUser?.role === "DOCTOR" && (
+        <div
+          style={{ animation: "fadeIn .2s ease-out both" }}
+          className={`p-4 rounded-3xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm transition-all ${
+            currentUser.spaceId
+              ? "bg-emerald-50/90 border-emerald-300 text-emerald-950"
+              : "bg-blue-50/90 border-blue-300 text-blue-950"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-xs ${
+                currentUser.spaceId ? "bg-emerald-600" : "bg-[#0048B5]"
+              }`}
+            >
+              {currentUser.spaceId ? <Laptop size={22} /> : <CheckCircle2 size={22} />}
+            </span>
+            <div>
+              <p className="font-heading text-[15px] font-bold">
+                {currentUser.spaceId
+                  ? `Estación de Trabajo Activa: Puesto #${currentUser.spaceId} (${spaceMap[currentUser.spaceId]?.marca || "PC"})`
+                  : `¡Bienvenido Dr(a). ${currentUser.name}!`}
+              </p>
+              <p className="text-[12px] opacity-90 mt-0.5">
+                {currentUser.spaceId
+                  ? `Puesto asignado para tu turno (${currentUser.shift}). Al terminar tu turno, presiona el botón para dejar el puesto disponible.`
+                  : "Por favor haz clic sobre cualquier cubículo marcado en VERDE (Disponible) para seleccionarlo e iniciar tu jornada."}
+              </p>
+            </div>
+          </div>
+
+          {currentUser.spaceId && onReleaseMySpace && (
+            <button
+              type="button"
+              onClick={onReleaseMySpace}
+              className="shrink-0 flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-[12.5px] font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-md transition-all active:scale-95"
+            >
+              <LogOut size={15} />
+              <span>Finalizar Jornada (Liberar Puesto #{currentUser.spaceId})</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* CONTENEDOR PRINCIPAL DEL PLANO ARQUITECTÓNICO SIMÉTRICO */}
       <div className="relative bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-8 shadow-sm overflow-x-auto">
