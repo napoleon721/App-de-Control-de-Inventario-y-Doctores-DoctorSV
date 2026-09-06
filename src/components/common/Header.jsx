@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import {
   LayoutGrid, Warehouse, Stethoscope, FileClock, Bell,
   RefreshCw, Sheet as SheetIcon, LogIn, Sparkles, UserCheck, CheckCircle2,
-  Shield, LogOut, Laptop, User
+  Shield, LogOut, Laptop, User, FileSpreadsheet, Clock, Settings
 } from "lucide-react";
 import DoctorSVLogo from "./DoctorSVLogo";
 import { BRAND } from "../../constants/tokens";
@@ -17,6 +17,8 @@ export default function Header({
   currentUser,
   onLogout,
   onOpenAuthPortal,
+  onOpenShiftConfig,
+  onOpenLiveReport,
 }) {
   const [alertOpen, setAlertOpen] = useState(false);
 
@@ -121,6 +123,30 @@ export default function Header({
             >
               <RefreshCw size={13} className={isSyncing ? "animate-spin text-[#0095FF]" : "text-slate-500"} />
               <span>{isSyncing ? "Sincronizando..." : "Sync"}</span>
+            </button>
+          )}
+
+          {/* Reporte en Vivo (Master only) */}
+          {!isDoctorRole && onOpenLiveReport && (
+            <button
+              onClick={onOpenLiveReport}
+              className="hidden md:flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 px-3 py-1.5 text-[12px] font-bold text-emerald-800 transition shadow-2xs active:scale-95"
+              title="Generar y visualizar reporte de asistencia y ocupación en vivo"
+            >
+              <FileSpreadsheet size={14} className="text-emerald-700" />
+              <span>Reporte</span>
+            </button>
+          )}
+
+          {/* Configuración de Turnos / Horarios (Master only) */}
+          {!isDoctorRole && onOpenShiftConfig && (
+            <button
+              onClick={onOpenShiftConfig}
+              className="hidden md:flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700 transition shadow-2xs active:scale-95"
+              title="Configurar y editar horarios y turnos disponibles para los médicos"
+            >
+              <Clock size={13} className="text-[#0048B5]" />
+              <span>Turnos</span>
             </button>
           )}
 

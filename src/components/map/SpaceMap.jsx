@@ -14,7 +14,9 @@ export default function SpaceMap({
   onReleaseShift,
   currentUser,
   onReleaseMySpace,
+  horarios = HORARIOS,
 }) {
+  const isDoctorRole = currentUser?.role === "DOCTOR";
   const [query, setQuery] = useState("");
   const [filterEstado, setFilterEstado] = useState("TODOS");
   const [filterTurno, setFilterTurno] = useState("TODOS");
@@ -122,7 +124,7 @@ export default function SpaceMap({
               className="bg-transparent text-[12px] outline-none font-bold text-slate-700 cursor-pointer"
             >
               <option value="TODOS">Todos los turnos ({occupiedSpaces.length})</option>
-              {HORARIOS.map((h) => {
+              {(horarios || HORARIOS).map((h) => {
                 const count = spaces.filter((s) => s.horario === h).length;
                 return (
                   <option key={h} value={h}>
@@ -446,13 +448,13 @@ export default function SpaceMap({
           </div>
 
           {/* ================= TABLAS INFERIORES RESUMEN CON DISEÑO PREMIUM ================= */}
-          <div className="mt-8 pt-6 border-t-2 border-slate-200/80 grid grid-cols-1 md:grid-cols-3 gap-6 text-[12px]">
+          <div className={`mt-8 pt-6 border-t-2 border-slate-200/80 ${isDoctorRole ? "max-w-md" : "grid grid-cols-1 md:grid-cols-3 gap-6"} text-[12px]`}>
 
-            {/* TABLA 1: CÓDIGO DE COLOR */}
-            <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
+            {/* TABLA 1: CÓDIGO DE COLOR & RESUMEN DE DISPONIBILIDAD (Visible para Médicos y Master) */}
+            <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200 shadow-2xs">
               <div className="flex items-center justify-between">
                 <span className="font-heading font-bold text-[13px] tracking-wider text-slate-800 uppercase">
-                  Código de Color & Totales
+                  {isDoctorRole ? "Resumen de Puestos y Disponibilidad" : "Código de Color & Totales"}
                 </span>
                 <span className="text-[11px] font-mono-data text-slate-400 font-bold">140 Espacios</span>
               </div>
@@ -462,125 +464,137 @@ export default function SpaceMap({
                     <span className="h-3.5 w-5 rounded-[3px] bg-[#237A40] shadow-2xs" />
                     <span className="font-semibold text-slate-700">DISPONIBLE</span>
                   </div>
-                  <span className="font-mono-data font-bold text-slate-900">{counts.DISPONIBLE || 95}</span>
+                  <span className="font-mono-data font-bold text-slate-900">{counts.DISPONIBLE || 0}</span>
+                </div>
+                <div className="flex items-center justify-between p-2.5 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-3.5 w-5 rounded-[3px] bg-[#0048B5] shadow-2xs" />
+                    <span className="font-semibold text-slate-700">OCUPADO CON MÉDICO</span>
+                  </div>
+                  <span className="font-mono-data font-bold text-slate-900">{counts.OCUPADO || 0}</span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <span className="h-3.5 w-5 rounded-[3px] bg-[#F59E0B] shadow-2xs" />
                     <span className="font-semibold text-slate-700">INCOMPLETOS</span>
                   </div>
-                  <span className="font-mono-data font-bold text-slate-900">{counts.INCOMPLETO || 1}</span>
+                  <span className="font-mono-data font-bold text-slate-900">{counts.INCOMPLETO || 0}</span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <span className="h-3.5 w-5 rounded-[3px] bg-[#2563EB] shadow-2xs" />
                     <span className="font-semibold text-slate-700">INHABILITADOS (FILTRACIÓN)</span>
                   </div>
-                  <span className="font-mono-data font-bold text-slate-900">{counts.INHABILITADO || 8}</span>
+                  <span className="font-mono-data font-bold text-slate-900">{counts.INHABILITADO || 0}</span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <span className="h-3.5 w-5 rounded-[3px] bg-[#F43F5E] shadow-2xs" />
                     <span className="font-semibold text-slate-700">VACÍOS SIN EQUIPO</span>
                   </div>
-                  <span className="font-mono-data font-bold text-slate-900">{counts.VACIO || 29}</span>
+                  <span className="font-mono-data font-bold text-slate-900">{counts.VACIO || 0}</span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <span className="h-3.5 w-5 rounded-[3px] bg-[#A855F7] shadow-2xs" />
                     <span className="font-semibold text-slate-700">REPARACIÓN</span>
                   </div>
-                  <span className="font-mono-data font-bold text-slate-900">{counts.REPARACION || 1}</span>
+                  <span className="font-mono-data font-bold text-slate-900">{counts.REPARACION || 0}</span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <span className="h-3.5 w-5 rounded-[3px] bg-[#38BDF8] shadow-2xs" />
-                    <span className="font-semibold text-slate-700">RESERVADO</span>
+                    <span className="font-semibold text-slate-700">RESERVADO / SUPERVISIÓN</span>
                   </div>
-                  <span className="font-mono-data font-bold text-slate-900">{counts.RESERVADO || 5}</span>
+                  <span className="font-mono-data font-bold text-slate-900">{counts.RESERVADO || 0}</span>
                 </div>
               </div>
             </div>
 
-            {/* TABLA 2: INVENTARIO BODEGA */}
-            <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
-              <div className="flex items-center justify-between">
-                <span className="font-heading font-bold text-[13px] tracking-wider text-slate-800 uppercase">
-                  Inventario en Bodega
-                </span>
-                <span className="text-[11px] font-mono-data text-slate-400 font-bold">Stock de Reserva</span>
-              </div>
-              <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white shadow-2xs">
-                <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                  <span className="font-bold text-slate-700">PC (COMPUTADORAS)</span>
-                  <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">1</span>
+            {/* TABLA 2 Y TABLA 3: EXCLUSIVAS PARA ADMINISTRADOR / MASTER (Ocultas para rol Doctor) */}
+            {!isDoctorRole && (
+              <>
+                {/* TABLA 2: INVENTARIO BODEGA */}
+                <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-heading font-bold text-[13px] tracking-wider text-slate-800 uppercase">
+                      Inventario en Bodega
+                    </span>
+                    <span className="text-[11px] font-mono-data text-slate-400 font-bold">Stock de Reserva</span>
+                  </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white shadow-2xs">
+                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
+                      <span className="font-bold text-slate-700">PC (COMPUTADORAS)</span>
+                      <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">1</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
+                      <span className="font-bold text-slate-700">MAUSE</span>
+                      <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">2</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
+                      <span className="font-bold text-slate-700">HUB USB-C</span>
+                      <span className="font-mono-data font-bold text-slate-400 text-[13px]">0</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
+                      <span className="font-bold text-slate-700">MONITOR</span>
+                      <span className="font-mono-data font-bold text-slate-400 text-[13px]">0</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
+                      <span className="font-bold text-slate-700">CABLES ETHERNET</span>
+                      <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">1</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                  <span className="font-bold text-slate-700">MAUSE</span>
-                  <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">2</span>
-                </div>
-                <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                  <span className="font-bold text-slate-700">HUB USB-C</span>
-                  <span className="font-mono-data font-bold text-slate-400 text-[13px]">0</span>
-                </div>
-                <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                  <span className="font-bold text-slate-700">MONITOR</span>
-                  <span className="font-mono-data font-bold text-slate-400 text-[13px]">0</span>
-                </div>
-                <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                  <span className="font-bold text-slate-700">CABLES ETHERNET</span>
-                  <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">1</span>
-                </div>
-              </div>
-            </div>
 
-            {/* TABLA 3: TOTALES POR MARCAS / ESTADO */}
-            <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
-              <div className="flex items-center justify-between">
-                <span className="font-heading font-bold text-[13px] tracking-wider text-slate-800 uppercase">
-                  Totales por Marca
-                </span>
-                <span className="text-[11px] font-mono-data text-slate-400 font-bold">{grandTotalPc} PCs en Sede</span>
-              </div>
-              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                <table className="w-full text-center text-[12px]">
-                  <thead>
-                    <tr className="bg-slate-100/80 border-b border-slate-200 font-bold text-slate-700 uppercase text-[10px] tracking-wider">
-                      <th className="p-2.5 text-left">Marca</th>
-                      <th className="p-2.5">Disponible</th>
-                      <th className="p-2.5">Reservado</th>
-                      <th className="p-2.5">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-2.5 text-left font-bold text-slate-800">DELL</td>
-                      <td className="p-2.5 font-mono-data bg-emerald-50 text-emerald-800 font-bold">{dellDisp}</td>
-                      <td className="p-2.5 font-mono-data text-slate-600">{dellRes}</td>
-                      <td className="p-2.5 font-mono-data font-extrabold text-slate-900 bg-slate-50">{dellTotal}</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-2.5 text-left font-bold text-slate-800">LENOVO</td>
-                      <td className="p-2.5 font-mono-data bg-emerald-50 text-emerald-800 font-bold">{lenovoDisp}</td>
-                      <td className="p-2.5 font-mono-data text-slate-600">{lenovoRes}</td>
-                      <td className="p-2.5 font-mono-data font-extrabold text-slate-900 bg-slate-50">{lenovoTotal}</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-2.5 text-left font-bold text-slate-800">HP</td>
-                      <td className="p-2.5 font-mono-data bg-emerald-50 text-emerald-800 font-bold">{hpDisp}</td>
-                      <td className="p-2.5 font-mono-data text-slate-600">{hpRes}</td>
-                      <td className="p-2.5 font-mono-data font-extrabold text-slate-900 bg-slate-50">{hpTotal}</td>
-                    </tr>
-                    <tr className="bg-slate-100/90 font-bold">
-                      <td className="p-2.5 text-left uppercase text-[11px] text-slate-700">Totales</td>
-                      <td className="p-2.5 font-mono-data text-emerald-800 font-extrabold">{totalDisp}</td>
-                      <td className="p-2.5 font-mono-data text-slate-700 font-extrabold">{totalRes}</td>
-                      <td className="p-2.5 font-mono-data font-extrabold text-[#0048B5] bg-blue-50">{grandTotalPc}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                {/* TABLA 3: TOTALES POR MARCAS / ESTADO */}
+                <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-heading font-bold text-[13px] tracking-wider text-slate-800 uppercase">
+                      Totales por Marca
+                    </span>
+                    <span className="text-[11px] font-mono-data text-slate-400 font-bold">{grandTotalPc} PCs en Sede</span>
+                  </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                    <table className="w-full text-center text-[12px]">
+                      <thead>
+                        <tr className="bg-slate-100/80 border-b border-slate-200 font-bold text-slate-700 uppercase text-[10px] tracking-wider">
+                          <th className="p-2.5 text-left">Marca</th>
+                          <th className="p-2.5">Disponible</th>
+                          <th className="p-2.5">Reservado</th>
+                          <th className="p-2.5">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr className="hover:bg-slate-50">
+                          <td className="p-2.5 text-left font-bold text-slate-800">DELL</td>
+                          <td className="p-2.5 font-mono-data bg-emerald-50 text-emerald-800 font-bold">{dellDisp}</td>
+                          <td className="p-2.5 font-mono-data text-slate-600">{dellRes}</td>
+                          <td className="p-2.5 font-mono-data font-extrabold text-slate-900 bg-slate-50">{dellTotal}</td>
+                        </tr>
+                        <tr className="hover:bg-slate-50">
+                          <td className="p-2.5 text-left font-bold text-slate-800">LENOVO</td>
+                          <td className="p-2.5 font-mono-data bg-emerald-50 text-emerald-800 font-bold">{lenovoDisp}</td>
+                          <td className="p-2.5 font-mono-data text-slate-600">{lenovoRes}</td>
+                          <td className="p-2.5 font-mono-data font-extrabold text-slate-900 bg-slate-50">{lenovoTotal}</td>
+                        </tr>
+                        <tr className="hover:bg-slate-50">
+                          <td className="p-2.5 text-left font-bold text-slate-800">HP</td>
+                          <td className="p-2.5 font-mono-data bg-emerald-50 text-emerald-800 font-bold">{hpDisp}</td>
+                          <td className="p-2.5 font-mono-data text-slate-600">{hpRes}</td>
+                          <td className="p-2.5 font-mono-data font-extrabold text-slate-900 bg-slate-50">{hpTotal}</td>
+                        </tr>
+                        <tr className="bg-slate-100/90 font-bold">
+                          <td className="p-2.5 text-left uppercase text-[11px] text-slate-700">Totales</td>
+                          <td className="p-2.5 font-mono-data text-emerald-800 font-extrabold">{totalDisp}</td>
+                          <td className="p-2.5 font-mono-data text-slate-700 font-extrabold">{totalRes}</td>
+                          <td className="p-2.5 font-mono-data font-extrabold text-[#0048B5] bg-blue-50">{grandTotalPc}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
 
           </div>
 

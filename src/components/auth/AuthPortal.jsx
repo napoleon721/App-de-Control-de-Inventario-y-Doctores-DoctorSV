@@ -7,7 +7,13 @@ import {
 import logoPng from "../../assets/doctorsv_logo.png";
 import { DOCTORES_EXCEL, HORARIOS } from "../../constants/tokens";
 
-export default function AuthPortal({ onLoginMaster, onLoginDoctor, onClose, isModal = false }) {
+export default function AuthPortal({
+  onLoginMaster,
+  onLoginDoctor,
+  onClose,
+  isModal = false,
+  horarios = HORARIOS,
+}) {
   const [activeTab, setActiveTab] = useState("doctor"); // 'doctor' | 'master'
 
   // Master State
@@ -19,7 +25,9 @@ export default function AuthPortal({ onLoginMaster, onLoginDoctor, onClose, isMo
   const [searchDoctor, setSearchDoctor] = useState("");
   const [selectedDoctorObj, setSelectedDoctorObj] = useState(null);
   const [manualDoctorName, setManualDoctorName] = useState("");
-  const [selectedHorario, setSelectedHorario] = useState(HORARIOS[1] || "07:00 AM – 12:00 PM");
+  const [selectedHorario, setSelectedHorario] = useState(
+    (horarios && horarios[0]) || "07:00 AM – 12:00 PM"
+  );
   const [doctorError, setDoctorError] = useState("");
 
   // Padrón filtration
@@ -293,8 +301,8 @@ export default function AuthPortal({ onLoginMaster, onLoginDoctor, onClose, isMo
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
                   2. Horario / Franja de Atención
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {HORARIOS.slice(0, 4).map((h) => {
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-0.5">
+                  {(horarios || HORARIOS).map((h) => {
                     const isSelected = selectedHorario === h;
                     const isMorning = h.includes("AM") && !h.includes("MD");
                     const isAfternoon = h.includes("MD") || (h.includes("PM") && !h.includes("10:00"));
@@ -305,13 +313,13 @@ export default function AuthPortal({ onLoginMaster, onLoginDoctor, onClose, isMo
                         key={h}
                         type="button"
                         onClick={() => setSelectedHorario(h)}
-                        className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-[12px] font-medium transition-all text-left ${
+                        className={`flex items-center gap-2.5 p-2 rounded-xl border text-[12px] font-medium transition-all text-left ${
                           isSelected
                             ? "border-[#0048B5] bg-blue-50/90 text-[#0048B5] font-bold ring-1 ring-[#0048B5]"
                             : "border-slate-200 bg-slate-50/60 text-slate-600 hover:bg-slate-100/80"
                         }`}
                       >
-                        <Icon size={15} className={isSelected ? "text-[#0095FF]" : "text-slate-400"} />
+                        <Icon size={14} className={isSelected ? "text-[#0095FF]" : "text-slate-400"} />
                         <span className="truncate">{h}</span>
                       </button>
                     );

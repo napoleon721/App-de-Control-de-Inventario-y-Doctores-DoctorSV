@@ -11,7 +11,8 @@ export default function AttendanceView({
   spaces,
   onAssignDoctor,
   onUnassignDoctor,
-  onOpenCheckIn
+  onOpenCheckIn,
+  onOpenLiveReport,
 }) {
   const [selectedSupId, setSelectedSupId] = useState(SUPERVISORES_OFICIALES[0].id);
   const [searchQuery, setSearchQuery] = useState("");
@@ -141,7 +142,17 @@ export default function AttendanceView({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {onOpenLiveReport && (
+            <button
+              onClick={onOpenLiveReport}
+              className="flex items-center gap-2 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white px-4 py-2.5 text-[13px] font-extrabold shadow-sm transition-all active:scale-95 backdrop-blur-md"
+            >
+              <FileSpreadsheet size={16} />
+              <span>Ver Reporte en Vivo</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenCheckIn}
             className="flex items-center gap-2 rounded-2xl bg-white text-[#0048B5] px-5 py-2.5 text-[13px] font-extrabold shadow-md hover:bg-slate-50 transition-all hover:scale-105 active:scale-95"

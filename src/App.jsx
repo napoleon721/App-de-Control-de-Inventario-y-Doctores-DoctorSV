@@ -13,9 +13,11 @@ import HistoryView from "./components/history/HistoryView";
 import AttendanceView from "./components/attendance/AttendanceView";
 import QuickCheckInModal from "./components/attendance/QuickCheckInModal";
 import AuthPortal from "./components/auth/AuthPortal";
+import ShiftConfigModal from "./components/config/ShiftConfigModal";
+import LiveAttendanceReportModal from "./components/attendance/LiveAttendanceReportModal";
 
 import {
-  BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, buildInitialSpaces
+  BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces
 } from "./constants/tokens";
 
 export default function App() {
@@ -70,6 +72,26 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
   const [authPortalOpen, setAuthPortalOpen] = useState(false);
+
+  // 3. Horarios y Turnos configurables dinámicamente por el Doctor Master
+  const [horarios, setHorarios] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_CONFIG_HORARIOS_V1");
+      return saved ? JSON.parse(saved) : HORARIOS;
+    } catch {
+      return HORARIOS;
+    }
+  });
+  const [shiftConfigOpen, setShiftConfigOpen] = useState(false);
+  const [liveReportOpen, setLiveReportOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("DOCTORSV_CONFIG_HORARIOS_V1", JSON.stringify(horarios));
+    } catch (e) {
+      console.error("Error saving horarios config:", e);
+    }
+  }, [horarios]);
 
   // Sincronizar en LocalStorage
   useEffect(() => {
@@ -436,6 +458,8 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onOpenAuthPortal={() => setAuthPortalOpen(true)}
+        onOpenShiftConfig={() => setShiftConfigOpen(true)}
+        onOpenLiveReport={() => setLiveReportOpen(true)}
       />
 
       {/* Contenedor central */}
@@ -470,6 +494,7 @@ export default function App() {
             onReleaseShift={handleReleaseShift}
             currentUser={currentUser}
             onReleaseMySpace={handleReleaseMySpace}
+            horarios={horarios}
           />
         )}
 
@@ -479,6 +504,7 @@ export default function App() {
             onAssignDoctor={handleAssignDoctor}
             onUnassignDoctor={handleUnassignDoctor}
             onOpenCheckIn={() => setCheckInModalOpen(true)}
+            onOpenLiveReport={() => setLiveReportOpen(true)}
           />
         )}
 
@@ -555,6 +581,7 @@ export default function App() {
           spaces={spaces}
           onClose={() => setCheckInModalOpen(false)}
           onConfirmCheckIn={handleConfirmCheckIn}
+          horarios={horarios}
         />
       )}
 
@@ -572,6 +599,25 @@ export default function App() {
           }}
           onClose={currentUser ? () => setAuthPortalOpen(false) : null}
           isModal={!!currentUser}
+          horarios={horarios}
+        />
+      )}
+
+      {/* Modal de Configuración de Horarios & Turnos (Master) */}
+      {shiftConfigOpen && (
+        <ShiftConfigModal
+          horarios={horarios}
+          onSaveHorarios={(newHorarios) => setHorarios(newHorarios)}
+          onClose={() => setShiftConfigOpen(false)}
+        />
+      )}
+
+      {/* Modal de Reporte de Asistencia & Alimentación en Tiempo Real (Master) */}
+      {liveReportOpen && (
+        <LiveAttendanceReportModal
+          spaces={spaces}
+          historial={historial}
+          onClose={() => setLiveReportOpen(false)}
         />
       )}
     </div>

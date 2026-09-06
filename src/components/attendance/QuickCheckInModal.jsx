@@ -4,11 +4,18 @@ import {
 } from "lucide-react";
 import { DOCTORES_EXCEL, HORARIOS, BRAND } from "../../constants/tokens";
 
-export default function QuickCheckInModal({ spaces, onClose, onConfirmCheckIn }) {
+export default function QuickCheckInModal({
+  spaces,
+  onClose,
+  onConfirmCheckIn,
+  horarios = HORARIOS,
+}) {
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [searchDoctor, setSearchDoctor] = useState("");
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
-  const [selectedHorario, setSelectedHorario] = useState(HORARIOS[1] || "07:00 AM – 12:00 PM");
+  const [selectedHorario, setSelectedHorario] = useState(
+    (horarios && horarios[0]) || "07:00 AM – 12:00 PM"
+  );
   const [successData, setSuccessData] = useState(null);
 
   // Doctors list filtered
@@ -222,9 +229,9 @@ export default function QuickCheckInModal({ spaces, onClose, onConfirmCheckIn })
                 <select
                   value={selectedHorario}
                   onChange={(e) => setSelectedHorario(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs cursor-pointer"
                 >
-                  {HORARIOS.map((h) => (
+                  {(horarios || HORARIOS).map((h) => (
                     <option key={h} value={h}>
                       {h}
                     </option>
