@@ -13,16 +13,18 @@ export default function Header({
   alerts,
   onSync,
   isSyncing,
+  lastSyncTime,
   onOpenCheckIn,
   currentUser,
   onLogout,
   onOpenAuthPortal,
   onOpenShiftConfig,
   onOpenLiveReport,
+  onOpenGoogleSheetsConfig,
 }) {
   const [alertOpen, setAlertOpen] = useState(false);
 
-  const tabs = [
+  const allTabs = [
     { id: "mapa", label: "Mapa de Espacios", icon: LayoutGrid },
     { id: "asistencia", label: "Control de Asistencia", icon: UserCheck },
     { id: "medicos", label: "Padrón de Médicos", icon: Stethoscope },
@@ -32,6 +34,12 @@ export default function Header({
 
   const isDoctorRole = currentUser?.role === "DOCTOR";
   const isMasterRole = currentUser?.role === "MASTER";
+  const isSupervisorRole = currentUser?.role === "SUPERVISOR";
+
+  // Supervisores solo tienen acceso a "Mapa de Espacios" y "Control de Asistencia"
+  const tabs = isSupervisorRole
+    ? allTabs.filter((t) => ["mapa", "asistencia"].includes(t.id))
+    : allTabs;
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs transition-all">
@@ -41,6 +49,8 @@ export default function Header({
         style={{
           background: isDoctorRole
             ? "linear-gradient(90deg, #15803D 0%, #22C55E 50%, #0095FF 100%)"
+            : isSupervisorRole
+            ? "linear-gradient(90deg, #0284C7 0%, #0048B5 50%, #0095FF 100%)"
             : "linear-gradient(90deg, #0048B5 0%, #0095FF 50%, #0284C7 100%)",
         }}
       />
@@ -53,6 +63,12 @@ export default function Header({
             <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Estación de Trabajo
+            </span>
+          )}
+          {isSupervisorRole && (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2.5 py-0.5 text-[11px] font-bold text-cyan-800 border border-cyan-200">
+              <UserCheck size={11} className="text-cyan-700" />
+              Supervisor de Sede
             </span>
           )}
           {isMasterRole && (
@@ -120,9 +136,18 @@ export default function Header({
               onClick={onSync}
               disabled={isSyncing}
               className="hidden sm:flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-50 shadow-xs disabled:opacity-75"
+              title={
+                lastSyncTime
+                  ? `Sincronización en vivo activa · Última: ${lastSyncTime.toLocaleTimeString("es-SV")}`
+                  : "Sincronizar puestos y médicos en tiempo real"
+              }
             >
-              <RefreshCw size={13} className={isSyncing ? "animate-spin text-[#0095FF]" : "text-slate-500"} />
+              <RefreshCw size={13} className={isSyncing ? "animate-spin text-[#0095FF]" : "text-emerald-500"} />
               <span>{isSyncing ? "Sincronizando..." : "Sync"}</span>
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"
+                title="Sincronización en vivo activa"
+              />
             </button>
           )}
 
@@ -138,8 +163,20 @@ export default function Header({
             </button>
           )}
 
-          {/* Configuración de Turnos / Horarios (Master only) */}
-          {!isDoctorRole && onOpenShiftConfig && (
+          {/* Configuración de Google Sheets (Enlace Base de Datos) */}
+          {!isDoctorRole && onOpenGoogleSheetsConfig && (
+            <button
+              onClick={onOpenGoogleSheetsConfig}
+              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-400/80 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-3 py-1.5 text-[12px] font-bold transition shadow-2xs active:scale-95"
+              title="Configurar y vincular Google Sheets en vivo como Base de Datos"
+            >
+              <SheetIcon size={14} className="text-white" />
+              <span>Google Sheets</span>
+            </button>
+          )}
+
+          {/* Configuración de Turnos / Horarios (Exclusivo Master) */}
+          {isMasterRole && onOpenShiftConfig && (
             <button
               onClick={onOpenShiftConfig}
               className="hidden md:flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700 transition shadow-2xs active:scale-95"
@@ -192,6 +229,32 @@ export default function Header({
                 <LogOut size={13} />
                 <span className="hidden sm:inline">Finalizar Jornada (Liberar Puesto)</span>
                 <span className="sm:hidden">Finalizar</span>
+              </button>
+            </div>
+          ) : isSupervisorRole ? (
+            /* SUPERVISOR SESSION ACTIVE CONTROLS */
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded-2xl bg-cyan-50/90 border border-cyan-200 px-3 py-1 text-[12px]">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0048B5] text-white">
+                  <UserCheck size={13} />
+                </span>
+                <div className="flex flex-col text-left leading-tight">
+                  <span className="font-bold text-slate-800 max-w-[140px] sm:max-w-[200px] truncate">
+                    {currentUser.name}
+                  </span>
+                  <span className="text-[10px] font-bold text-cyan-700 flex items-center gap-1">
+                    <span>Supervisor</span> · <span>Puesto #{currentUser.puesto}</span>
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-600 hover:text-rose-600 hover:border-rose-300 transition-colors shadow-2xs"
+                title="Cerrar sesión de Supervisor"
+              >
+                <LogOut size={13} />
+                <span className="hidden sm:inline">Cerrar Sesión</span>
               </button>
             </div>
           ) : isMasterRole ? (

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import {
   Search, Filter, DoorOpen, LayoutGrid, Monitor, ShieldCheck, Sparkles,
   Layers, CheckCircle2, AlertTriangle, Droplets, XCircle, Wrench, Lock, ArrowDown, ArrowUp,
-  Clock, RefreshCw, UserCheck, LogOut, Laptop, User
+  Clock, RefreshCw, UserCheck, LogOut, Laptop, User, Shield
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
 import { ESTADOS, MARCAS, HORARIOS } from "../../constants/tokens";
@@ -12,6 +12,7 @@ export default function SpaceMap({
   counts,
   onSelectSpace,
   onReleaseShift,
+  onReleaseByHorario,
   currentUser,
   onReleaseMySpace,
   horarios = HORARIOS,
@@ -20,6 +21,7 @@ export default function SpaceMap({
   const [query, setQuery] = useState("");
   const [filterEstado, setFilterEstado] = useState("TODOS");
   const [filterTurno, setFilterTurno] = useState("TODOS");
+  const [releaseHorarioTarget, setReleaseHorarioTarget] = useState("");
 
   // Fast map lookup
   const spaceMap = useMemo(() => {
@@ -44,14 +46,40 @@ export default function SpaceMap({
 
     const isMatch = matchesQuery && matchesEstado && matchesTurno;
     const isMyAssignedSpace = currentUser?.spaceId === space.id;
+    const isMySupervisorStation = currentUser?.role === "SUPERVISOR" && currentUser?.puesto === space.id;
+
+    // Para el rol Doctor: determinar si este puesto está bloqueado (no seleccionable)
+    const isOwnSpace = currentUser?.name &&
+      space.doctor &&
+      space.doctor.toLowerCase() === currentUser.name.toLowerCase();
+    const isSelectableForDoctor = space.estado === "DISPONIBLE" && !space.doctor;
+    const isBlockedForDoctor = isDoctorRole && !isOwnSpace && !isSelectableForDoctor;
+
+    // Para el rol Master y Supervisor: destacar visualmente los espacios ocupados por médicos
+    const isOccupiedByDoctor = !isDoctorRole && (space.estado === "OCUPADO" || !!space.doctor);
 
     return (
       <div
-        className={`transition-all duration-200 ${
+        className={`transition-all duration-200 relative ${
           isMatch ? "opacity-100 scale-100" : "opacity-15 scale-95 grayscale"
-        } ${isMyAssignedSpace ? "ring-4 ring-amber-400 ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md" : ""}`}
+        } ${isMyAssignedSpace ? "ring-4 ring-amber-400 ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md" : ""} ${
+          isMySupervisorStation ? "ring-4 ring-[#0095FF] ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md" : ""
+        } ${
+          isOccupiedByDoctor && !isMySupervisorStation ? "ring-2 ring-[#0095FF] ring-offset-1 z-10 rounded-[6px] shadow-sm" : ""
+        } ${
+          isBlockedForDoctor ? "opacity-40 grayscale-[60%] cursor-not-allowed" : ""
+        }`}
+        title={isBlockedForDoctor ? `Puesto ${space.estado} — No disponible para asignación` : undefined}
       >
         <ExactCubicle space={space} onClick={onSelectSpace} />
+        {/* Indicador visual de bloqueo en modo Doctor */}
+        {isBlockedForDoctor && isMatch && (
+          <div className="pointer-events-none absolute inset-0 rounded-[6px] bg-slate-900/10 flex items-end justify-center pb-0.5">
+            <span className="text-[7px] font-bold text-slate-500 bg-white/80 rounded px-0.5 leading-tight">
+              ✕
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -154,18 +182,54 @@ export default function SpaceMap({
 
           {/* Botón de Relevo / Liberación de Turno (Solo para Master/Admin) */}
           {currentUser?.role !== "DOCTOR" && onReleaseShift && occupiedSpaces.length > 0 && (
-            <button
-              onClick={() => {
-                if (window.confirm(`¿Deseas liberar los ${occupiedSpaces.length} puestos ocupados para el cambio de turno?`)) {
-                  onReleaseShift();
-                }
-              }}
-              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-slate-700 hover:bg-slate-800 transition shadow-2xs active:scale-95"
-              title="Libera los puestos del turno anterior para dar paso al siguiente turno"
-            >
-              <RefreshCw size={12} />
-              <span>Relevo de Turno</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Relevo por Franja */}
+              {onReleaseByHorario && (
+                <div className="flex items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2 py-1 shadow-2xs">
+                  <RefreshCw size={12} className="text-amber-600 shrink-0" />
+                  <select
+                    value={releaseHorarioTarget}
+                    onChange={(e) => setReleaseHorarioTarget(e.target.value)}
+                    className="bg-transparent text-[11.5px] font-bold text-amber-800 outline-none cursor-pointer max-w-[140px]"
+                  >
+                    <option value="">Liberar por franja...</option>
+                    {horarios.map((h) => {
+                      const cnt = occupiedSpaces.filter((s) => s.horario === h).length;
+                      return cnt > 0 ? (
+                        <option key={h} value={h}>{h} ({cnt})</option>
+                      ) : null;
+                    })}
+                  </select>
+                  {releaseHorarioTarget && (
+                    <button
+                      onClick={() => {
+                        const cnt = occupiedSpaces.filter((s) => s.horario === releaseHorarioTarget).length;
+                        if (window.confirm(`¿Liberar ${cnt} puesto(s) de la franja "${releaseHorarioTarget}"?\nUsa esto si un médico olvidou salirse o para hacer relevo parcial.`)) {
+                          onReleaseByHorario(releaseHorarioTarget);
+                          setReleaseHorarioTarget("");
+                        }
+                      }}
+                      className="ml-1 flex items-center gap-1 rounded-lg bg-amber-600 hover:bg-amber-700 px-2.5 py-1 text-[11px] font-bold text-white transition-all active:scale-95 shadow-xs"
+                    >
+                      Liberar
+                    </button>
+                  )}
+                </div>
+              )}
+              {/* Relevo General */}
+              <button
+                onClick={() => {
+                  if (window.confirm(`¿Deseas liberar los ${occupiedSpaces.length} puestos ocupados para el cambio de turno?`)) {
+                    onReleaseShift();
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-slate-700 hover:bg-slate-800 transition shadow-2xs active:scale-95"
+                title="Libera todos los puestos del turno anterior"
+              >
+                <RefreshCw size={12} />
+                <span>Relevo General</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -212,6 +276,38 @@ export default function SpaceMap({
               <span>Finalizar Jornada (Liberar Puesto #{currentUser.spaceId})</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Banner Exclusivo de Supervisor: Estación Física y Lote Asignado */}
+      {currentUser?.role === "SUPERVISOR" && (
+        <div
+          style={{ animation: "fadeIn .2s ease-out both" }}
+          className="p-4 rounded-3xl border border-cyan-200 bg-gradient-to-r from-cyan-50/90 via-blue-50/80 to-white text-cyan-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0048B5] text-white shadow-xs">
+              <UserCheck size={22} />
+            </span>
+            <div>
+              <p className="font-heading text-[15px] font-bold text-slate-900">
+                Supervisor: {currentUser.name} · Estación Física Puesto #{currentUser.puesto}
+              </p>
+              <p className="text-[12px] text-slate-600 mt-0.5">
+                Turno Oficial: <strong className="text-slate-800">{currentUser.shift}</strong> · Lote Supervisado: <strong className="text-[#0048B5]">Puestos #{currentUser.bloqueInicio} al #{currentUser.bloqueFin}</strong> ({currentUser.totalPuestos} puestos)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onSelectSpace && spaceMap[currentUser.puesto] && onSelectSpace(spaceMap[currentUser.puesto])}
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-[#0048B5] bg-white border border-blue-200 hover:bg-blue-50 transition shadow-2xs active:scale-95"
+            >
+              <Shield size={13} />
+              <span>Ver Mi Puesto #{currentUser.puesto}</span>
+            </button>
+          </div>
         </div>
       )}
 

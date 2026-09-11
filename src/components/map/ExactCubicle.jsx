@@ -12,7 +12,7 @@ export default function ExactCubicle({ space, onClick }) {
   const isSupervisor = [135, 136, 137, 138, 1].includes(space.id) || space.categoria === "Supervisores";
   const isOcupado = (space.estado === "OCUPADO" || !!space.doctor) && !isSupervisor;
 
-  // Exact refined color styles matching the architectural floor plan with premium aesthetics
+  // Estilos visuales exactos alineados al plano arquitectónico y tokens oficiales
   let bgGradient = "linear-gradient(180deg, #2D8A4E 0%, #1E6B39 100%)"; // Verde Disponible
   let textColor = "#FFFFFF";
   let borderColor = "#16592E";
@@ -20,7 +20,18 @@ export default function ExactCubicle({ space, onClick }) {
   let tagText = space.marca || "DELL";
   let TagIcon = Monitor;
 
-  if (isIncompleto) {
+  if (isOcupado) {
+    // Puesto ocupado por un médico en tiempo real (Azul institucional DoctorSV)
+    bgGradient = "linear-gradient(180deg, #0048B5 0%, #002D7A 100%)";
+    textColor = "#FFFFFF";
+    borderColor = "#0095FF";
+    shadowGlow = "rgba(0, 149, 255, 0.4)";
+    // Extraer primer nombre o apellido significativo del médico
+    const cleanDoc = space.doctor ? space.doctor.replace(/^DR(A)?\.\s*/i, "").trim() : "";
+    const firstWord = cleanDoc.split(" ")[0] || "DOC";
+    tagText = firstWord.length > 7 ? firstWord.slice(0, 6) + "." : firstWord;
+    TagIcon = User;
+  } else if (isIncompleto) {
     bgGradient = "linear-gradient(180deg, #F59E0B 0%, #D97706 100%)"; // Amarillo
     textColor = "#FFFFFF";
     borderColor = "#B45309";
@@ -57,10 +68,17 @@ export default function ExactCubicle({ space, onClick }) {
     TagIcon = isSupervisor ? Shield : Lock;
   }
 
+  const tooltipText = isOcupado
+    ? `Puesto #${space.id} · Ocupado por Dr(a). ${space.doctor} (${space.horario || 'Turno activo'}) · PC: ${space.marca || 'DELL'}`
+    : isSupervisor
+    ? `Puesto de Supervisión #${space.id} (${space.marca || 'PC'})`
+    : `Puesto #${space.id} · ${space.estado} · ${space.marca || 'Sin PC'}`;
+
   return (
     <button
       type="button"
       onClick={() => onClick(space)}
+      title={tooltipText}
       style={{
         background: bgGradient,
         borderColor: borderColor,
@@ -76,7 +94,9 @@ export default function ExactCubicle({ space, onClick }) {
         {isSupervisor ? (
           <span className="h-2 w-2 rounded-full bg-cyan-200 ring-1 ring-slate-900/40" title={`Puesto de Supervisión: ${space.doctor || 'Supervisor'}`} />
         ) : isOcupado ? (
-          <span className="h-2 w-2 rounded-full bg-emerald-300 ring-1 ring-white/80 animate-pulse" title={`Asignado a: ${space.doctor}`} />
+          <span className="flex items-center gap-0.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-white animate-pulse" />
+          </span>
         ) : null}
       </div>
 

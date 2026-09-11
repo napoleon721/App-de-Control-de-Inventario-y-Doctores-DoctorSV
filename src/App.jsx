@@ -15,10 +15,27 @@ import QuickCheckInModal from "./components/attendance/QuickCheckInModal";
 import AuthPortal from "./components/auth/AuthPortal";
 import ShiftConfigModal from "./components/config/ShiftConfigModal";
 import LiveAttendanceReportModal from "./components/attendance/LiveAttendanceReportModal";
+import GoogleSheetsConfigModal from "./components/config/GoogleSheetsConfigModal";
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces
 } from "./constants/tokens";
+
+import {
+  subscribeToCloudSpaces,
+  saveCloudSpaces,
+  subscribeToCloudBodega,
+  saveCloudBodega,
+  subscribeToCloudHistorial,
+  saveCloudHistorial,
+} from "./services/firestoreSync";
+import { logoutFromFirebase } from "./services/firebaseAuth";
+import {
+  fetchSpacesFromGoogleSheets,
+  updateSpaceInGoogleSheets,
+  logMovementToGoogleSheets,
+  isGoogleSheetsConfigured,
+} from "./services/googleSheetsService";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -56,9 +73,21 @@ export default function App() {
     }
   });
 
-  // 2. Sesión multi-usuario (Doctor Master vs Doctor Operativo)
+  // Personal adicional agregado manualmente al padrón
+  const [customStaff, setCustomStaff] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_CUSTOM_STAFF_V1");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 2. Sesión multi-usuario (Doctor Master vs Doctor Operativo) con soporte para pestañas independientes
   const [currentUser, setCurrentUser] = useState(() => {
     try {
+      const sessionUser = sessionStorage.getItem("DOCTORSV_ACTIVE_USER_SESSION");
+      if (sessionUser) return JSON.parse(sessionUser);
       const saved = localStorage.getItem("DOCTORSV_ACTIVE_USER_V2");
       return saved ? JSON.parse(saved) : null;
     } catch {
@@ -70,6 +99,7 @@ export default function App() {
   const [selectedSpace, setSelectedSpace] = useState(null);
   const [claimModalSpace, setClaimModalSpace] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
   const [authPortalOpen, setAuthPortalOpen] = useState(false);
 
@@ -84,6 +114,30 @@ export default function App() {
   });
   const [shiftConfigOpen, setShiftConfigOpen] = useState(false);
   const [liveReportOpen, setLiveReportOpen] = useState(false);
+  const [googleSheetsModalOpen, setGoogleSheetsModalOpen] = useState(false);
+
+  // Carga inicial y sincronización desde Google Sheets si está configurado
+  useEffect(() => {
+    async function loadFromSheets() {
+      if (isGoogleSheetsConfigured()) {
+        try {
+          const res = await fetchSpacesFromGoogleSheets();
+          if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+            setSpaces((prev) =>
+              prev.map((s) => {
+                const match = res.data.find((item) => Number(item.id) === Number(s.id));
+                return match ? { ...s, ...match } : s;
+              })
+            );
+            setLastSyncTime(new Date());
+          }
+        } catch (e) {
+          console.warn("Google Sheets initial sync skipped:", e);
+        }
+      }
+    }
+    loadFromSheets();
+  }, []);
 
   useEffect(() => {
     try {
@@ -93,10 +147,16 @@ export default function App() {
     }
   }, [horarios]);
 
-  // Sincronizar en LocalStorage
+  // Sincronizar en LocalStorage, notificar a otras pestañas y persistir en Cloud Firestore
   useEffect(() => {
     try {
       localStorage.setItem("DOCTORSV_EXCEL_REAL_SPACES_V1", JSON.stringify(spaces));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "SPACES_UPDATED", payload: spaces });
+        bc.close();
+      }
+      saveCloudSpaces(spaces);
     } catch (e) {
       console.error("Error saving spaces:", e);
     }
@@ -106,6 +166,12 @@ export default function App() {
     try {
       const simplified = bodegaStock.map(({ key, original, actual }) => ({ key, original, actual }));
       localStorage.setItem("DOCTORSV_EXCEL_REAL_BODEGA_V1", JSON.stringify(simplified));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "BODEGA_UPDATED", payload: bodegaStock });
+        bc.close();
+      }
+      saveCloudBodega(simplified);
     } catch (e) {
       console.error("Error saving bodega:", e);
     }
@@ -114,22 +180,136 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem("DOCTORSV_EXCEL_REAL_HISTORIAL_V1", JSON.stringify(historial));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "HISTORIAL_UPDATED", payload: historial });
+        bc.close();
+      }
+      saveCloudHistorial(historial);
     } catch (e) {
       console.error("Error saving historial:", e);
     }
   }, [historial]);
 
+  // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo
+  useEffect(() => {
+    const unsubSpaces = subscribeToCloudSpaces((cloudSpaces) => {
+      if (cloudSpaces && Array.isArray(cloudSpaces) && cloudSpaces.length > 0) {
+        setSpaces(cloudSpaces);
+        setLastSyncTime(new Date());
+      }
+    });
+
+    const unsubBodega = subscribeToCloudBodega((cloudBodega) => {
+      if (cloudBodega && Array.isArray(cloudBodega) && cloudBodega.length > 0) {
+        setBodegaStock((prev) =>
+          prev.map((b) => {
+            const match = cloudBodega.find((p) => p.key === b.key);
+            return match ? { ...b, actual: match.actual } : b;
+          })
+        );
+      }
+    });
+
+    const unsubHistorial = subscribeToCloudHistorial((cloudHistorial) => {
+      if (cloudHistorial && Array.isArray(cloudHistorial) && cloudHistorial.length > 0) {
+        setHistorial(cloudHistorial);
+      }
+    });
+
+    return () => {
+      if (unsubSpaces) unsubSpaces();
+      if (unsubBodega) unsubBodega();
+      if (unsubHistorial) unsubHistorial();
+    };
+  }, []);
+
   useEffect(() => {
     try {
       if (currentUser) {
+        sessionStorage.setItem("DOCTORSV_ACTIVE_USER_SESSION", JSON.stringify(currentUser));
         localStorage.setItem("DOCTORSV_ACTIVE_USER_V2", JSON.stringify(currentUser));
       } else {
-        localStorage.removeItem("DOCTORSV_ACTIVE_USER_V2");
+        sessionStorage.removeItem("DOCTORSV_ACTIVE_USER_SESSION");
       }
     } catch (e) {
       console.error("Error saving user session:", e);
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("DOCTORSV_CUSTOM_STAFF_V1", JSON.stringify(customStaff));
+    } catch (e) {
+      console.error("Error saving custom staff:", e);
+    }
+  }, [customStaff]);
+
+  // Sincronización cruzada bidireccional en tiempo real entre pestañas (Doctor en pestaña A, Master en pestaña B)
+  useEffect(() => {
+    let bc = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.onmessage = (event) => {
+          const { type, payload } = event.data || {};
+          if (type === "SPACES_UPDATED" && payload) {
+            setSpaces(payload);
+            setLastSyncTime(new Date());
+          } else if (type === "HISTORIAL_UPDATED" && payload) {
+            setHistorial(payload);
+          } else if (type === "BODEGA_UPDATED" && payload) {
+            setBodegaStock(payload);
+          } else if (type === "FORCE_SYNC") {
+            try {
+              const saved = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
+              if (saved) setSpaces(JSON.parse(saved));
+              setLastSyncTime(new Date());
+            } catch {}
+          }
+        };
+      }
+    } catch {}
+
+    function handleStorageSync(e) {
+      if (e.key === "DOCTORSV_EXCEL_REAL_SPACES_V1" && e.newValue) {
+        try {
+          const updated = JSON.parse(e.newValue);
+          setSpaces(updated);
+          setLastSyncTime(new Date());
+        } catch {}
+      }
+      if (e.key === "DOCTORSV_EXCEL_REAL_HISTORIAL_V1" && e.newValue) {
+        try {
+          setHistorial(JSON.parse(e.newValue));
+        } catch {}
+      }
+      if (e.key === "DOCTORSV_EXCEL_REAL_BODEGA_V1" && e.newValue) {
+        try {
+          const updatedBodega = JSON.parse(e.newValue);
+          setBodegaStock((prev) =>
+            prev.map((b) => {
+              const match = updatedBodega.find((p) => p.key === b.key);
+              return match ? { ...b, actual: match.actual } : b;
+            })
+          );
+        } catch {}
+      }
+      if (e.key === "DOCTORSV_SYNC_PING") {
+        try {
+          const savedSpaces = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
+          if (savedSpaces) setSpaces(JSON.parse(savedSpaces));
+          setLastSyncTime(new Date());
+        } catch {}
+      }
+    }
+
+    window.addEventListener("storage", handleStorageSync);
+    return () => {
+      window.removeEventListener("storage", handleStorageSync);
+      if (bc) bc.close();
+    };
+  }, []);
 
   // Si el médico entra y ya tenía un cubículo asignado en el mapa, auto-vincular
   useEffect(() => {
@@ -207,9 +387,13 @@ export default function App() {
     setSpaces((prev) =>
       prev.map((s) => (s.id === updatedSpace.id ? updatedSpace : s))
     );
+    if (isGoogleSheetsConfigured()) {
+      updateSpaceInGoogleSheets(updatedSpace);
+    }
   }
 
   function handleAssignDoctor(doctorName, spaceId, horario) {
+    const assignedHorario = horario || "07:00 AM – 12:00 PM";
     setSpaces((prev) =>
       prev.map((s) => {
         if (s.doctor === doctorName && s.id !== spaceId) {
@@ -219,7 +403,7 @@ export default function App() {
           return {
             ...s,
             doctor: doctorName,
-            horario: horario || s.horario || "07:00 AM – 12:00 PM",
+            horario: assignedHorario,
             estado: "OCUPADO",
             ultimoMovimiento: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
           };
@@ -227,6 +411,14 @@ export default function App() {
         return s;
       })
     );
+    if (isGoogleSheetsConfigured()) {
+      updateSpaceInGoogleSheets({
+        id: spaceId,
+        doctor: doctorName,
+        horario: assignedHorario,
+        estado: "OCUPADO",
+      });
+    }
   }
 
   function handleUnassignDoctor(doctorName, spaceId) {
@@ -243,6 +435,14 @@ export default function App() {
         return s;
       })
     );
+    if (isGoogleSheetsConfigured()) {
+      updateSpaceInGoogleSheets({
+        id: spaceId,
+        doctor: "",
+        horario: "",
+        estado: "DISPONIBLE",
+      });
+    }
   }
 
   // Flujo exclusivo de Doctor: Asignación interactiva al hacer clic en un puesto del mapa
@@ -283,9 +483,19 @@ export default function App() {
       origen: "Plano de Ubicaciones",
       destino: `Puesto #${space.id}`,
       falla: "N/A",
-      obs: `Dr(a). ${docName} inició su turno y tomó posesión del Puesto #${space.id} (${shift})`,
+      obs: `Dr(a). ${docName} inició su turno y tomó posesión del Puesto #${space.id} (${shift})${currentUser.supervisorNombre ? ` · Supervisor: ${currentUser.supervisorNombre}` : ""}`,
     };
     setHistorial((prev) => [newLog, ...prev]);
+
+    if (isGoogleSheetsConfigured()) {
+      updateSpaceInGoogleSheets({
+        id: space.id,
+        doctor: docName,
+        horario: shift,
+        estado: "OCUPADO",
+      });
+      logMovementToGoogleSheets(newLog);
+    }
   }
 
   // Liberar el puesto de trabajo del doctor (dejándolo DISPONIBLE para el siguiente turno)
@@ -321,6 +531,16 @@ export default function App() {
         obs: `Dr(a). ${docName} finalizó su jornada de trabajo. El Puesto #${currentSpaceId} quedó DISPONIBLE.`,
       };
       setHistorial((prev) => [newLog, ...prev]);
+
+      if (isGoogleSheetsConfigured()) {
+        updateSpaceInGoogleSheets({
+          id: currentSpaceId,
+          doctor: "",
+          horario: "",
+          estado: "DISPONIBLE",
+        });
+        logMovementToGoogleSheets(newLog);
+      }
     }
 
     setCurrentUser((prev) => (prev ? { ...prev, spaceId: null } : null));
@@ -331,6 +551,9 @@ export default function App() {
     if (currentUser?.role === "DOCTOR" && currentUser?.spaceId) {
       handleReleaseMySpace();
     }
+    sessionStorage.removeItem("DOCTORSV_ACTIVE_USER_SESSION");
+    localStorage.removeItem("DOCTORSV_ACTIVE_USER_V2");
+    logoutFromFirebase();
     setCurrentUser(null);
     setAuthPortalOpen(true);
   }
@@ -365,41 +588,94 @@ export default function App() {
     const newEntry = {
       id: `checkin-${Date.now()}`,
       fecha: new Date().toLocaleDateString("es-SV"),
-      equipo: "CHECK-IN",
+      equipo: "PC",
       espacio: spaceId,
-      accion: "Check-In",
-      origen: "Auto-Registro Médico",
+      accion: "Check-In Rápido",
+      origen: "Padrón Médico",
       destino: `Puesto #${spaceId}`,
       falla: "N/A",
-      obs: `Médico ${doctor} realizó auto check-in en Puesto #${spaceId} (${horario})`,
+      obs: `Médico ${doctor} registrado en puesto #${spaceId} (${horario})`,
     };
 
     setHistorial((prev) => [newEntry, ...prev]);
+
+    if (isGoogleSheetsConfigured()) {
+      updateSpaceInGoogleSheets({
+        id: spaceId,
+        doctor,
+        horario,
+        estado: "OCUPADO",
+      });
+      logMovementToGoogleSheets(newEntry);
+    }
   }
 
   function handleReleaseShift() {
     setSpaces((prev) =>
-      prev.map((s) => ({
-        ...s,
-        doctor: null,
-        horario: null,
-        estado: s.marca ? "DISPONIBLE" : "VACIO",
-      }))
+      prev.map((s) => {
+        if (s.doctor) {
+          return {
+            ...s,
+            doctor: null,
+            horario: null,
+            estado: s.marca ? "DISPONIBLE" : "VACIO",
+          };
+        }
+        return s;
+      })
     );
 
     const newEntry = {
       id: `relevo-${Date.now()}`,
       fecha: new Date().toLocaleDateString("es-SV"),
-      equipo: "TURNO",
+      equipo: "TODOS",
       espacio: null,
-      accion: "Relevo",
+      accion: "Relevo de Turno",
       origen: "Turno Saliente",
-      destino: "Turno Entrante",
+      destino: "DISPONIBLE",
       falla: "N/A",
-      obs: `Relevo general de turno ejecutado: Puestos liberados para asignación del nuevo turno`,
+      obs: "Relevo general de turno ejecutado: todos los puestos con médico han sido liberados",
     };
 
     setHistorial((prev) => [newEntry, ...prev]);
+
+    if (isGoogleSheetsConfigured()) {
+      logMovementToGoogleSheets(newEntry);
+    }
+  }
+
+  function handleReleaseByHorario(horario) {
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.doctor && s.horario === horario) {
+          return {
+            ...s,
+            doctor: null,
+            horario: null,
+            estado: s.marca ? "DISPONIBLE" : "VACIO",
+          };
+        }
+        return s;
+      })
+    );
+
+    const newEntry = {
+      id: `relevo-h-${Date.now()}`,
+      fecha: new Date().toLocaleDateString("es-SV"),
+      equipo: "FRANJA",
+      espacio: null,
+      accion: "Relevo por Franja",
+      origen: `Franja ${horario}`,
+      destino: "DISPONIBLE",
+      falla: "N/A",
+      obs: `Relevo de franja ejecutado: puestos de la franja "${horario}" liberados para el turno entrante`,
+    };
+
+    setHistorial((prev) => [newEntry, ...prev]);
+
+    if (isGoogleSheetsConfigured()) {
+      logMovementToGoogleSheets(newEntry);
+    }
   }
 
   function handleRegisterMovement(movementData) {
@@ -433,17 +709,74 @@ export default function App() {
     };
 
     setHistorial((prev) => [newLog, ...prev]);
+
+    if (isGoogleSheetsConfigured()) {
+      logMovementToGoogleSheets(newLog);
+    }
   }
 
-  function handleSync() {
+  async function handleSync() {
     setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      alert("✅ Sincronización exitosa con la base de datos central de DoctorSV.");
-    }, 900);
+    try {
+      if (isGoogleSheetsConfigured()) {
+        try {
+          const res = await fetchSpacesFromGoogleSheets();
+          if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+            setSpaces((prev) =>
+              prev.map((s) => {
+                const match = res.data.find((item) => Number(item.id) === Number(s.id));
+                return match ? { ...s, ...match } : s;
+              })
+            );
+          }
+        } catch (err) {
+          console.warn("Sync from Google Sheets:", err);
+        }
+      }
+
+      const savedSpaces = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
+      if (savedSpaces) setSpaces(JSON.parse(savedSpaces));
+
+      const savedHistorial = localStorage.getItem("DOCTORSV_EXCEL_REAL_HISTORIAL_V1");
+      if (savedHistorial) setHistorial(JSON.parse(savedHistorial));
+
+      const savedStaff = localStorage.getItem("DOCTORSV_CUSTOM_STAFF_V1");
+      if (savedStaff) setCustomStaff(JSON.parse(savedStaff));
+
+      const savedBodega = localStorage.getItem("DOCTORSV_EXCEL_REAL_BODEGA_V1");
+      if (savedBodega) {
+        const parsedBodega = JSON.parse(savedBodega);
+        setBodegaStock((prev) =>
+          prev.map((b) => {
+            const match = parsedBodega.find((p) => p.key === b.key);
+            return match ? { ...b, actual: match.actual } : b;
+          })
+        );
+      }
+
+      setLastSyncTime(new Date());
+      localStorage.setItem("DOCTORSV_SYNC_PING", Date.now().toString());
+
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "FORCE_SYNC" });
+        bc.close();
+      }
+    } catch (e) {
+      console.error("Error during sync:", e);
+    }
+    setTimeout(() => setIsSyncing(false), 700);
   }
 
   const isDoctorRole = currentUser?.role === "DOCTOR";
+  const isSupervisorRole = currentUser?.role === "SUPERVISOR";
+
+  // Restricción de permisos para Supervisores (solo mapa y control de asistencia)
+  useEffect(() => {
+    if (isSupervisorRole && ["bodega", "medicos", "historial"].includes(tab)) {
+      setTab("asistencia");
+    }
+  }, [isSupervisorRole, tab]);
 
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-800 font-sans antialiased selection:bg-[#0095FF] selection:text-white">
@@ -454,12 +787,14 @@ export default function App() {
         alerts={alerts}
         onSync={handleSync}
         isSyncing={isSyncing}
+        lastSyncTime={lastSyncTime}
         onOpenCheckIn={() => setCheckInModalOpen(true)}
         currentUser={currentUser}
         onLogout={handleLogout}
         onOpenAuthPortal={() => setAuthPortalOpen(true)}
         onOpenShiftConfig={() => setShiftConfigOpen(true)}
         onOpenLiveReport={() => setLiveReportOpen(true)}
+        onOpenGoogleSheetsConfig={() => setGoogleSheetsModalOpen(true)}
       />
 
       {/* Contenedor central */}
@@ -492,6 +827,7 @@ export default function App() {
             counts={counts}
             onSelectSpace={handleSpaceClick}
             onReleaseShift={handleReleaseShift}
+            onReleaseByHorario={handleReleaseByHorario}
             currentUser={currentUser}
             onReleaseMySpace={handleReleaseMySpace}
             horarios={horarios}
@@ -505,26 +841,32 @@ export default function App() {
             onUnassignDoctor={handleUnassignDoctor}
             onOpenCheckIn={() => setCheckInModalOpen(true)}
             onOpenLiveReport={() => setLiveReportOpen(true)}
+            initialSupId={currentUser?.supervisorId || null}
+            onReleaseByHorario={handleReleaseByHorario}
           />
         )}
 
-        {!isDoctorRole && tab === "bodega" && (
+        {!isDoctorRole && !isSupervisorRole && tab === "bodega" && (
           <WarehouseView
             bodegaStock={bodegaStock}
             spaces={spaces}
             onRegisterMovement={handleRegisterMovement}
+            historial={historial}
           />
         )}
 
-        {!isDoctorRole && tab === "medicos" && (
+        {!isDoctorRole && !isSupervisorRole && tab === "medicos" && (
           <DoctorsView
             spaces={spaces}
             onAssignDoctor={handleAssignDoctor}
             onUnassignDoctor={handleUnassignDoctor}
+            customStaff={customStaff}
+            onAddStaff={(member) => setCustomStaff((prev) => [...prev, member])}
+            onRemoveStaff={(id) => setCustomStaff((prev) => prev.filter((m) => m.id !== id))}
           />
         )}
 
-        {!isDoctorRole && tab === "historial" && (
+        {!isDoctorRole && !isSupervisorRole && tab === "historial" && (
           <HistoryView
             historial={historial}
             spaces={spaces}
@@ -541,7 +883,9 @@ export default function App() {
               <span className="font-medium">
                 {isDoctorRole
                   ? `Estación de Dr(a). ${currentUser.name} · Sede San Miguel`
-                  : "Sistema de Gestión de Telemedicina · Sede San Miguel"}
+                  : isSupervisorRole
+                  ? `Estación de Supervisión: ${currentUser.name} (Puesto #${currentUser.puesto}) · Sede San Miguel`
+                  : "Doctor Master · Sistema de Gestión y Control Integral · Sede San Miguel"}
               </span>
             </div>
           </div>
@@ -585,7 +929,7 @@ export default function App() {
         />
       )}
 
-      {/* Portal de Acceso Multi-Usuario (Doctor Master vs Doctor Operativo) */}
+      {/* Portal de Acceso Multi-Usuario (Doctor Master vs Supervisor vs Doctor Operativo) */}
       {(authPortalOpen || !currentUser) && (
         <AuthPortal
           onLoginMaster={() => {
@@ -596,6 +940,11 @@ export default function App() {
             setCurrentUser(doctorData);
             setAuthPortalOpen(false);
             setTab("mapa");
+          }}
+          onLoginSupervisor={(supervisorData) => {
+            setCurrentUser(supervisorData);
+            setAuthPortalOpen(false);
+            setTab("asistencia");
           }}
           onClose={currentUser ? () => setAuthPortalOpen(false) : null}
           isModal={!!currentUser}
@@ -618,6 +967,16 @@ export default function App() {
           spaces={spaces}
           historial={historial}
           onClose={() => setLiveReportOpen(false)}
+        />
+      )}
+
+      {/* Modal de Configuración y Enlace con Google Sheets (Master / Admin) */}
+      {googleSheetsModalOpen && (
+        <GoogleSheetsConfigModal
+          onClose={() => setGoogleSheetsModalOpen(false)}
+          onConnected={() => {
+            handleSync();
+          }}
         />
       )}
     </div>

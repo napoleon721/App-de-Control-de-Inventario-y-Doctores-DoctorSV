@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
-  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check
+  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
@@ -13,10 +13,24 @@ export default function AttendanceView({
   onUnassignDoctor,
   onOpenCheckIn,
   onOpenLiveReport,
+  initialSupId = null,
+  onReleaseByHorario,
 }) {
-  const [selectedSupId, setSelectedSupId] = useState(SUPERVISORES_OFICIALES[0].id);
+  const [selectedSupId, setSelectedSupId] = useState(
+    initialSupId && SUPERVISORES_OFICIALES.find((s) => s.id === initialSupId)
+      ? initialSupId
+      : SUPERVISORES_OFICIALES[0].id
+  );
+
+  useEffect(() => {
+    if (initialSupId && SUPERVISORES_OFICIALES.some((s) => s.id === initialSupId)) {
+      setSelectedSupId(initialSupId);
+    }
+  }, [initialSupId]);
+  const [autoSelected] = useState(!!initialSupId && SUPERVISORES_OFICIALES.some((s) => s.id === initialSupId));
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("TODOS");
+  const [filterHorario, setFilterHorario] = useState("TODOS");
 
   // Attendance state by doctor name: { [doctorName]: "PRESENTE" | "AUSENTE" | "JUSTIFICADO" }
   const [attendanceRecords, setAttendanceRecords] = useState(() => {
@@ -63,9 +77,10 @@ export default function AttendanceView({
         String(d.id).includes(searchQuery) ||
         (d.espacio && String(d.espacio).includes(searchQuery));
       const matchesStatus = filterStatus === "TODOS" || d.status === filterStatus;
-      return matchesSearch && matchesStatus;
+      const matchesHorario = filterHorario === "TODOS" || d.horario === filterHorario;
+      return matchesSearch && matchesStatus && matchesHorario;
     });
-  }, [batchDoctors, searchQuery, filterStatus]);
+  }, [batchDoctors, searchQuery, filterStatus, filterHorario]);
 
   // Supervisor Batch Spaces in the floor map
   const supervisorSpaces = useMemo(() => {
@@ -106,12 +121,13 @@ export default function AttendanceView({
   }
 
   function handleCopyReport() {
+    const horarioLabel = filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario;
     const reportText = `📊 REPORTE DE ASISTENCIA Y OCUPACIÓN · DOCTORSV\n` +
       `Supervisor: ${currentSupervisor.nombre}\n` +
-      `Turno: ${currentSupervisor.horario}\n` +
+      `Turno / Franja Horaria: ${horarioLabel}\n` +
       `Bloque de Puestos Asignados: Puestos #${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin} (${currentSupervisor.totalPuestos} puestos)\n` +
       `------------------------------------\n` +
-      `Total Programados: ${totalProgramados}\n` +
+      `Total Programados: ${totalProgramados}${filterHorario !== "TODOS" ? ` (filtrado por ${filterHorario})` : ""}\n` +
       `Total Presentes: ${totalPresentes} (${asistenciaPct}%)\n` +
       `Total Ausentes / Inasistencia: ${totalAusentes} (${inasistenciaPct}%)\n` +
       `Puestos Ocupados con Médico: ${totalConPuesto}\n` +
@@ -163,9 +179,25 @@ export default function AttendanceView({
         </div>
       </div>
 
-      {/* Selector de Supervisor & Lote */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Banner informativo cuando el supervisor fue auto-seleccionado desde el login del doctor */}
+      {autoSelected && (
+        <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-[12.5px] text-blue-800 shadow-2xs">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[#0048B5] text-white">
+            <UserCheck size={15} />
+          </span>
+          <div>
+            <span className="font-bold">Vista auto-ajustada al último doctor logueado.</span>
+            <span className="ml-1 text-blue-600">
+              El lote mostrado corresponde al supervisor que el médico seleccionó al ingresar.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Selector de Supervisor & Lote + Filtro de Franja Horaria */}
+      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start gap-3">
+          {/* Supervisor */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
               Supervisor a Cargo
@@ -179,6 +211,27 @@ export default function AttendanceView({
                 <option key={s.id} value={s.id}>
                   {s.nombre} · Puesto #{s.puesto} ({s.totalPuestos} médicos)
                 </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Franja Horaria */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Franja Horaria
+            </label>
+            <select
+              value={filterHorario}
+              onChange={(e) => setFilterHorario(e.target.value)}
+              className={`rounded-xl border px-3.5 py-2 text-[13px] font-bold outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs transition-all ${
+                filterHorario !== "TODOS"
+                  ? "border-[#0048B5] bg-blue-50 text-[#0048B5]"
+                  : "border-slate-200 bg-slate-50 text-slate-800"
+              }`}
+            >
+              <option value="TODOS">Todas las franjas</option>
+              {HORARIOS.map((h) => (
+                <option key={h} value={h}>{h}</option>
               ))}
             </select>
           </div>
@@ -211,13 +264,52 @@ export default function AttendanceView({
           </div>
         </div>
 
-        <button
-          onClick={handleCopyReport}
-          className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-all"
-        >
-          <FileSpreadsheet size={15} className="text-emerald-600" />
-          <span>Copiar Reporte de Asistencia</span>
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          {/* Badge de filtros activos */}
+          {filterHorario !== "TODOS" && (
+            <div className="flex items-center gap-1.5 rounded-xl bg-blue-50 border border-blue-200 px-3 py-1.5 text-[11.5px] font-bold text-[#0048B5]">
+              <Filter size={12} />
+              <span>Franja: {filterHorario}</span>
+              <button
+                onClick={() => setFilterHorario("TODOS")}
+                className="ml-1 text-slate-400 hover:text-rose-500 font-black text-[13px] leading-none"
+                title="Limpiar filtro de franja"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {/* Botón Liberar Franja */}
+          {onReleaseByHorario && (() => {
+            const franjaTarget = filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario;
+            const ocupadosEnFranja = spaces.filter((s) => s.doctor && s.horario === franjaTarget).length;
+            return ocupadosEnFranja > 0 ? (
+              <button
+                onClick={() => {
+                  if (window.confirm(
+                    `¿Liberar los ${ocupadosEnFranja} puesto(s) asignados en la franja "${franjaTarget}"?\n\nEsto es útil si un médico olvidó cerrar sesión o al hacer relevo de turno.`
+                  )) {
+                    onReleaseByHorario(franjaTarget);
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-2xs transition-all active:scale-95"
+                title={`Liberar todos los puestos de la franja ${franjaTarget}`}
+              >
+                <RefreshCw size={13} />
+                <span>Liberar Franja ({ocupadosEnFranja})</span>
+              </button>
+            ) : null;
+          })()}
+
+          <button
+            onClick={handleCopyReport}
+            className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-all"
+          >
+            <FileSpreadsheet size={15} className="text-emerald-600" />
+            <span>Copiar Reporte de Asistencia</span>
+          </button>
+        </div>
       </div>
 
       {/* Tarjetas KPIs de Asistencia en Tiempo Real */}

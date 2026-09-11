@@ -1,15 +1,17 @@
 import React, { useState, useMemo } from "react";
-import { Stethoscope, ChevronRight, Search, Clock, Users, Shield, UserCheck, Briefcase, Building2 } from "lucide-react";
+import { Stethoscope, ChevronRight, Search, Clock, Users, Shield, UserCheck, Briefcase, Building2, UserPlus, Trash2 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import DoctorAssignModal from "./DoctorAssignModal";
+import AddStaffModal from "./AddStaffModal";
 import { HORARIOS, DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 
-export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor }) {
+export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, customStaff = [], onAddStaff, onRemoveStaff }) {
   const [filterCategory, setFilterCategory] = useState("TODOS");
   const [filterShift, setFilterShift] = useState("TODOS");
   const [searchDoctor, setSearchDoctor] = useState("");
   const [assigningDoctor, setAssigningDoctor] = useState(null);
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -65,8 +67,17 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor }
       }
     });
 
+    // 4. Add customStaff entries (manually added)
+    customStaff.forEach((member) => {
+      const cleanName = member.nombre.toLowerCase().trim();
+      if (!addedNames.has(cleanName)) {
+        list.push(member);
+        addedNames.add(cleanName);
+      }
+    });
+
     return list;
-  }, []);
+  }, [customStaff]);
 
   const filteredDoctors = useMemo(() => {
     return fullDoctorsList.filter((d) => {
@@ -105,6 +116,17 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor }
       subtitle="Nómina oficial completa con roles, turnos y asignación de puestos · Sede San Miguel"
       right={
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botón Agregar Personal */}
+          {onAddStaff && (
+            <button
+              onClick={() => setAddStaffOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[12px] font-bold text-white shadow-xs transition-all hover:brightness-110 active:scale-95"
+              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+            >
+              <UserPlus size={13} />
+              <span>Agregar {filterCategory !== "TODOS" ? filterCategory : "Personal"}</span>
+            </button>
+          )}
           <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-xs focus-within:ring-2 focus-within:ring-[#0095FF]/40">
             <Search size={14} className="text-slate-400" />
             <input
@@ -271,16 +293,32 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor }
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setAssigningDoctor(d.nombre)}
-                      className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-semibold transition-all shadow-2xs ${
-                        assignedSpace
-                          ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                          : "text-white bg-[#0048B5] hover:bg-[#003487]"
-                      }`}
-                    >
-                      {assignedSpace ? "Reasignar" : "Asignar Puesto"} <ChevronRight size={13} />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {/* Eliminar si es registro personalizado */}
+                      {d.isCustom && onRemoveStaff && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`¿Eliminar a "${d.nombre}" del padrón?`)) {
+                              onRemoveStaff(d.id);
+                            }
+                          }}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                          title="Eliminar del padrón"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setAssigningDoctor(d.nombre)}
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-semibold transition-all shadow-2xs ${
+                          assignedSpace
+                            ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                            : "text-white bg-[#0048B5] hover:bg-[#003487]"
+                        }`}
+                      >
+                        {assignedSpace ? "Reasignar" : "Asignar Puesto"} <ChevronRight size={13} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -334,6 +372,15 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor }
           onClose={() => setAssigningDoctor(null)}
           onAssign={onAssignDoctor}
           onUnassign={onUnassignDoctor}
+        />
+      )}
+
+      {/* Modal de Alta de Personal */}
+      {addStaffOpen && (
+        <AddStaffModal
+          initialCategory={filterCategory !== "TODOS" ? filterCategory : "Planilla"}
+          onClose={() => setAddStaffOpen(false)}
+          onAdd={onAddStaff}
         />
       )}
     </SectionCard>

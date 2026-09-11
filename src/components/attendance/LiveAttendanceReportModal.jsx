@@ -3,6 +3,7 @@ import {
   FileSpreadsheet, Download, Copy, Printer, CheckCircle2, User,
   Clock, Laptop, Search, Filter, X, Check, FileText, ArrowUpDown
 } from "lucide-react";
+import { HORARIOS } from "../../constants/tokens";
 
 export default function LiveAttendanceReportModal({
   spaces,
@@ -29,11 +30,21 @@ export default function LiveAttendanceReportModal({
       }));
   }, [spaces]);
 
-  // Unique shift list from active assignments
-  const turnosDisponibles = useMemo(() => {
-    const set = new Set(activeAssignments.map((a) => a.horario));
-    return Array.from(set);
+  // Count per franja (all HORARIOS, even if 0)
+  const countPerFranja = useMemo(() => {
+    const map = {};
+    HORARIOS.forEach((h) => { map[h] = 0; });
+    activeAssignments.forEach((a) => {
+      if (map[a.horario] !== undefined) map[a.horario]++;
+      else map[a.horario] = (map[a.horario] || 0) + 1;
+    });
+    return map;
   }, [activeAssignments]);
+
+  // Franjas that have at least 1 active doctor
+  const franjasActivas = useMemo(() => {
+    return HORARIOS.filter((h) => (countPerFranja[h] || 0) > 0);
+  }, [countPerFranja]);
 
   const filteredAssignments = useMemo(() => {
     return activeAssignments.filter((a) => {
@@ -198,24 +209,34 @@ export default function LiveAttendanceReportModal({
               )}
             </div>
 
-            {/* Filtro de Turno */}
-            {turnosDisponibles.length > 0 && (
-              <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
-                <Filter size={13} className="text-slate-400" />
-                <select
-                  value={filterTurno}
-                  onChange={(e) => setFilterTurno(e.target.value)}
-                  className="bg-transparent text-[12px] font-semibold text-slate-700 outline-none cursor-pointer"
-                >
-                  <option value="TODOS">Todos los turnos ({activeAssignments.length})</option>
-                  {turnosDisponibles.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+            {/* Filtro de Turno — siempre visible con todas las franjas */}
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
+              <Filter size={13} className="text-slate-400" />
+              <select
+                value={filterTurno}
+                onChange={(e) => setFilterTurno(e.target.value)}
+                className="bg-transparent text-[12px] font-semibold text-slate-700 outline-none cursor-pointer max-w-[200px]"
+              >
+                <option value="TODOS">Todos los turnos ({activeAssignments.length})</option>
+                {HORARIOS.map((h) => {
+                  const cnt = countPerFranja[h] || 0;
+                  return (
+                    <option key={h} value={h}>
+                      {h} ({cnt} méd.)
                     </option>
-                  ))}
-                </select>
-              </div>
-            )}
+                  );
+                })}
+              </select>
+              {filterTurno !== "TODOS" && (
+                <button
+                  onClick={() => setFilterTurno("TODOS")}
+                  className="ml-1 text-slate-400 hover:text-rose-500 font-black text-[13px] leading-none"
+                  title="Limpiar filtro"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Botones de Exportación */}
@@ -242,6 +263,43 @@ export default function LiveAttendanceReportModal({
             </button>
           </div>
         </div>
+
+        {/* Pills de Acceso Rápido por Franja Activa */}
+        {franjasActivas.length > 0 && (
+          <div className="px-4 sm:px-6 pb-3 flex flex-wrap gap-2 shrink-0">
+            <button
+              onClick={() => setFilterTurno("TODOS")}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-1 text-[11px] font-bold border transition-all ${
+                filterTurno === "TODOS"
+                  ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:border-[#0095FF] hover:text-[#0048B5]"
+              }`}
+            >
+              Todos · {activeAssignments.length}
+            </button>
+            {franjasActivas.map((h) => {
+              const cnt = countPerFranja[h] || 0;
+              const isActive = filterTurno === h;
+              // Short label e.g. "07:00" from "07:00 AM – 12:00 PM"
+              const shortLabel = h.split("–")[0].trim();
+              return (
+                <button
+                  key={h}
+                  onClick={() => setFilterTurno(isActive ? "TODOS" : h)}
+                  title={h}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1 text-[11px] font-bold border transition-all ${
+                    isActive
+                      ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs"
+                      : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:border-emerald-400"
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-cyan-300" : "bg-emerald-500"}`} />
+                  {shortLabel} · {cnt}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Tabla de Médicos Conectados en Tiempo Real */}
         <div className="p-4 sm:p-6 pt-2 overflow-y-auto flex-1">

@@ -1,12 +1,27 @@
 import React, { useState } from "react";
 import {
-  Warehouse, LayoutGrid, Plus, TrendingUp, TrendingDown, Minus, ShieldCheck, AlertOctagon
+  Warehouse, LayoutGrid, Plus, TrendingUp, TrendingDown, Minus, ShieldCheck,
+  Clock, FileText, ArrowRightLeft, Filter
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import MovementModal from "./MovementModal";
 
-export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement }) {
+export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement, historial = [] }) {
   const [movementModalOpen, setMovementModalOpen] = useState(false);
+  const [filterTipo, setFilterTipo] = useState("TODOS");
+
+  // Filtrar del historial solo los movimientos relacionados a bodega / hardware
+  const BODEGA_ACTIONS = ["Movimiento", "Cambio", "Retiro", "Ingreso", "Reemplazo por falla",
+    "Reemplazo preventivo", "Préstamo", "Devolución", "Baja de equipo"];
+  const warehouseMovements = historial
+    .filter((h) => {
+      const isWarehouse = h.origen === "BODEGA" || h.destino === "BODEGA" ||
+        BODEGA_ACTIONS.some((a) => h.accion && h.accion.toLowerCase().includes(a.toLowerCase())) ||
+        ["PC", "MAUSE", "HUB", "MONITOR", "CABLES", "HEADSET"].includes(h.equipo);
+      const matchesTipo = filterTipo === "TODOS" || h.equipo === filterTipo;
+      return isWarehouse && matchesTipo;
+    })
+    .slice(0, 30);
 
   const totalesEquipo = bodegaStock.map((t) => {
     const enUso =
@@ -172,6 +187,105 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement 
           spaces={spaces}
         />
       )}
+
+      {/* Sección: Reporte de Movimientos Recientes de Bodega */}
+      <SectionCard
+        icon={FileText}
+        title="Reporte de Movimientos · Inventario Bodega"
+        subtitle="Log en tiempo real de todos los cambios de hardware registrados en la sede"
+        right={
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
+              <Filter size={13} className="text-slate-400" />
+              <select
+                value={filterTipo}
+                onChange={(e) => setFilterTipo(e.target.value)}
+                className="bg-transparent text-[12px] font-semibold text-slate-700 outline-none cursor-pointer"
+              >
+                <option value="TODOS">Todo el hardware</option>
+                {["PC", "MAUSE", "HUB", "MONITOR", "CABLES", "HEADSET"].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => setMovementModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:brightness-110 shadow-xs"
+              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+            >
+              <Plus size={14} /> Registrar Movimiento
+            </button>
+          </div>
+        }
+      >
+        {warehouseMovements.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+            <ArrowRightLeft size={28} className="mb-2 opacity-40" />
+            <p className="text-[13px] font-medium">No hay movimientos de bodega registrados aún.</p>
+            <p className="text-[11.5px] mt-1">Registra un movimiento para que aparezca aquí.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
+            <table className="w-full text-left text-[12px]">
+              <thead>
+                <tr className="bg-slate-50/90 border-b border-slate-200 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3.5 py-2.5">Fecha</th>
+                  <th className="px-3.5 py-2.5">Hardware</th>
+                  <th className="px-3.5 py-2.5">Acción</th>
+                  <th className="px-3.5 py-2.5">Origen</th>
+                  <th className="px-3.5 py-2.5">Destino</th>
+                  <th className="px-3.5 py-2.5">Puesto</th>
+                  <th className="px-3.5 py-2.5">Observaciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {warehouseMovements.map((mov, idx) => {
+                  const isFromBodega = mov.origen === "BODEGA";
+                  const isToBodega = mov.destino === "BODEGA";
+                  return (
+                    <tr key={mov.id || idx} className="hover:bg-blue-50/20 transition-colors">
+                      <td className="px-3.5 py-2.5 text-slate-500 font-mono-data text-[11px] whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <Clock size={11} className="text-slate-400" />
+                          {mov.fecha}
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <span className="inline-flex items-center rounded-lg bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] font-bold text-[#0048B5]">
+                          {mov.equipo || "—"}
+                        </span>
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-bold border ${
+                          isFromBodega
+                            ? "bg-amber-50 text-amber-800 border-amber-200"
+                            : isToBodega
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            : "bg-slate-50 text-slate-700 border-slate-200"
+                        }`}>
+                          {isFromBodega ? "↑ Salida" : isToBodega ? "↓ Entrada" : mov.accion || "—"}
+                        </span>
+                      </td>
+                      <td className="px-3.5 py-2.5 text-slate-600 font-medium">{mov.origen || "—"}</td>
+                      <td className="px-3.5 py-2.5 text-slate-600 font-medium">{mov.destino || "—"}</td>
+                      <td className="px-3.5 py-2.5">
+                        {mov.espacio ? (
+                          <span className="font-mono-data text-[11.5px] font-bold text-[#0048B5]">
+                            #{mov.espacio}
+                          </span>
+                        ) : <span className="text-slate-400 text-[11px]">—</span>}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-slate-500 max-w-[220px]">
+                        <p className="truncate text-[11px]" title={mov.obs}>{mov.obs || mov.falla || "—"}</p>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
