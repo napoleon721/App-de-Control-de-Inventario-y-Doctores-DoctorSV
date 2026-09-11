@@ -186,46 +186,96 @@ function doGet(e) {
       var doctors = [];
       var seenNames = {};
 
-      // Localizar columnas en la tabla de médicos
-      var startRow = 1;
-      var idCol = 1;
-      var nameCol = 2;
-      var shiftCol = 3;
-      var cubiculoCol = 4;
-      var tipoCol = 5;
-
-      for (var r = 0; r < Math.min(15, data.length); r++) {
-        for (var c = 0; c < data[r].length; c++) {
-          var val = String(data[r][c] || "").toUpperCase();
-          if (val.indexOf("NOMBRE DE MÉDICO") !== -1 || (val.indexOf("NOMBRE") !== -1 && val.indexOf("BUSCAR") === -1)) {
-            startRow = r + 1;
-            nameCol = c;
-            idCol = Math.max(0, c - 1);
-            shiftCol = c + 1;
-            cubiculoCol = c + 2;
-            tipoCol = c + 3;
-            break;
+      // Si es "Buscador de Médicos", leer directamente la tabla maestra en columnas H a L (Col 8 a 12)
+      if (docSheet.getName() === "Buscador de Médicos") {
+        for (var r = 8; r < data.length; r++) {
+          var row = data[r];
+          // Col 9 (index 8): Nombre del Médico en tabla maestra
+          var masterName = row[8] ? String(row[8]).trim() : "";
+          if (masterName && masterName !== "Nombre de Médico" && masterName.indexOf("---") === -1) {
+            var upperName = masterName.toUpperCase();
+            if (!seenNames[upperName]) {
+              seenNames[upperName] = true;
+              doctors.push({
+                id: Number(row[7]) || (doctors.length + 1), // Col 8 (index 7): ID
+                nombre: upperName,
+                horario: row[9] ? String(row[9]).trim() : "Turno Rotativo", // Col 10 (index 9): Turno
+                cubiculo: row[10] ? Number(row[10]) : null, // Col 11 (index 10): Cubículo
+                tipo: row[11] ? String(row[11]).trim() : "Planilla" // Col 12 (index 11): Tipo
+              });
+            }
           }
         }
       }
 
-      for (var i = startRow; i < data.length; i++) {
-        var row = data[i];
-        var name = String(row[nameCol] || "").trim();
-        if (!name || name.indexOf("---") !== -1 || name.indexOf("SEPTIEMBRE") !== -1 || name.indexOf("BUSCADOR") !== -1) continue;
+      // Si no se encontraron en la tabla maestra (o para otra hoja), buscar por encabezados dinámicos
+      if (doctors.length === 0) {
+        var startRow = 1;
+        var idCol = 1;
+        var nameCol = 2;
+        var shiftCol = 3;
+        var cubiculoCol = 4;
+        var tipoCol = 5;
 
-        var cleanName = name.toUpperCase();
-        if (!seenNames[cleanName]) {
-          seenNames[cleanName] = true;
-          doctors.push({
-            id: row[idCol] || (doctors.length + 1),
-            nombre: cleanName,
-            tipo: row[tipoCol] || "Planilla",
-            horario: row[shiftCol] || "Turno Rotativo",
-            cubiculo: row[cubiculoCol] || null
-          });
+        for (var r = 0; r < Math.min(15, data.length); r++) {
+          for (var c = 0; c < data[r].length; c++) {
+            var val = String(data[r][c] || "").toUpperCase();
+            if (val.indexOf("NOMBRE DE MÉDICO") !== -1 || (val.indexOf("NOMBRE") !== -1 && val.indexOf("BUSCAR") === -1)) {
+              startRow = r + 1;
+              nameCol = c;
+              idCol = Math.max(0, c - 1);
+              shiftCol = c + 1;
+              cubiculoCol = c + 2;
+              tipoCol = c + 3;
+              break;
+            }
+          }
+        }
+
+        for (var i = startRow; i < data.length; i++) {
+          var row = data[i];
+          var name = String(row[nameCol] || "").trim();
+          if (!name || name.indexOf("---") !== -1 || name.indexOf("SEPTIEMBRE") !== -1 || name.indexOf("BUSCADOR") !== -1) continue;
+
+          var cleanName = name.toUpperCase();
+          if (!seenNames[cleanName]) {
+            seenNames[cleanName] = true;
+            doctors.push({
+              id: row[idCol] || (doctors.length + 1),
+              nombre: cleanName,
+              tipo: row[tipoCol] || "Planilla",
+              horario: row[shiftCol] || "Turno Rotativo",
+              cubiculo: row[cubiculoCol] || null
+            });
+          }
         }
       }
+
+      // Complementar con médicos de Personal SSM si existen adicionales
+      try {
+        var ssStaff = getStaffSpreadsheet();
+        if (ssStaff && ssStaff.getId() !== ssDocs.getId()) {
+          var staffSheet = ssStaff.getSheetByName("SEDE SAN MIGUEL") || ssStaff.getSheets()[0];
+          var sData = staffSheet.getDataRange().getValues();
+          for (var si = 5; si < sData.length; si++) {
+            var sRow = sData[si];
+            var sName = sRow[1] ? String(sRow[1]).trim() : "";
+            if (sName && sName.length > 5 && sName.indexOf("---") === -1 && sName.indexOf("SEPTIEMBRE") === -1) {
+              var sUpper = sName.toUpperCase();
+              if (!seenNames[sUpper]) {
+                seenNames[sUpper] = true;
+                doctors.push({
+                  id: doctors.length + 1,
+                  nombre: sUpper,
+                  tipo: "Planilla",
+                  horario: "Turno Rotativo",
+                  cubiculo: null
+                });
+              }
+            }
+          }
+        }
+      } catch (eStaff) {}
 
       return createJsonResponse({
         success: true,
