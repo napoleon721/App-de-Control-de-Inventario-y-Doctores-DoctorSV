@@ -1,48 +1,53 @@
 /**
  * =========================================================================
- * DoctorSV — Backend Centralizado para Múltiples Hojas de Google Sheets
+ * DoctorSV — Backend Centralizado para las 3 Hojas Oficiales de Google Sheets
  * =========================================================================
- * Conecta automáticamente:
- * 1. Sistema TM-SM V2 (Inventario de 140 Cubículos y Movimientos)
- * 2. Buscador de Médicos / Padrón Oficial
- * 3. Personal SSM
+ * 1. Sistema TM-SM V2 (140 Cubículos, Estados en Vivo, Bodega y Auditoría)
+ * 2. Buscador de Médicos con Tipo (Padrón Oficial de Médicos y Turnos)
+ * 3. Personal SSM (Personal Adicional de Sede San Miguel)
  * =========================================================================
  */
 
-// IDs de las hojas proporcionadas por el usuario
-var SHEET_ID_1 = "1_VQKDLOcWM4JNoo5veD2Bn7ASWhgHmhE70iTcBCSmPQ";
-var SHEET_ID_2 = "1VNZQLl_JKzEaJzoV2Yi_QbhZxsykrBtgE-y9KnzcAPM";
+// IDs de las tres hojas oficiales de Google Sheets
+var SHEET_SPACES_ID  = "1VNZQLl_JKzEaJzoV2Yi_QbhZxsykrBtgE-y9KnzcAPM"; // Sistema TM-SM V2
+var SHEET_DOCTORS_ID = "1VqHT9fJfPd60ro3NFBAi1NzhOHHcuXbdApKv6cNFKXs"; // Buscador_Medicos_Con_Tipo
+var SHEET_STAFF_ID   = "1_VQKDLOcWM4JNoo5veD2Bn7ASWhgHmhE70iTcBCSmPQ"; // personal SSM
 
 /**
- * Obtiene el libro que contiene el inventario de puestos/cubículos
+ * Abre el libro del inventario de cubículos (Sistema TM-SM V2)
  */
 function getSpacesSpreadsheet() {
-  var ids = [SHEET_ID_2, SHEET_ID_1];
-  for (var i = 0; i < ids.length; i++) {
-    try {
-      var ss = SpreadsheetApp.openById(ids[i]);
-      if (ss.getSheetByName("INVENTARIO ACTUALIZADO") || ss.getSheetByName("TM-SM") || ss.getSheetByName("_BASE_DATOS")) {
-        return ss;
-      }
-    } catch (e) {}
+  try {
+    return SpreadsheetApp.openById(SHEET_SPACES_ID);
+  } catch (e) {
+    return SpreadsheetApp.getActiveSpreadsheet();
   }
-  return SpreadsheetApp.getActiveSpreadsheet();
 }
 
 /**
- * Obtiene el libro que contiene el padrón de médicos / personal
+ * Abre el libro del padrón oficial de médicos (Buscador_Medicos_Con_Tipo)
  */
 function getDoctorsSpreadsheet() {
-  var ids = [SHEET_ID_1, SHEET_ID_2];
-  for (var i = 0; i < ids.length; i++) {
+  try {
+    return SpreadsheetApp.openById(SHEET_DOCTORS_ID);
+  } catch (e) {
     try {
-      var ss = SpreadsheetApp.openById(ids[i]);
-      if (ss.getSheetByName("Buscador de Médicos") || ss.getSheetByName("SEDE SAN MIGUEL") || ss.getSheetByName("Medicos")) {
-        return ss;
-      }
-    } catch (e) {}
+      return SpreadsheetApp.openById(SHEET_STAFF_ID);
+    } catch (e2) {
+      return SpreadsheetApp.getActiveSpreadsheet();
+    }
   }
-  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+/**
+ * Abre el libro de personal de sede (personal SSM)
+ */
+function getStaffSpreadsheet() {
+  try {
+    return SpreadsheetApp.openById(SHEET_STAFF_ID);
+  } catch (e) {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  }
 }
 
 function getInventorySheet(ss) {
@@ -106,25 +111,34 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) || "getSpaces";
 
   try {
-    // 0. Diagnóstico y verificación de ambas hojas
+    // 0. Diagnóstico general de las 3 bases
     if (action === "ping" || action === "getMeta") {
       var ssSpaces = getSpacesSpreadsheet();
       var ssDocs = getDoctorsSpreadsheet();
+      var ssStaff = getStaffSpreadsheet();
+
       return createJsonResponse({
         success: true,
-        message: "DoctorSV Sheets API conectada con éxito",
+        message: "DoctorSV: Las 3 bases de Google Sheets están conectadas",
         spacesBook: {
+          id: SHEET_SPACES_ID,
           name: ssSpaces.getName(),
           sheets: ssSpaces.getSheets().map(function(s) { return s.getName(); })
         },
         doctorsBook: {
+          id: SHEET_DOCTORS_ID,
           name: ssDocs.getName(),
           sheets: ssDocs.getSheets().map(function(s) { return s.getName(); })
+        },
+        staffBook: {
+          id: SHEET_STAFF_ID,
+          name: ssStaff.getName(),
+          sheets: ssStaff.getSheets().map(function(s) { return s.getName(); })
         }
       });
     }
 
-    // 1. Obtener puestos / cubículos del inventario
+    // 1. Obtener puestos / cubículos del inventario (Sistema TM-SM V2)
     if (action === "getSpaces") {
       var ss = getSpacesSpreadsheet();
       var sheet = getInventorySheet(ss);
@@ -164,25 +178,32 @@ function doGet(e) {
       });
     }
 
-    // 2. Obtener lista de médicos
+    // 2. Obtener lista completa de médicos (Buscador_Medicos_Con_Tipo + Personal SSM)
     if (action === "getDoctors") {
-      var ss = getDoctorsSpreadsheet();
-      var docSheet = ss.getSheetByName("Buscador de Médicos") || ss.getSheetByName("SEDE SAN MIGUEL") || ss.getSheetByName("Medicos") || ss.getSheets()[0];
+      var ssDocs = getDoctorsSpreadsheet();
+      var docSheet = ssDocs.getSheetByName("Buscador de Médicos") || ssDocs.getSheets()[0];
       var data = docSheet.getDataRange().getValues();
       var doctors = [];
+      var seenNames = {};
 
-      // Si es "Buscador de Médicos" o "SEDE SAN MIGUEL", buscar fila de encabezado
+      // Localizar columnas en la tabla de médicos
       var startRow = 1;
-      var idIdx = 0;
-      var nameIdx = 1;
-      var shiftIdx = 3;
+      var idCol = 1;
+      var nameCol = 2;
+      var shiftCol = 3;
+      var cubiculoCol = 4;
+      var tipoCol = 5;
 
       for (var r = 0; r < Math.min(15, data.length); r++) {
         for (var c = 0; c < data[r].length; c++) {
           var val = String(data[r][c] || "").toUpperCase();
-          if (val.indexOf("NOMBRE DE MÉDICO") !== -1 || val.indexOf("NOMBRE") !== -1 && val.indexOf("BUSCAR") === -1) {
+          if (val.indexOf("NOMBRE DE MÉDICO") !== -1 || (val.indexOf("NOMBRE") !== -1 && val.indexOf("BUSCAR") === -1)) {
             startRow = r + 1;
-            nameIdx = c;
+            nameCol = c;
+            idCol = Math.max(0, c - 1);
+            shiftCol = c + 1;
+            cubiculoCol = c + 2;
+            tipoCol = c + 3;
             break;
           }
         }
@@ -190,27 +211,32 @@ function doGet(e) {
 
       for (var i = startRow; i < data.length; i++) {
         var row = data[i];
-        var name = String(row[nameIdx] || "").trim();
-        if (!name || name.indexOf("---") !== -1 || name.indexOf("SEPTIEMBRE") !== -1) continue;
+        var name = String(row[nameCol] || "").trim();
+        if (!name || name.indexOf("---") !== -1 || name.indexOf("SEPTIEMBRE") !== -1 || name.indexOf("BUSCADOR") !== -1) continue;
 
-        doctors.push({
-          id: row[0] || (i - startRow + 1),
-          nombre: name.toUpperCase(),
-          tipo: "Planilla",
-          horario: row[shiftIdx] || "Turno Rotativo"
-        });
+        var cleanName = name.toUpperCase();
+        if (!seenNames[cleanName]) {
+          seenNames[cleanName] = true;
+          doctors.push({
+            id: row[idCol] || (doctors.length + 1),
+            nombre: cleanName,
+            tipo: row[tipoCol] || "Planilla",
+            horario: row[shiftCol] || "Turno Rotativo",
+            cubiculo: row[cubiculoCol] || null
+          });
+        }
       }
 
       return createJsonResponse({
         success: true,
         count: doctors.length,
-        bookUsed: ss.getName(),
+        bookUsed: ssDocs.getName(),
         sheetUsed: docSheet.getName(),
         doctors: doctors
       });
     }
 
-    return createJsonResponse({ success: true, message: "DoctorSV Centralized Sheets API en línea" });
+    return createJsonResponse({ success: true, message: "DoctorSV 3-Sheets API en línea" });
   } catch (err) {
     return createJsonResponse({ success: false, error: err.toString() });
   }
@@ -225,7 +251,7 @@ function doPost(e) {
 
     var action = body.action || "updateSpace";
 
-    // 1. Actualizar estado de puesto / asignación de doctor
+    // 1. Actualizar estado de puesto / asignación de doctor (En Sistema TM-SM V2)
     if (action === "updateSpace") {
       var ss = getSpacesSpreadsheet();
       var sheet = getInventorySheet(ss);
@@ -294,14 +320,15 @@ function doPost(e) {
     // 3. Agregar personal al Padrón
     if (action === "addStaff") {
       var ss = getDoctorsSpreadsheet();
-      var staffSheet = ss.getSheetByName("Medicos") || ss.getSheetByName("Personal") || ss.getSheetByName("personal SSM") || ss.getSheets()[0];
+      var staffSheet = ss.getSheetByName("Buscador de Médicos") || ss.getSheetByName("Medicos") || ss.getSheetByName("Personal") || ss.getSheets()[0];
       var s = body.staff || {};
       staffSheet.appendRow([
+        "",
         s.id || new Date().getTime(),
         s.nombre || "",
-        s.categoria || s.tipo || "Planilla",
-        s.rol || "Médico General",
-        s.horario || ""
+        s.horario || "",
+        "",
+        s.categoria || s.tipo || "Planilla"
       ]);
       return createJsonResponse({ success: true, added: true, book: ss.getName(), sheet: staffSheet.getName() });
     }
