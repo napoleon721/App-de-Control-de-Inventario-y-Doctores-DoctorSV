@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
-  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw
+  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from "../../constants/tokens";
+import SupervisorRosterModal from "./SupervisorRosterModal";
 
 export default function AttendanceView({
   spaces,
@@ -27,14 +28,62 @@ export default function AttendanceView({
       setSelectedSupId(initialSupId);
     }
   }, [initialSupId]);
+
   const [autoSelected] = useState(!!initialSupId && SUPERVISORES_OFICIALES.some((s) => s.id === initialSupId));
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("TODOS");
   const [filterHorario, setFilterHorario] = useState("TODOS");
+  const [rosterModalOpen, setRosterModalOpen] = useState(false);
+
+  // Nóminas configuradas por supervisor: { [supId]: ["Nombre 1", "Nombre 2", ...] }
+  const [rosterBySupervisor, setRosterBySupervisor] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_SUPERVISOR_ROSTERS_V2");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const currentSupervisor = useMemo(() => {
+    return SUPERVISORES_OFICIALES.find((s) => s.id === selectedSupId) || SUPERVISORES_OFICIALES[0];
+  }, [selectedSupId]);
+
+  // Lista de nombres de médicos asignados al supervisor actual
+  const currentRosterNames = useMemo(() => {
+    if (rosterBySupervisor[currentSupervisor.id] && Array.isArray(rosterBySupervisor[currentSupervisor.id]) && rosterBySupervisor[currentSupervisor.id].length > 0) {
+      return rosterBySupervisor[currentSupervisor.id];
+    }
+    // Si no se ha personalizado, pre-cargar según afinidad de grupo oficial de la hoja
+    let defaultList = [];
+    if (currentSupervisor.id === "sup-1" || currentSupervisor.id === "sup-3") {
+      defaultList = DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 1").map((d) => d.nombre);
+    } else if (currentSupervisor.id === "sup-2" || currentSupervisor.id === "sup-4") {
+      defaultList = DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 2").map((d) => d.nombre);
+    }
+    // Completar hasta la capacidad del lote (ej. 40)
+    const needed = currentSupervisor.totalPuestos || 40;
+    if (defaultList.length < needed) {
+      const remainder = DOCTORES_EXCEL.filter((d) => !defaultList.includes(d.nombre))
+        .slice(0, needed - defaultList.length)
+        .map((d) => d.nombre);
+      defaultList = [...defaultList, ...remainder];
+    }
+    return defaultList.slice(0, needed);
+  }, [rosterBySupervisor, currentSupervisor]);
+
+  function handleSaveSupervisorRoster(newNames) {
+    setRosterBySupervisor((prev) => {
+      const next = { ...prev, [currentSupervisor.id]: newNames };
+      try {
+        localStorage.setItem("DOCTORSV_SUPERVISOR_ROSTERS_V2", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
 
   // Attendance state by doctor name: { [doctorName]: "PRESENTE" | "AUSENTE" | "JUSTIFICADO" }
   const [attendanceRecords, setAttendanceRecords] = useState(() => {
-    // Initial attendance: doctors who already have an assigned space are PRESENTE
     const map = {};
     spaces.forEach((s) => {
       if (s.doctor) {
@@ -44,55 +93,92 @@ export default function AttendanceView({
     return map;
   });
 
-  const currentSupervisor = useMemo(() => {
-    return SUPERVISORES_OFICIALES.find((s) => s.id === selectedSupId) || SUPERVISORES_OFICIALES[0];
-  }, [selectedSupId]);
-
-  // Doctors programmed for this supervisor's batch
-  const batchDoctors = useMemo(() => {
-    // Slice doctors based on supervisor batch size
-    const count = currentSupervisor.totalPuestos;
-    return DOCTORES_EXCEL.slice(0, count).map((doc) => {
-      const spaceAssigned = spaces.find((s) => s.doctor && s.doctor.toLowerCase() === doc.nombre.toLowerCase());
-      const status = spaceAssigned
-        ? "PRESENTE"
-        : (attendanceRecords[doc.nombre] || "PENDIENTE");
-
-      return {
-        id: doc.id,
-        nombre: doc.nombre,
-        tipo: doc.tipo || "Planilla",
-        horario: currentSupervisor.horario,
-        status,
-        espacio: spaceAssigned ? spaceAssigned.id : null,
-      };
-    });
-  }, [currentSupervisor, spaces, attendanceRecords]);
-
-  // Filtered list
-  const filteredBatch = useMemo(() => {
-    return batchDoctors.filter((d) => {
-      const matchesSearch =
-        d.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(d.id).includes(searchQuery) ||
-        (d.espacio && String(d.espacio).includes(searchQuery));
-      const matchesStatus = filterStatus === "TODOS" || d.status === filterStatus;
-      const matchesHorario = filterHorario === "TODOS" || d.horario === filterHorario;
-      return matchesSearch && matchesStatus && matchesHorario;
-    });
-  }, [batchDoctors, searchQuery, filterStatus, filterHorario]);
-
-  // Supervisor Batch Spaces in the floor map
+  // Espacios del lote del supervisor en el mapa
   const supervisorSpaces = useMemo(() => {
     return spaces.filter(
       (s) => s.id >= currentSupervisor.bloqueInicio && s.id <= currentSupervisor.bloqueFin
     );
   }, [spaces, currentSupervisor]);
 
+  // Lista consolidada de médicos para el lote del supervisor
+  const batchDoctors = useMemo(() => {
+    const list = [];
+    const addedNames = new Set();
+
+    // 1. Médicos configurados en la nómina del turno
+    currentRosterNames.forEach((name) => {
+      const docObj = DOCTORES_EXCEL.find((d) => d.nombre.toLowerCase() === name.toLowerCase()) || {
+        id: "EXT",
+        nombre: name,
+        tipo: "Planilla",
+        correo: "",
+        jvpm: "",
+      };
+
+      const spaceAssigned = spaces.find((s) => s.doctor && s.doctor.toLowerCase().trim() === name.toLowerCase().trim());
+      const status = spaceAssigned
+        ? "PRESENTE"
+        : (attendanceRecords[name] || "PENDIENTE");
+
+      list.push({
+        id: docObj.id,
+        nombre: docObj.nombre,
+        correo: docObj.correo || "",
+        jvpm: docObj.jvpm || "",
+        tipo: docObj.tipo || "Planilla",
+        horario: currentSupervisor.horario,
+        status,
+        espacio: spaceAssigned ? spaceAssigned.id : null,
+      });
+      addedNames.add(name.toLowerCase().trim());
+    });
+
+    // 2. Incluir también cualquier médico que se haya sentado físicamente en este lote (aunque no estuviera pre-agendado)
+    supervisorSpaces.forEach((s) => {
+      if (s.doctor && !addedNames.has(s.doctor.toLowerCase().trim())) {
+        const docObj = DOCTORES_EXCEL.find((d) => d.nombre.toLowerCase().trim() === s.doctor.toLowerCase().trim());
+        list.push({
+          id: docObj?.id || "EXT",
+          nombre: s.doctor,
+          correo: docObj?.correo || "",
+          jvpm: docObj?.jvpm || "",
+          tipo: docObj?.tipo || "Planilla",
+          horario: s.horario || currentSupervisor.horario,
+          status: "PRESENTE",
+          espacio: s.id,
+          externoAlLote: true,
+        });
+        addedNames.add(s.doctor.toLowerCase().trim());
+      }
+    });
+
+    return list;
+  }, [currentRosterNames, spaces, attendanceRecords, currentSupervisor, supervisorSpaces]);
+
+  // Médicos filtrados
+  const filteredBatch = useMemo(() => {
+    return batchDoctors.filter((d) => {
+      const matchesSearch =
+        d.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(d.id).includes(searchQuery) ||
+        (d.correo && d.correo.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (d.espacio && String(d.espacio).includes(searchQuery));
+
+      let matchesStatus = true;
+      if (filterStatus === "TODOS") matchesStatus = true;
+      else if (filterStatus === "SIN_PUESTO") matchesStatus = d.espacio === null;
+      else matchesStatus = d.status === filterStatus;
+
+      const matchesHorario = filterHorario === "TODOS" || d.horario === filterHorario;
+      return matchesSearch && matchesStatus && matchesHorario;
+    });
+  }, [batchDoctors, searchQuery, filterStatus, filterHorario]);
+
   // Metrics
   const totalProgramados = batchDoctors.length;
   const totalPresentes = batchDoctors.filter((d) => d.status === "PRESENTE").length;
   const totalConPuesto = batchDoctors.filter((d) => d.espacio !== null).length;
+  const totalSinPuesto = batchDoctors.filter((d) => d.espacio === null).length;
   const totalAusentes = batchDoctors.filter((d) => d.status === "AUSENTE").length;
   const totalJustificados = batchDoctors.filter((d) => d.status === "JUSTIFICADO").length;
 
@@ -105,6 +191,24 @@ export default function AttendanceView({
       ...prev,
       [docName]: status,
     }));
+  }
+
+  // Marcar con 1 clic a todos los médicos que no se sentaron como Ausentes
+  function handleMarkUnseatedAsAbsent() {
+    const unseated = batchDoctors.filter((d) => !d.espacio && d.status !== "JUSTIFICADO");
+    if (unseated.length === 0) {
+      alert("¡Excelente! Todos los médicos programados ya tienen puesto asignado o justificante.");
+      return;
+    }
+    if (window.confirm(`¿Deseas marcar a los ${unseated.length} médicos que NO tienen puesto como AUSENTES en este turno?`)) {
+      setAttendanceRecords((prev) => {
+        const next = { ...prev };
+        unseated.forEach((d) => {
+          next[d.nombre] = "AUSENTE";
+        });
+        return next;
+      });
+    }
   }
 
   function handleQuickAssign(docName) {
@@ -303,11 +407,20 @@ export default function AttendanceView({
           })()}
 
           <button
+            onClick={() => setRosterModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-[#0048B5] border border-blue-200 bg-blue-50/80 hover:bg-blue-100 shadow-2xs transition-all active:scale-95"
+            title="Personaliza qué médicos están asignados a este supervisor"
+          >
+            <Settings2 size={15} className="text-[#0095FF]" />
+            <span>Configurar Nómina ({currentRosterNames.length})</span>
+          </button>
+
+          <button
             onClick={handleCopyReport}
             className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-all"
           >
             <FileSpreadsheet size={15} className="text-emerald-600" />
-            <span>Copiar Reporte de Asistencia</span>
+            <span>Copiar Reporte</span>
           </button>
         </div>
       </div>
@@ -353,14 +466,27 @@ export default function AttendanceView({
           title={`Pase de Asistencia · ${currentSupervisor.nombre}`}
           subtitle="Verifica la asistencia y vincula el puesto donde se sentó cada médico"
           right={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {totalSinPuesto > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkUnseatedAsAbsent}
+                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs"
+                  title="Marca a todos los médicos que aún no tienen puesto como ausentes"
+                >
+                  <UserX size={13} />
+                  <span className="hidden sm:inline">Marcar Faltantes como Ausentes ({totalSinPuesto})</span>
+                  <span className="sm:hidden">Faltantes Ausentes ({totalSinPuesto})</span>
+                </button>
+              )}
+
               <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
                 <Search size={13} className="text-slate-400" />
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar médico..."
-                  className="w-36 sm:w-44 bg-transparent text-[12px] font-medium outline-none placeholder:text-slate-400"
+                  className="w-32 sm:w-40 bg-transparent text-[12px] font-medium outline-none placeholder:text-slate-400"
                 />
               </div>
 
@@ -371,6 +497,7 @@ export default function AttendanceView({
               >
                 <option value="TODOS">Todos los estados</option>
                 <option value="PRESENTE">Presentes ({totalPresentes})</option>
+                <option value="SIN_PUESTO">⚠️ Faltantes / Sin Puesto ({totalSinPuesto})</option>
                 <option value="PENDIENTE">Pendientes</option>
                 <option value="AUSENTE">Ausentes ({totalAusentes})</option>
                 <option value="JUSTIFICADO">Justificados ({totalJustificados})</option>
@@ -378,6 +505,57 @@ export default function AttendanceView({
             </div>
           }
         >
+          {/* Pestañas de Filtro Rápido (Todos vs Presentes vs Faltantes) */}
+          <div className="flex items-center gap-1.5 mb-3.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setFilterStatus("TODOS")}
+              className={`px-3 py-1 rounded-xl text-[11.5px] font-bold transition-all ${
+                filterStatus === "TODOS"
+                  ? "bg-[#0048B5] text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              Todos ({totalProgramados})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus("PRESENTE")}
+              className={`px-3 py-1 rounded-xl text-[11.5px] font-bold transition-all ${
+                filterStatus === "PRESENTE"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+              }`}
+            >
+              Presentes ({totalPresentes})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus("SIN_PUESTO")}
+              className={`px-3 py-1 rounded-xl text-[11.5px] font-bold transition-all flex items-center gap-1 ${
+                filterStatus === "SIN_PUESTO"
+                  ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-400/40"
+                  : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
+              }`}
+            >
+              <AlertCircle size={12} />
+              <span>Faltantes / Sin Puesto ({totalSinPuesto})</span>
+            </button>
+            {totalAusentes > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilterStatus("AUSENTE")}
+                className={`px-3 py-1 rounded-xl text-[11.5px] font-bold transition-all ${
+                  filterStatus === "AUSENTE"
+                    ? "bg-rose-600 text-white shadow-xs"
+                    : "bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100"
+                }`}
+              >
+                Ausentes ({totalAusentes})
+              </button>
+            )}
+          </div>
+
           <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
             <table className="w-full text-left text-[12.5px]">
               <thead>
@@ -396,13 +574,30 @@ export default function AttendanceView({
                   const isJustified = doc.status === "JUSTIFICADO";
 
                   return (
-                    <tr key={doc.id} className="hover:bg-blue-50/30 transition-colors">
+                    <tr key={`${doc.id}-${doc.nombre}`} className="hover:bg-blue-50/30 transition-colors">
                       <td className="px-3.5 py-3 font-mono-data text-slate-400 text-[11px]">
                         {idx + 1}
                       </td>
                       <td className="px-3.5 py-3 font-semibold text-slate-800">
                         <p className="leading-tight">{doc.nombre}</p>
-                        <span className="text-[10.5px] font-normal text-slate-400">{doc.tipo}</span>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[10px] font-normal text-slate-400">{doc.tipo}</span>
+                          {doc.correo && (
+                            <span className="text-[10px] font-mono text-[#0048B5] font-normal">
+                              {doc.correo}
+                            </span>
+                          )}
+                          {doc.jvpm && (
+                            <span className="text-[9.5px] font-mono bg-slate-100 text-slate-500 px-1 py-0.2 rounded">
+                              {doc.jvpm}
+                            </span>
+                          )}
+                          {doc.externoAlLote && (
+                            <span className="text-[9.5px] bg-sky-100 text-sky-800 px-1.5 rounded font-bold">
+                              Se sentó en tu lote
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3.5 py-3">
                         {doc.espacio ? (
@@ -410,7 +605,7 @@ export default function AttendanceView({
                             <Laptop size={12} /> Puesto #{doc.espacio}
                           </span>
                         ) : (
-                          <span className="text-[11.5px] text-slate-400 italic">
+                          <span className="text-[11.5px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-semibold border border-amber-200">
                             Sin puesto asignado
                           </span>
                         )}
@@ -529,6 +724,16 @@ export default function AttendanceView({
           </div>
         </SectionCard>
       </div>
+
+      {/* Modal Configurador de Nómina de Médicos Asignados al Supervisor */}
+      {rosterModalOpen && (
+        <SupervisorRosterModal
+          supervisor={currentSupervisor}
+          currentDoctorNames={currentRosterNames}
+          onSaveRoster={handleSaveSupervisorRoster}
+          onClose={() => setRosterModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
