@@ -8,10 +8,11 @@
  * =========================================================================
  */
 
-// IDs de las tres hojas oficiales de Google Sheets
-var SHEET_SPACES_ID  = "1VNZQLl_JKzEaJzoV2Yi_QbhZxsykrBtgE-y9KnzcAPM"; // Sistema TM-SM V2
-var SHEET_DOCTORS_ID = "1VqHT9fJfPd60ro3NFBAi1NzhOHHcuXbdApKv6cNFKXs"; // Buscador_Medicos_Con_Tipo
-var SHEET_STAFF_ID   = "1_VQKDLOcWM4JNoo5veD2Bn7ASWhgHmhE70iTcBCSmPQ"; // personal SSM
+// IDs de las cuatro hojas oficiales de Google Sheets
+var SHEET_SPACES_ID            = "1VNZQLl_JKzEaJzoV2Yi_QbhZxsykrBtgE-y9KnzcAPM"; // Sistema TM-SM V2
+var SHEET_DOCTORS_DIRECTORY_ID = "1zHV2KYuuazYqX6N893-0XpEl7T96cKTs88FRWmhTy9I"; // Directorio Oficial de Médicos con Correos
+var SHEET_DOCTORS_ID           = "1VqHT9fJfPd60ro3NFBAi1NzhOHHcuXbdApKv6cNFKXs"; // Buscador_Medicos_Con_Tipo
+var SHEET_STAFF_ID             = "1_VQKDLOcWM4JNoo5veD2Bn7ASWhgHmhE70iTcBCSmPQ"; // personal SSM
 
 /**
  * Abre el libro del inventario de cubículos (Sistema TM-SM V2)
@@ -21,6 +22,17 @@ function getSpacesSpreadsheet() {
     return SpreadsheetApp.openById(SHEET_SPACES_ID);
   } catch (e) {
     return SpreadsheetApp.getActiveSpreadsheet();
+  }
+}
+
+/**
+ * Abre el libro del directorio oficial de médicos con correos institucionales
+ */
+function getDoctorsDirectorySpreadsheet() {
+  try {
+    return SpreadsheetApp.openById(SHEET_DOCTORS_DIRECTORY_ID);
+  } catch (e) {
+    return null;
   }
 }
 
@@ -178,77 +190,98 @@ function doGet(e) {
       });
     }
 
-    // 2. Obtener lista completa de médicos (Buscador_Medicos_Con_Tipo + Personal SSM)
+    // 2. Obtener lista completa de médicos (Directorio Oficial con Correos + Buscador de Médicos)
     if (action === "getDoctors") {
-      var ssDocs = getDoctorsSpreadsheet();
-      var docSheet = ssDocs.getSheetByName("Buscador de Médicos") || ssDocs.getSheets()[0];
-      var data = docSheet.getDataRange().getValues();
       var doctors = [];
+      var seenEmails = {};
       var seenNames = {};
 
-      // Si es "Buscador de Médicos", leer directamente la tabla maestra en columnas H a L (Col 8 a 12)
-      if (docSheet.getName() === "Buscador de Médicos") {
-        for (var r = 8; r < data.length; r++) {
-          var row = data[r];
-          // Col 9 (index 8): Nombre del Médico en tabla maestra
-          var masterName = row[8] ? String(row[8]).trim() : "";
-          if (masterName && masterName !== "Nombre de Médico" && masterName.indexOf("---") === -1) {
-            var upperName = masterName.toUpperCase();
-            if (!seenNames[upperName]) {
-              seenNames[upperName] = true;
-              doctors.push({
-                id: Number(row[7]) || (doctors.length + 1), // Col 8 (index 7): ID
-                nombre: upperName,
-                horario: row[9] ? String(row[9]).trim() : "Turno Rotativo", // Col 10 (index 9): Turno
-                cubiculo: row[10] ? Number(row[10]) : null, // Col 11 (index 10): Cubículo
-                tipo: row[11] ? String(row[11]).trim() : "Planilla" // Col 12 (index 11): Tipo
-              });
-            }
-          }
-        }
-      }
+      // A. Leer del Directorio Oficial de Médicos con Correos
+      try {
+        var ssDir = getDoctorsDirectorySpreadsheet();
+        if (ssDir) {
+          var dirSheet = ssDir.getSheetByName("Respuestas de formulario 1") || ssDir.getSheets()[0];
+          var dirData = dirSheet.getDataRange().getValues();
+          // Col 1: Nombre, Col 2: Grupo, Col 3: Tipo contrato, Col 5: Junta, Col 6: Teléfono, Col 9: TCA, Col 11: Correo electrónico
+          for (var dr = 1; dr < dirData.length; dr++) {
+            var dRow = dirData[dr];
+            var rawName = dRow[1] ? String(dRow[1]).trim() : "";
+            if (!rawName) continue;
 
-      // Si no se encontraron en la tabla maestra (o para otra hoja), buscar por encabezados dinámicos
-      if (doctors.length === 0) {
-        var startRow = 1;
-        var idCol = 1;
-        var nameCol = 2;
-        var shiftCol = 3;
-        var cubiculoCol = 4;
-        var tipoCol = 5;
+            var upperName = rawName.toUpperCase();
+            var email = dRow[11] ? String(dRow[11]).trim().toLowerCase() : "";
+            var jvpmRaw = dRow[5] ? String(dRow[5]).replace(/^["\s]+|["\s]+$/g, "").trim() : "";
+            var jvpm = jvpmRaw ? (jvpmRaw.indexOf("JVPM") !== -1 ? jvpmRaw : "JVPM-" + jvpmRaw) : "Institucional";
+            var grupo = dRow[2] ? String(dRow[2]).trim() : "Grupo General";
+            var tipo = dRow[3] ? String(dRow[3]).trim() : "Planilla";
+            var telefono = dRow[6] ? String(dRow[6]).trim() : "";
+            var tca = dRow[9] ? String(dRow[9]).trim() : "";
+            var placa = dRow[12] ? String(dRow[12]).trim() : "";
 
-        for (var r = 0; r < Math.min(15, data.length); r++) {
-          for (var c = 0; c < data[r].length; c++) {
-            var val = String(data[r][c] || "").toUpperCase();
-            if (val.indexOf("NOMBRE DE MÉDICO") !== -1 || (val.indexOf("NOMBRE") !== -1 && val.indexOf("BUSCAR") === -1)) {
-              startRow = r + 1;
-              nameCol = c;
-              idCol = Math.max(0, c - 1);
-              shiftCol = c + 1;
-              cubiculoCol = c + 2;
-              tipoCol = c + 3;
-              break;
-            }
-          }
-        }
+            var normKey = upperName.replace(/[^A-Z0-9]/g, "");
+            if (email && seenEmails[email]) continue;
+            if (email) seenEmails[email] = true;
+            seenNames[normKey] = doctors.length;
 
-        for (var i = startRow; i < data.length; i++) {
-          var row = data[i];
-          var name = String(row[nameCol] || "").trim();
-          if (!name || name.indexOf("---") !== -1 || name.indexOf("SEPTIEMBRE") !== -1 || name.indexOf("BUSCADOR") !== -1) continue;
-
-          var cleanName = name.toUpperCase();
-          if (!seenNames[cleanName]) {
-            seenNames[cleanName] = true;
             doctors.push({
-              id: row[idCol] || (doctors.length + 1),
-              nombre: cleanName,
-              tipo: row[tipoCol] || "Planilla",
-              horario: row[shiftCol] || "Turno Rotativo",
-              cubiculo: row[cubiculoCol] || null
+              id: doctors.length + 1,
+              nombre: upperName,
+              correo: email,
+              jvpm: jvpm,
+              grupo: grupo,
+              tipo: tipo,
+              horario: "Turno Rotativo",
+              telefono: telefono,
+              tcaUsuario: tca,
+              placa: placa,
+              cubiculo: null
             });
           }
         }
+      } catch (errDir) {
+        Logger.log("Error leyendo directorio de médicos: " + errDir);
+      }
+
+      // B. Complementar con datos de Buscador de Médicos (turnos y cubículos asignados)
+      try {
+        var ssDocs = getDoctorsSpreadsheet();
+        if (ssDocs) {
+          var docSheet = ssDocs.getSheetByName("Buscador de Médicos") || ssDocs.getSheets()[0];
+          var data = docSheet.getDataRange().getValues();
+
+          if (docSheet.getName() === "Buscador de Médicos") {
+            for (var r = 8; r < data.length; r++) {
+              var row = data[r];
+              var masterName = row[8] ? String(row[8]).trim() : "";
+              if (masterName && masterName !== "Nombre de Médico" && masterName.indexOf("---") === -1) {
+                var upperMaster = masterName.toUpperCase();
+                var normM = upperMaster.replace(/[^A-Z0-9]/g, "");
+                var shift = row[9] ? String(row[9]).trim() : "";
+                var cubiculo = row[10] ? Number(row[10]) : null;
+
+                if (seenNames[normM] !== undefined) {
+                  var existingDoc = doctors[seenNames[normM]];
+                  if (shift && shift !== "Turno Rotativo") existingDoc.horario = shift;
+                  if (cubiculo) existingDoc.cubiculo = cubiculo;
+                } else {
+                  seenNames[normM] = doctors.length;
+                  doctors.push({
+                    id: Number(row[7]) || (doctors.length + 1),
+                    nombre: upperMaster,
+                    correo: "",
+                    jvpm: "Institucional",
+                    grupo: "Grupo General",
+                    horario: shift || "Turno Rotativo",
+                    cubiculo: cubiculo,
+                    tipo: row[11] ? String(row[11]).trim() : "Planilla"
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (errDocs) {
+        Logger.log("Error leyendo buscador de médicos: " + errDocs);
       }
 
       // Complementar con médicos de Personal SSM si existen adicionales

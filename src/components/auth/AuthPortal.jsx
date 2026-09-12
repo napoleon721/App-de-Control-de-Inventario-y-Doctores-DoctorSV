@@ -128,19 +128,22 @@ export default function AuthPortal({
         return;
       }
 
-      // 4. Buscar si el doctor coincide con el padrón de Excel
-      const match = DOCTORES_EXCEL.find(d =>
-        displayName.toLowerCase().includes(d.nombre.toLowerCase()) ||
-        d.nombre.toLowerCase().includes(displayName.toLowerCase()) ||
-        (d.correo && d.correo.toLowerCase() === email.toLowerCase())
-      );
+      // 4. Buscar si el doctor coincide con el padrón oficial por correo electrónico institucional
+      const normEmail = email.toLowerCase().trim();
+      const match = DOCTORES_EXCEL.find(d => (d.correo && d.correo.toLowerCase().trim() === normEmail)) ||
+                    DOCTORES_EXCEL.find(d =>
+                      displayName.toLowerCase().includes(d.nombre.toLowerCase()) ||
+                      d.nombre.toLowerCase().includes(displayName.toLowerCase())
+                    );
 
       const doctorData = {
         name: match ? match.nombre : displayName,
         email,
         photoURL: user.photoURL || null,
         shift: match?.horario && match.horario !== "Turno Rotativo" ? match.horario : selectedHorario,
-        jvpm: match ? `JVPM-${match.id}` : "Institucional",
+        jvpm: match?.jvpm || (match ? `JVPM-${match.id}` : "Institucional"),
+        grupo: match?.grupo || "Grupo General",
+        tipo: match?.tipo || "Planilla",
         role: "DOCTOR",
         spaceId: null,
         supervisorId: selectedSupervisor?.id || null,
@@ -275,12 +278,15 @@ export default function AuthPortal({
     }
   }
 
-  // Padrón filtration
+  // Padrón filtration con búsqueda por nombre, correo, JVPM o usuario TCA
   const filteredDoctors = useMemo(() => {
     if (!searchDoctor.trim()) return DOCTORES_EXCEL.slice(0, 10);
     const q = searchDoctor.toLowerCase().trim();
     return DOCTORES_EXCEL.filter((d) =>
       d.nombre.toLowerCase().includes(q) ||
+      (d.correo && d.correo.toLowerCase().includes(q)) ||
+      (d.jvpm && d.jvpm.toLowerCase().includes(q)) ||
+      (d.tcaUsuario && d.tcaUsuario.toLowerCase().includes(q)) ||
       String(d.id).includes(q)
     ).slice(0, 15);
   }, [searchDoctor]);
@@ -350,7 +356,10 @@ export default function AuthPortal({
     onLoginDoctor({
       name: docName,
       shift: selectedHorario,
-      jvpm: selectedDoctorObj ? `JVPM-${selectedDoctorObj.id}` : "General",
+      jvpm: selectedDoctorObj?.jvpm || (selectedDoctorObj ? `JVPM-${selectedDoctorObj.id}` : "Institucional"),
+      grupo: selectedDoctorObj?.grupo || "Grupo General",
+      tipo: selectedDoctorObj?.tipo || "Planilla",
+      email: selectedDoctorObj?.correo || null,
       role: "DOCTOR",
       spaceId: null,
       supervisorId: selectedSupervisor?.id || null,
@@ -531,7 +540,7 @@ export default function AuthPortal({
                       <Check size={12} /> Verificado en Padrón
                     </span>
                   ) : (
-                    <span className="text-slate-400 text-[10.5px] font-medium">194 registrados</span>
+                    <span className="text-slate-400 text-[10.5px] font-medium">{DOCTORES_EXCEL.length} registrados</span>
                   )}
                 </label>
 
@@ -548,7 +557,13 @@ export default function AuthPortal({
                         </p>
                         <p className="text-[11px] text-emerald-800 font-medium mt-0.5">
                           Padrón Oficial #{selectedDoctorObj.id} · {selectedDoctorObj.horario || "Turno Activo"}
+                          {selectedDoctorObj.jvpm ? ` · ${selectedDoctorObj.jvpm}` : ""}
                         </p>
+                        {selectedDoctorObj.correo && (
+                          <p className="text-[10px] text-emerald-700 font-mono mt-0.5 flex items-center gap-1">
+                            <Mail size={11} /> {selectedDoctorObj.correo}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <button
@@ -571,7 +586,7 @@ export default function AuthPortal({
                             setSearchDoctor(e.target.value);
                             setManualDoctorName(e.target.value);
                           }}
-                          placeholder="Escribe tus nombres o apellidos para buscar..."
+                          placeholder="Busca por tu nombre, correo o JVPM..."
                           className="w-full bg-transparent text-[13px] font-medium text-slate-800 outline-none placeholder:text-slate-400"
                           autoFocus
                         />
@@ -591,7 +606,7 @@ export default function AuthPortal({
                     </div>
 
                     {/* Lista desplegable de doctores filtrados */}
-                    <div className="max-h-44 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-md divide-y divide-slate-100">
+                    <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-md divide-y divide-slate-100">
                       {filteredDoctors.map((doc) => (
                         <button
                           key={doc.id}
@@ -599,15 +614,27 @@ export default function AuthPortal({
                           onClick={() => handleSelectDoctor(doc)}
                           className="w-full text-left px-3.5 py-2 text-[12px] hover:bg-blue-50/80 transition-colors flex items-center justify-between group"
                         >
-                          <div className="flex items-center gap-2.5">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100 text-[#0048B5] text-[10px] font-bold">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-[#0048B5] text-[10px] font-bold">
                               {doc.nombre.slice(0, 1)}
                             </span>
-                            <span className="font-semibold text-slate-800 group-hover:text-[#0048B5]">
-                              {doc.nombre}
-                            </span>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-800 group-hover:text-[#0048B5] truncate leading-snug">
+                                {doc.nombre}
+                              </p>
+                              <p className="text-[10.5px] text-slate-400 font-normal truncate mt-0.5 flex items-center gap-1.5">
+                                {doc.correo && (
+                                  <span className="font-mono text-[#0048B5]">{doc.correo}</span>
+                                )}
+                                {doc.jvpm && (
+                                  <span className="bg-slate-100 px-1 py-0.2 rounded text-slate-500 font-mono text-[9.5px]">
+                                    {doc.jvpm}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
                           </div>
-                          <span className="text-[10px] font-mono-data text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded-md">
+                          <span className="text-[10px] font-mono-data text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
                             #{doc.id}
                           </span>
                         </button>

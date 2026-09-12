@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Stethoscope, ChevronRight, Search, Clock, Users, Shield, UserCheck, Briefcase, Building2, UserPlus, Trash2 } from "lucide-react";
+import { Stethoscope, ChevronRight, Search, Clock, Users, Shield, UserCheck, Briefcase, Building2, UserPlus, Trash2, Mail } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import DoctorAssignModal from "./DoctorAssignModal";
@@ -31,6 +31,8 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
         rol: sup.rol,
         horarioDefault: sup.horario,
         puestoOficial: sup.puesto,
+        correo: sup.correo || null,
+        jvpm: null,
       });
       addedNames.add(sup.nombre.toLowerCase().trim());
     });
@@ -46,6 +48,8 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
           rol: st.rol,
           horarioDefault: "07:00 AM – 12:00 PM",
           puestoOficial: null,
+          correo: null,
+          jvpm: null,
         });
         addedNames.add(cleanName);
       }
@@ -58,10 +62,13 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
         list.push({
           id: doc.id,
           nombre: doc.nombre,
-          categoria: doc.tipo || "Planilla",
-          rol: doc.tipo === "Planilla" ? "Médico Planilla" : "Servicios Profesionales",
+          categoria: doc.grupo || doc.tipo || "Planilla",
+          rol: doc.tipo === "Planilla" ? "Médico Planilla" : (doc.tipo || "Médico de Turno"),
           horarioDefault: doc.horario || "Turno Rotativo",
           puestoOficial: null,
+          correo: doc.correo || null,
+          jvpm: doc.jvpm || null,
+          telefono: doc.telefono || null,
         });
         addedNames.add(cleanName);
       }
@@ -85,6 +92,8 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
       const matchesSearch =
         d.nombre.toLowerCase().includes(searchDoctor.toLowerCase()) ||
         String(d.id).toLowerCase().includes(searchDoctor.toLowerCase()) ||
+        (d.correo && d.correo.toLowerCase().includes(searchDoctor.toLowerCase())) ||
+        (d.jvpm && d.jvpm.toLowerCase().includes(searchDoctor.toLowerCase())) ||
         (d.puestoOficial && String(d.puestoOficial).includes(searchDoctor)) ||
         (assignedSpace && String(assignedSpace.id).includes(searchDoctor));
 
@@ -237,8 +246,8 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
                     >
                       {isSupervisor ? <Shield size={14} /> : initials}
                     </span>
-                    <div>
-                      <p className="leading-tight text-slate-800 flex items-center gap-1.5">
+                    <div className="min-w-0">
+                      <p className="leading-tight text-slate-800 flex items-center gap-1.5 truncate">
                         {d.nombre}
                         {isSupervisor && (
                           <span className="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.2 rounded-full font-bold border border-sky-300">
@@ -246,7 +255,20 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
                           </span>
                         )}
                       </p>
-                      <p className="text-[10.5px] text-slate-400 font-normal">{d.rol}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-[10.5px] text-slate-400 font-normal">{d.rol}</span>
+                        {d.correo && (
+                          <span className="text-[10.5px] text-[#0048B5] font-mono font-medium flex items-center gap-1">
+                            <Mail size={10} className="text-[#0095FF] shrink-0" />
+                            {d.correo}
+                          </span>
+                        )}
+                        {d.jvpm && (
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-mono font-bold">
+                            {d.jvpm}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">
