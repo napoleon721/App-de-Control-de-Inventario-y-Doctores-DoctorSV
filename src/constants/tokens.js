@@ -103,12 +103,11 @@ export const HORARIOS = [
 
 // Supervisores Oficiales extraídos de las tablas del Excel
 export const SUPERVISORES_OFICIALES = [
-  { id: "sup-1", nombre: "EMERSON JOSUE VIGIL HERNANDEZ", puesto: 135, rol: "Supervisor Médico (Turno Mañana)", bloqueInicio: 37, bloqueFin: 76, totalPuestos: 40, horario: "06:00 AM – 02:00 PM" },
-  { id: "sup-2", nombre: "SALVADOR RENDEROS BONILLA", puesto: 136, rol: "Supervisor Médico (Turno Tarde)", bloqueInicio: 71, bloqueFin: 104, totalPuestos: 34, horario: "02:00 PM – 10:00 PM" },
-  { id: "sup-3", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", puesto: 137, rol: "Supervisor Médico (Turno Intermedio)", bloqueInicio: 1, bloqueFin: 36, totalPuestos: 36, horario: "08:00 AM – 12:00 MD" },
-  { id: "sup-4", nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ", puesto: 138, rol: "Supervisora Médica", bloqueInicio: 105, bloqueFin: 140, totalPuestos: 36, horario: "07:00 AM – 12:00 PM" },
-  { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO", puesto: 1, rol: "Supervisor de Control & Acceso", bloqueInicio: 1, bloqueFin: 40, totalPuestos: 40, horario: "02:00 PM – 10:00 PM" },
-  { id: "sup-6", nombre: "Dr. Ugalde (Supervisor General)", puesto: 135, rol: "Coordinador General de Sede", bloqueInicio: 37, bloqueFin: 76, totalPuestos: 40, horario: "07:00 AM – 12:00 PM" },
+  { id: "sup-1", nombre: "EMERSON JOSUE VIGIL HERNANDEZ", correo: "emerson.vigil@doctorsv.gob.sv", puesto: 135, rol: "Supervisor Médico (Turno Mañana)", bloqueInicio: 37, bloqueFin: 76, totalPuestos: 40, horario: "06:00 AM – 02:00 PM" },
+  { id: "sup-2", nombre: "SALVADOR RENDEROS BONILLA", correo: "salvador.renderos@doctorsv.gob.sv", puesto: 136, rol: "Supervisor Médico (Turno Tarde)", bloqueInicio: 71, bloqueFin: 104, totalPuestos: 34, horario: "02:00 PM – 10:00 PM" },
+  { id: "sup-3", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", correo: "alfredo.martinez@doctorsv.gob.sv", puesto: 137, rol: "Supervisor Médico (Turno Intermedio)", bloqueInicio: 1, bloqueFin: 36, totalPuestos: 36, horario: "08:00 AM – 12:00 MD" },
+  { id: "sup-4", nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ", correo: "roxana.canales@doctorsv.gob.sv", puesto: 138, rol: "Supervisora Médica", bloqueInicio: 105, bloqueFin: 140, totalPuestos: 36, horario: "07:00 AM – 12:00 PM" },
+  { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO", correo: "edward.zelaya@doctorsv.gob.sv", puesto: 1, rol: "Supervisor de Control & Acceso", bloqueInicio: 1, bloqueFin: 40, totalPuestos: 40, horario: "02:00 PM – 10:00 PM" },
 ];
 
 // Datos reales extraídos directamente de los archivos Excel oficiales

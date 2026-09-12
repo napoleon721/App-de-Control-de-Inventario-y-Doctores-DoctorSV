@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import {
   Shield, Stethoscope, Lock, KeyRound, Search, Check,
   ChevronRight, ArrowRight, Laptop, Clock, AlertCircle, Eye, EyeOff,
-  Sparkles, User, Sun, Sunset, Moon, RefreshCw, X, UserCheck
+  Sparkles, User, Sun, Sunset, Moon, RefreshCw, X, UserCheck, Mail
 } from "lucide-react";
 import logoPng from "../../assets/doctorsv_logo.png";
 import { DOCTORES_EXCEL, HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
@@ -42,7 +42,22 @@ export default function AuthPortal({
   const [doctorError, setDoctorError] = useState("");
   const [selectedSupervisor, setSelectedSupervisor] = useState(null);
 
-  // Google Login Handler
+  // Helper para identificar si el usuario logueado es uno de los 5 supervisores oficiales
+  function findSupervisorByEmailOrName(email = "", displayName = "") {
+    const normEmail = email.toLowerCase().trim();
+    const normName = displayName.toLowerCase().trim();
+
+    return SUPERVISORES_OFICIALES.find((s) => {
+      const sEmail = (s.correo || "").toLowerCase().trim();
+      const sName = (s.nombre || "").toLowerCase().trim();
+      if (sEmail && normEmail === sEmail) return true;
+      if (sEmail && normEmail.startsWith(sEmail.split("@")[0])) return true;
+      if (normName && (normName.includes(sName) || sName.includes(normName))) return true;
+      return false;
+    });
+  }
+
+  // Google Login Handler (Desde la pestaña Doctor o general)
   async function handleGoogleDoctorLogin() {
     setIsGoogleLoading(true);
     setDoctorError("");
@@ -67,7 +82,7 @@ export default function AuthPortal({
       const email = user.email || "";
       const displayName = user.displayName || email.split("@")[0];
 
-      // Detección automática de Doctor Master por correo oficial
+      // 1. Detección automática de Doctor Master por correo oficial
       const isMaster = email.toLowerCase() === "elmer.andrade@doctorsv.gob.sv" ||
                        email.toLowerCase().startsWith("elmer.andrade@");
 
@@ -84,7 +99,28 @@ export default function AuthPortal({
         return;
       }
 
-      // Verificación de dominio institucional si está configurado en .env
+      // 2. Detección automática de Supervisor Oficial por correo institucional
+      const matchedSupervisor = findSupervisorByEmailOrName(email, displayName);
+      if (matchedSupervisor) {
+        onLoginSupervisor({
+          name: matchedSupervisor.nombre,
+          role: "SUPERVISOR",
+          supervisorId: matchedSupervisor.id,
+          puesto: matchedSupervisor.puesto,
+          spaceId: matchedSupervisor.puesto,
+          shift: matchedSupervisor.horario,
+          bloqueInicio: matchedSupervisor.bloqueInicio,
+          bloqueFin: matchedSupervisor.bloqueFin,
+          totalPuestos: matchedSupervisor.totalPuestos,
+          email: email,
+          photoURL: user.photoURL || null,
+          authProvider: "google",
+          loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+        });
+        return;
+      }
+
+      // 3. Verificación de dominio institucional si está configurado en .env
       const allowedDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || "";
       if (allowedDomain && !email.toLowerCase().includes(allowedDomain.toLowerCase())) {
         setDoctorError(`La cuenta ${email} no coincide con el dominio institucional (${allowedDomain}).`);
@@ -92,7 +128,7 @@ export default function AuthPortal({
         return;
       }
 
-      // Buscar si el doctor coincide con el padrón de Excel
+      // 4. Buscar si el doctor coincide con el padrón de Excel
       const match = DOCTORES_EXCEL.find(d =>
         displayName.toLowerCase().includes(d.nombre.toLowerCase()) ||
         d.nombre.toLowerCase().includes(displayName.toLowerCase()) ||
@@ -117,6 +153,76 @@ export default function AuthPortal({
     } catch (err) {
       console.error("Error en Google Sign-In:", err);
       setDoctorError("Error de autenticación con Google. Intenta nuevamente o usa el padrón rápido.");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  }
+
+  // Google Supervisor Login Handler (Desde la pestaña Supervisor)
+  async function handleGoogleSupervisorLogin() {
+    setIsGoogleLoading(true);
+    setSupervisorError("");
+    try {
+      const res = await loginWithGoogle();
+      if (!res.success) {
+        const errStr = String(res.code || res.error || "");
+        if (errStr.includes("popup-closed-by-user")) {
+          setSupervisorError("Acceso cancelado: Se cerró la ventana de inicio de sesión de Google.");
+        } else if (errStr.includes("popup-blocked")) {
+          setSupervisorError("Tu navegador bloqueó la ventana emergente de Google. Permite ventanas emergentes para este sitio.");
+        } else {
+          setSupervisorError(`No se pudo conectar con Google (${errStr}). Selecciona tu nombre abajo.`);
+        }
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      const user = res.user;
+      const email = user.email || "";
+      const displayName = user.displayName || email.split("@")[0];
+
+      // Si es el Doctor Master
+      if (email.toLowerCase() === "elmer.andrade@doctorsv.gob.sv" || email.toLowerCase().startsWith("elmer.andrade@")) {
+        onLoginMaster({
+          role: "MASTER",
+          name: "Dr. Elmer Andrade (Master Admin)",
+          email: email,
+          photoURL: user.photoURL || null,
+          shift: "Turno Completo",
+          authProvider: "google",
+          loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+        });
+        return;
+      }
+
+      // Buscar coincidencia entre los 5 supervisores oficiales
+      const matchedSup = findSupervisorByEmailOrName(email, displayName);
+      if (!matchedSup) {
+        setSupervisorError(
+          `La cuenta ${email} no está registrada en la nómina oficial de los 5 supervisores. Si eres médico operativo, accede desde la pestaña "Doctor".`
+        );
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      onLoginSupervisor({
+        name: matchedSup.nombre,
+        role: "SUPERVISOR",
+        supervisorId: matchedSup.id,
+        puesto: matchedSup.puesto,
+        spaceId: matchedSup.puesto,
+        shift: matchedSup.horario,
+        bloqueInicio: matchedSup.bloqueInicio,
+        bloqueFin: matchedSup.bloqueFin,
+        totalPuestos: matchedSup.totalPuestos,
+        email: email,
+        photoURL: user.photoURL || null,
+        authProvider: "google",
+        loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+      });
+    } catch (err) {
+      console.error("Error Supervisor Google Sign-In:", err);
+      setSupervisorError("Error de autenticación con Google para Supervisor.");
     } finally {
       setIsGoogleLoading(false);
     }
@@ -218,10 +324,13 @@ export default function AuthPortal({
           role: "SUPERVISOR",
           supervisorId: sup.id,
           puesto: sup.puesto,
+          spaceId: sup.puesto,
           shift: sup.horario,
           bloqueInicio: sup.bloqueInicio,
           bloqueFin: sup.bloqueFin,
           totalPuestos: sup.totalPuestos,
+          email: sup.correo,
+          authProvider: "pin",
           loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
         });
       }
@@ -651,6 +760,37 @@ export default function AuthPortal({
                 </div>
               )}
 
+              {/* Opción 1: Google Institucional para Supervisores */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleSupervisorLogin}
+                  disabled={isGoogleLoading}
+                  className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 px-4 text-[13px] font-bold text-cyan-950 bg-white hover:bg-cyan-50/60 border-2 border-cyan-200/90 hover:border-cyan-400 shadow-sm active:scale-[0.99] transition-all disabled:opacity-60"
+                >
+                  {isGoogleLoading ? (
+                    <RefreshCw size={18} className="animate-spin text-[#0095FF]" />
+                  ) : (
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z" />
+                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.1C3.26 21.36 7.33 24 12 24z" />
+                      <path fill="#FBBC05" d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.1z" />
+                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z" />
+                    </svg>
+                  )}
+                  <span>{isGoogleLoading ? "Conectando..." : "Acceder con Google Institucional (Supervisor)"}</span>
+                </button>
+
+                <div className="relative flex items-center justify-center my-2.5">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-cyan-100" />
+                  </div>
+                  <span className="relative bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    o selecciona tu estación con PIN
+                  </span>
+                </div>
+              </div>
+
               {/* Selector de Perfil de Supervisor */}
               <div>
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
@@ -691,6 +831,10 @@ export default function AuthPortal({
                             </p>
                             <p className="text-[10px] text-cyan-700 font-semibold mt-0.5">
                               Lote: Puestos #{sup.bloqueInicio} al #{sup.bloqueFin} ({sup.totalPuestos} médicos)
+                            </p>
+                            <p className="text-[10.5px] font-mono text-[#0048B5] font-semibold mt-0.5 flex items-center gap-1">
+                              <Mail size={11} className="text-[#0095FF] shrink-0" />
+                              <span>{sup.correo}</span>
                             </p>
                           </div>
                         </div>
