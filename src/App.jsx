@@ -116,27 +116,88 @@ export default function App() {
   const [liveReportOpen, setLiveReportOpen] = useState(false);
   const [googleSheetsModalOpen, setGoogleSheetsModalOpen] = useState(false);
 
-  // Carga inicial y sincronización desde Google Sheets si está configurado
+  // Sincronizador Automático en Tiempo Real Multidispositivo (Auto-Sync en vivo sin recargar página)
   useEffect(() => {
-    async function loadFromSheets() {
-      if (isGoogleSheetsConfigured()) {
-        try {
-          const res = await fetchSpacesFromGoogleSheets();
-          if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-            setSpaces((prev) =>
-              prev.map((s) => {
-                const match = res.data.find((item) => Number(item.id) === Number(s.id));
-                return match ? { ...s, ...match } : s;
-              })
-            );
-            setLastSyncTime(new Date());
-          }
-        } catch (e) {
-          console.warn("Google Sheets initial sync skipped:", e);
+    let timer = null;
+    let isFetching = false;
+
+    async function syncFromCloud() {
+      if (isFetching) return;
+      if (!isGoogleSheetsConfigured()) return;
+
+      isFetching = true;
+      try {
+        const res = await fetchSpacesFromGoogleSheets();
+        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          setSpaces((prevSpaces) => {
+            let hasChanges = false;
+            const updated = prevSpaces.map((s) => {
+              const cloudMatch = res.data.find((item) => Number(item.id) === Number(s.id));
+              if (!cloudMatch) return s;
+
+              const doctorChanged = (cloudMatch.doctor || null) !== (s.doctor || null);
+              const estadoChanged = cloudMatch.estado !== s.estado;
+              const horarioChanged = (cloudMatch.horario || null) !== (s.horario || null);
+              const obsChanged = (cloudMatch.observaciones || "") !== (s.observaciones || "");
+
+              if (doctorChanged || estadoChanged || horarioChanged || obsChanged) {
+                hasChanges = true;
+                return {
+                  ...s,
+                  estado: cloudMatch.estado || s.estado,
+                  doctor: cloudMatch.doctor || null,
+                  horario: cloudMatch.horario || null,
+                  observaciones: cloudMatch.observaciones || s.observaciones,
+                  marca: cloudMatch.marca || s.marca,
+                  modelo: cloudMatch.modelo || s.modelo,
+                  activoPc: cloudMatch.activoPc || s.activoPc,
+                  ultimoMovimiento: cloudMatch.ultimoMovimiento || s.ultimoMovimiento,
+                };
+              }
+              return s;
+            });
+
+            if (hasChanges) {
+              setLastSyncTime(new Date());
+              return updated;
+            }
+            return prevSpaces;
+          });
         }
+      } catch (err) {
+        // Silencioso en fondo para no interrumpir al usuario
+      } finally {
+        isFetching = false;
       }
     }
-    loadFromSheets();
+
+    // Carga inicial inmediata
+    syncFromCloud();
+
+    // Sondeo continuo en segundo plano: cada 4 segundos si la pestaña está visible
+    const getIntervalTime = () => (document.visibilityState === "hidden" ? 15000 : 4000);
+
+    const scheduleNext = () => {
+      timer = setTimeout(async () => {
+        await syncFromCloud();
+        scheduleNext();
+      }, getIntervalTime());
+    };
+
+    scheduleNext();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncFromCloud();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   useEffect(() => {

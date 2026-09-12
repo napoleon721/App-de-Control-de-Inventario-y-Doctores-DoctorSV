@@ -66,22 +66,23 @@ export function getGoogleSheetIds() {
  */
 export async function fetchSpacesFromGoogleSheets() {
   const url = getSheetsApiUrl();
-  if (!url) return null;
+  if (!url) return { success: false, data: [] };
 
   try {
-    const res = await fetch(`${url}?action=getSpaces`, {
+    const res = await fetch(`${url}?action=getSpaces&_t=${Date.now()}`, {
       method: "GET",
       headers: { "Accept": "application/json" },
+      cache: "no-store",
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
     if (data && data.success && Array.isArray(data.spaces)) {
-      return data.spaces;
+      return { success: true, data: data.spaces, count: data.spaces.length };
     }
-    return null;
+    return { success: false, data: [] };
   } catch (error) {
     console.warn("No se pudo obtener datos de Google Sheets (usando local):", error);
-    return null;
+    return { success: false, data: [] };
   }
 }
 
@@ -95,8 +96,7 @@ export async function updateSpaceInGoogleSheets(space) {
   try {
     await fetch(url, {
       method: "POST",
-      mode: "no-cors", // Apps Script redirects require no-cors for simple fire-and-forget
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "updateSpace",
         spaceId: space.id,
@@ -125,8 +125,7 @@ export async function logMovementToGoogleSheets(movement) {
   try {
     await fetch(url, {
       method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "logMovement",
         movement: {
