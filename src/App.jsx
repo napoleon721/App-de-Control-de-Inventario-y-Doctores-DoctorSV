@@ -372,17 +372,23 @@ export default function App() {
     };
   }, []);
 
-  // Si el médico entra y ya tenía un cubículo asignado en el mapa, auto-vincular
+  // Sincronización continua y reactiva del puesto del médico con el estado real de los cubículos
   useEffect(() => {
-    if (currentUser?.role === "DOCTOR" && !currentUser.spaceId) {
-      const existing = spaces.find(
-        (s) => s.doctor && s.doctor.toLowerCase() === currentUser.name.toLowerCase()
+    if (currentUser?.role === "DOCTOR") {
+      const myActiveSpace = spaces.find(
+        (s) => s.doctor && s.doctor.toLowerCase().trim() === currentUser.name.toLowerCase().trim()
       );
-      if (existing) {
-        setCurrentUser((prev) => (prev ? { ...prev, spaceId: existing.id } : null));
+
+      if (myActiveSpace) {
+        if (currentUser.spaceId !== myActiveSpace.id) {
+          setCurrentUser((prev) => (prev ? { ...prev, spaceId: myActiveSpace.id } : null));
+        }
+      } else if (currentUser.spaceId) {
+        // ¡Si el master o supervisor liberó la franja o el puesto, desvincular inmediatamente al médico!
+        setCurrentUser((prev) => (prev ? { ...prev, spaceId: null } : null));
       }
     }
-  }, [spaces, currentUser]);
+  }, [spaces, currentUser?.name, currentUser?.role, currentUser?.spaceId]);
 
   // Conteos calculados reactivamente
   const counts = useMemo(() => {
@@ -672,6 +678,8 @@ export default function App() {
   }
 
   function handleReleaseShift() {
+    const spacesToRelease = spaces.filter((s) => s.doctor);
+
     setSpaces((prev) =>
       prev.map((s) => {
         if (s.doctor) {
@@ -695,17 +703,28 @@ export default function App() {
       origen: "Turno Saliente",
       destino: "DISPONIBLE",
       falla: "N/A",
-      obs: "Relevo general de turno ejecutado: todos los puestos con médico han sido liberados",
+      obs: `Relevo general de turno ejecutado: ${spacesToRelease.length} puestos con médico han sido liberados`,
     };
 
     setHistorial((prev) => [newEntry, ...prev]);
 
     if (isGoogleSheetsConfigured()) {
       logMovementToGoogleSheets(newEntry);
+      spacesToRelease.forEach((s) => {
+        updateSpaceInGoogleSheets({
+          id: s.id,
+          doctor: "",
+          horario: "",
+          estado: s.marca ? "DISPONIBLE" : "VACIO",
+          observaciones: s.observaciones || "",
+        });
+      });
     }
   }
 
   function handleReleaseByHorario(horario) {
+    const spacesToRelease = spaces.filter((s) => s.doctor && s.horario === horario);
+
     setSpaces((prev) =>
       prev.map((s) => {
         if (s.doctor && s.horario === horario) {
@@ -729,13 +748,22 @@ export default function App() {
       origen: `Franja ${horario}`,
       destino: "DISPONIBLE",
       falla: "N/A",
-      obs: `Relevo de franja ejecutado: puestos de la franja "${horario}" liberados para el turno entrante`,
+      obs: `Relevo de franja ejecutado: ${spacesToRelease.length} puestos de la franja "${horario}" liberados para el turno entrante`,
     };
 
     setHistorial((prev) => [newEntry, ...prev]);
 
     if (isGoogleSheetsConfigured()) {
       logMovementToGoogleSheets(newEntry);
+      spacesToRelease.forEach((s) => {
+        updateSpaceInGoogleSheets({
+          id: s.id,
+          doctor: "",
+          horario: "",
+          estado: s.marca ? "DISPONIBLE" : "VACIO",
+          observaciones: s.observaciones || "",
+        });
+      });
     }
   }
 
