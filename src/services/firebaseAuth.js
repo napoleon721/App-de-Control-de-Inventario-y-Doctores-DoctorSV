@@ -33,6 +33,7 @@ export async function loginWithGoogle() {
     console.warn("Google Auth error:", error);
     return {
       success: false,
+      code: error.code || "auth/unknown",
       error: error.code || error.message,
     };
   }

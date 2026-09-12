@@ -932,9 +932,15 @@ export default function App() {
       {/* Portal de Acceso Multi-Usuario (Doctor Master vs Supervisor vs Doctor Operativo) */}
       {(authPortalOpen || !currentUser) && (
         <AuthPortal
-          onLoginMaster={() => {
-            setCurrentUser({ role: "MASTER", name: "Doctor Master (Admin)", shift: "Turno Completo" });
+          onLoginMaster={(masterData) => {
+            setCurrentUser(masterData || {
+              role: "MASTER",
+              name: "Dr. Elmer Andrade (Master Admin)",
+              email: "elmer.andrade@doctorsv.gob.sv",
+              shift: "Turno Completo"
+            });
             setAuthPortalOpen(false);
+            setTab("mapa");
           }}
           onLoginDoctor={(doctorData) => {
             setCurrentUser(doctorData);
