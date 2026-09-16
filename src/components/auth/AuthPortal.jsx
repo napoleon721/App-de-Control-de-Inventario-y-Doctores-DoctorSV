@@ -57,6 +57,41 @@ export default function AuthPortal({
     });
   }
 
+  // Helper para verificar si un correo tiene privilegios de Doctor Master
+  function isMasterEmail(email = "") {
+    if (!email) return false;
+    const norm = email.toLowerCase().trim();
+    const envMaster = (import.meta.env.VITE_MASTER_EMAIL || "").toLowerCase().trim();
+    const envList = envMaster ? envMaster.split(",").map((e) => e.trim()) : [];
+    const masterList = [
+      "elmer.andrade@doctorsv.gob.sv",
+      "cccalixo1998@gmail.com",
+      ...envList,
+    ];
+    return masterList.includes(norm) || norm.startsWith("elmer.andrade@");
+  }
+
+  function getMasterPayload(user, email) {
+    const norm = (email || "").toLowerCase().trim();
+    const displayName = user?.displayName || "";
+    let name = "Dr. Elmer Andrade (Master Admin)";
+    if (norm === "cccalixo1998@gmail.com") {
+      name = displayName ? `${displayName} (Master Temp)` : "Master Tester (cccalixo1998)";
+    } else if (displayName && !norm.startsWith("elmer.andrade")) {
+      name = `${displayName} (Master Admin)`;
+    }
+
+    return {
+      role: "MASTER",
+      name,
+      email: email || norm,
+      photoURL: user?.photoURL || null,
+      shift: "Turno Completo",
+      authProvider: "google",
+      loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+    };
+  }
+
   // Google Login Handler (Desde la pestaña Doctor o general)
   async function handleGoogleDoctorLogin() {
     setIsGoogleLoading(true);
@@ -82,20 +117,9 @@ export default function AuthPortal({
       const email = user.email || "";
       const displayName = user.displayName || email.split("@")[0];
 
-      // 1. Detección automática de Doctor Master por correo oficial
-      const isMaster = email.toLowerCase() === "elmer.andrade@doctorsv.gob.sv" ||
-                       email.toLowerCase().startsWith("elmer.andrade@");
-
-      if (isMaster) {
-        onLoginMaster({
-          role: "MASTER",
-          name: "Dr. Elmer Andrade (Master Admin)",
-          email: email,
-          photoURL: user.photoURL || null,
-          shift: "Turno Completo",
-          authProvider: "google",
-          loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-        });
+      // 1. Detección automática de Doctor Master por correo oficial / autorizado
+      if (isMasterEmail(email)) {
+        onLoginMaster(getMasterPayload(user, email));
         return;
       }
 
@@ -185,16 +209,8 @@ export default function AuthPortal({
       const displayName = user.displayName || email.split("@")[0];
 
       // Si es el Doctor Master
-      if (email.toLowerCase() === "elmer.andrade@doctorsv.gob.sv" || email.toLowerCase().startsWith("elmer.andrade@")) {
-        onLoginMaster({
-          role: "MASTER",
-          name: "Dr. Elmer Andrade (Master Admin)",
-          email: email,
-          photoURL: user.photoURL || null,
-          shift: "Turno Completo",
-          authProvider: "google",
-          loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-        });
+      if (isMasterEmail(email)) {
+        onLoginMaster(getMasterPayload(user, email));
         return;
       }
 
@@ -251,25 +267,13 @@ export default function AuthPortal({
       }
 
       const email = (res.user.email || "").toLowerCase();
-      const isMaster = email === "elmer.andrade@doctorsv.gob.sv" ||
-                       email.startsWith("elmer.andrade@") ||
-                       email === (import.meta.env.VITE_MASTER_EMAIL || "").toLowerCase();
-
-      if (!isMaster) {
-        setMasterError(`La cuenta ${email} no tiene permisos de Doctor Master. Usa el correo oficial (elmer.andrade@doctorsv.gob.sv).`);
+      if (!isMasterEmail(email)) {
+        setMasterError(`La cuenta ${email} no tiene permisos de Doctor Master. Usa un correo autorizado.`);
         setIsGoogleLoading(false);
         return;
       }
 
-      onLoginMaster({
-        role: "MASTER",
-        name: "Dr. Elmer Andrade (Master Admin)",
-        email: res.user.email,
-        photoURL: res.user.photoURL || null,
-        shift: "Turno Completo",
-        authProvider: "google",
-        loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-      });
+      onLoginMaster(getMasterPayload(res.user, res.user.email));
     } catch (err) {
       console.error("Error Master Google Sign-In:", err);
       setMasterError("Error de autenticación con Google para Doctor Master.");
@@ -962,7 +966,7 @@ export default function AuthPortal({
                       <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z" />
                     </svg>
                   )}
-                  <span>{isGoogleLoading ? "Conectando..." : "Acceder con Google (elmer.andrade@...)"}</span>
+                  <span>{isGoogleLoading ? "Conectando..." : "Acceder con Google (Master Autorizado)"}</span>
                 </button>
 
                 <div className="relative flex items-center justify-center my-2.5">
