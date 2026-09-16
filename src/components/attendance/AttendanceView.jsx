@@ -16,6 +16,8 @@ export default function AttendanceView({
   onOpenLiveReport,
   initialSupId = null,
   onReleaseByHorario,
+  rosterBySupervisor: propRosters = null,
+  onSaveRoster = null,
 }) {
   const [selectedSupId, setSelectedSupId] = useState(
     initialSupId && SUPERVISORES_OFICIALES.find((s) => s.id === initialSupId)
@@ -35,8 +37,8 @@ export default function AttendanceView({
   const [filterHorario, setFilterHorario] = useState("TODOS");
   const [rosterModalOpen, setRosterModalOpen] = useState(false);
 
-  // Nóminas configuradas por supervisor: { [supId]: ["Nombre 1", "Nombre 2", ...] }
-  const [rosterBySupervisor, setRosterBySupervisor] = useState(() => {
+  // Nóminas configuradas por supervisor (usar prop si viene de App, o fallback a localStorage)
+  const [localRosters, setLocalRosters] = useState(() => {
     try {
       const saved = localStorage.getItem("DOCTORSV_SUPERVISOR_ROSTERS_V2");
       return saved ? JSON.parse(saved) : {};
@@ -45,14 +47,18 @@ export default function AttendanceView({
     }
   });
 
+  const activeRosters = propRosters && typeof propRosters === "object" && Object.keys(propRosters).length > 0
+    ? propRosters
+    : localRosters;
+
   const currentSupervisor = useMemo(() => {
     return SUPERVISORES_OFICIALES.find((s) => s.id === selectedSupId) || SUPERVISORES_OFICIALES[0];
   }, [selectedSupId]);
 
   // Lista de nombres de médicos asignados al supervisor actual
   const currentRosterNames = useMemo(() => {
-    if (rosterBySupervisor[currentSupervisor.id] && Array.isArray(rosterBySupervisor[currentSupervisor.id]) && rosterBySupervisor[currentSupervisor.id].length > 0) {
-      return rosterBySupervisor[currentSupervisor.id];
+    if (activeRosters[currentSupervisor.id] && Array.isArray(activeRosters[currentSupervisor.id]) && activeRosters[currentSupervisor.id].length > 0) {
+      return activeRosters[currentSupervisor.id];
     }
     // Si no se ha personalizado, pre-cargar según afinidad de grupo oficial de la hoja
     let defaultList = [];
@@ -70,16 +76,19 @@ export default function AttendanceView({
       defaultList = [...defaultList, ...remainder];
     }
     return defaultList.slice(0, needed);
-  }, [rosterBySupervisor, currentSupervisor]);
+  }, [activeRosters, currentSupervisor]);
 
   function handleSaveSupervisorRoster(newNames) {
-    setRosterBySupervisor((prev) => {
+    setLocalRosters((prev) => {
       const next = { ...prev, [currentSupervisor.id]: newNames };
       try {
         localStorage.setItem("DOCTORSV_SUPERVISOR_ROSTERS_V2", JSON.stringify(next));
       } catch {}
       return next;
     });
+    if (onSaveRoster) {
+      onSaveRoster(currentSupervisor.id, newNames);
+    }
   }
 
   // Attendance state by doctor name: { [doctorName]: "PRESENTE" | "AUSENTE" | "JUSTIFICADO" }
@@ -93,12 +102,31 @@ export default function AttendanceView({
     return map;
   });
 
-  // Espacios del lote del supervisor en el mapa
+  // Espacios del lote del supervisor en el mapa (comparación numérica segura)
   const supervisorSpaces = useMemo(() => {
     return (spaces || []).filter(
-      (s) => s.id >= currentSupervisor.bloqueInicio && s.id <= currentSupervisor.bloqueFin
+      (s) => Number(s.id) >= Number(currentSupervisor.bloqueInicio) && Number(s.id) <= Number(currentSupervisor.bloqueFin)
     );
   }, [spaces, currentSupervisor]);
+
+  // Mapas de búsqueda O(1) para eliminar los bucles lentos de 20,000+ iteraciones que causaban congelamientos
+  const doctorsMap = useMemo(() => {
+    const map = new Map();
+    DOCTORES_EXCEL.forEach((d) => {
+      if (d.nombre) map.set(d.nombre.toLowerCase().trim(), d);
+    });
+    return map;
+  }, []);
+
+  const spacesByDoctor = useMemo(() => {
+    const map = new Map();
+    (spaces || []).forEach((s) => {
+      if (s.doctor) {
+        map.set(String(s.doctor).toLowerCase().trim(), s);
+      }
+    });
+    return map;
+  }, [spaces]);
 
   // Lista consolidada de médicos para el lote del supervisor
   const batchDoctors = useMemo(() => {
@@ -110,7 +138,7 @@ export default function AttendanceView({
       const cleanName = String(name || "").toLowerCase().trim();
       if (!cleanName) return;
 
-      const docObj = DOCTORES_EXCEL.find((d) => String(d.nombre || "").toLowerCase().trim() === cleanName) || {
+      const docObj = doctorsMap.get(cleanName) || {
         id: "EXT",
         nombre: name,
         tipo: "Planilla",
@@ -118,7 +146,7 @@ export default function AttendanceView({
         jvpm: "",
       };
 
-      const spaceAssigned = (spaces || []).find((s) => s.doctor && String(s.doctor).toLowerCase().trim() === cleanName);
+      const spaceAssigned = spacesByDoctor.get(cleanName);
       const status = spaceAssigned
         ? "PRESENTE"
         : (attendanceRecords[name] || "PENDIENTE");
@@ -140,7 +168,7 @@ export default function AttendanceView({
     (supervisorSpaces || []).forEach((s) => {
       const sDoc = String(s.doctor || "").toLowerCase().trim();
       if (sDoc && !addedNames.has(sDoc)) {
-        const docObj = DOCTORES_EXCEL.find((d) => String(d.nombre || "").toLowerCase().trim() === sDoc);
+        const docObj = doctorsMap.get(sDoc);
         list.push({
           id: docObj?.id || "EXT",
           nombre: s.doctor,
@@ -157,7 +185,7 @@ export default function AttendanceView({
     });
 
     return list;
-  }, [currentRosterNames, spaces, attendanceRecords, currentSupervisor, supervisorSpaces]);
+  }, [currentRosterNames, doctorsMap, spacesByDoctor, attendanceRecords, currentSupervisor, supervisorSpaces]);
 
   // Médicos filtrados
   const filteredBatch = useMemo(() => {
@@ -216,16 +244,43 @@ export default function AttendanceView({
   }
 
   function handleQuickAssign(docName) {
-    const firstFreeSpace = supervisorSpaces.find((s) => s.estado === "DISPONIBLE" && !s.doctor) ||
-      spaces.find((s) => s.estado === "DISPONIBLE" && !s.doctor);
+    const firstFreeSpace = supervisorSpaces.find((s) => (!s.doctor || s.estado === "DISPONIBLE") && s.estado !== "INHABILITADO") ||
+      (spaces || []).find((s) => (!s.doctor || s.estado === "DISPONIBLE") && s.estado !== "INHABILITADO");
 
     if (!firstFreeSpace) {
       alert("No hay puestos disponibles en este bloque. Por favor revisa el mapa.");
       return;
     }
 
-    onAssignDoctor(docName, firstFreeSpace.id, currentSupervisor.horario);
+    onAssignDoctor(docName, Number(firstFreeSpace.id), currentSupervisor.horario);
     handleSetAttendance(docName, "PRESENTE");
+  }
+
+  // Asignar en lote automáticamente a todos los médicos programados que no tienen puesto
+  function handleBatchAssignRoster() {
+    const unseated = batchDoctors.filter((d) => !d.espacio && d.status !== "AUSENTE");
+    if (unseated.length === 0) {
+      alert("Todos los médicos de tu nómina ya tienen cubículo asignado.");
+      return;
+    }
+
+    const availableInBatch = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO");
+    if (availableInBatch.length === 0) {
+      alert(`No hay cubículos disponibles en tu lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin}).`);
+      return;
+    }
+
+    const countToAssign = Math.min(unseated.length, availableInBatch.length);
+    if (!window.confirm(`¿Deseas asignar automáticamente a ${countToAssign} médicos a los puestos libres de tu lote?`)) {
+      return;
+    }
+
+    for (let i = 0; i < countToAssign; i++) {
+      const doc = unseated[i];
+      const space = availableInBatch[i];
+      onAssignDoctor(doc.nombre, Number(space.id), currentSupervisor.horario);
+      handleSetAttendance(doc.nombre, "PRESENTE");
+    }
   }
 
   function handleCopyReport() {
@@ -409,6 +464,19 @@ export default function AttendanceView({
               </button>
             ) : null;
           })()}
+
+          {totalSinPuesto > 0 && puestosLibresLote > 0 && (
+            <button
+              type="button"
+              onClick={handleBatchAssignRoster}
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-white shadow-2xs transition-all active:scale-95 hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+              title="Asigna automáticamente a los médicos faltantes a cubículos libres en tu bloque"
+            >
+              <Sparkles size={14} />
+              <span>⚡ Auto-asignar Lote ({Math.min(totalSinPuesto, puestosLibresLote)})</span>
+            </button>
+          )}
 
           <button
             onClick={() => setRosterModalOpen(true)}

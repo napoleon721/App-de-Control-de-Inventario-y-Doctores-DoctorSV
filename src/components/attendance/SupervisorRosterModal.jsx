@@ -1,9 +1,67 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   X, Search, Check, Users, Settings2, Sparkles, Filter, Mail,
   CheckSquare, Square, AlertCircle, RefreshCw, UserCheck
 } from "lucide-react";
 import { DOCTORES_EXCEL } from "../../constants/tokens";
+
+// Componente memoizado para cada tarjeta de médico: solo re-renderiza cuando su propio estado 'isChecked' cambia
+const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({ doc, isChecked, onToggle }) {
+  return (
+    <div
+      onClick={() => onToggle(doc.nombre)}
+      className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+        isChecked
+          ? "bg-blue-50/80 border-[#0095FF] ring-1 ring-[#0095FF]/30 shadow-xs"
+          : "bg-white border-slate-200 hover:bg-slate-50/90 hover:border-slate-300"
+      }`}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <button
+          type="button"
+          className="shrink-0 text-[#0048B5]"
+          tabIndex={-1}
+        >
+          {isChecked ? (
+            <CheckSquare size={20} className="text-[#0048B5]" />
+          ) : (
+            <Square size={20} className="text-slate-300" />
+          )}
+        </button>
+
+        <div className="min-w-0">
+          <p className={`text-[12.5px] font-bold leading-snug truncate ${
+            isChecked ? "text-[#0048B5]" : "text-slate-800"
+          }`}>
+            {doc.nombre}
+          </p>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            {doc.correo && (
+              <span className="text-[10px] font-mono text-slate-500 truncate flex items-center gap-0.5">
+                <Mail size={10} className="text-cyan-600 shrink-0" />
+                {doc.correo}
+              </span>
+            )}
+            {doc.jvpm && (
+              <span className="text-[9.5px] font-mono bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-bold">
+                {doc.jvpm}
+              </span>
+            )}
+            {doc.grupo && (
+              <span className="text-[9.5px] bg-blue-50 text-[#0048B5] px-1 py-0.2 rounded font-semibold">
+                {doc.grupo}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <span className="text-[10px] font-mono font-bold text-slate-400 shrink-0">
+        #{doc.id}
+      </span>
+    </div>
+  );
+});
 
 export default function SupervisorRosterModal({
   supervisor,
@@ -37,6 +95,8 @@ export default function SupervisorRosterModal({
     return ["TODOS", ...Array.from(set)];
   }, []);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   // Filtered doctors list
   const filteredDoctors = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -46,16 +106,16 @@ export default function SupervisorRosterModal({
       if (!q) return true;
 
       return (
-        d.nombre.toLowerCase().includes(q) ||
+        (d.nombre && d.nombre.toLowerCase().includes(q)) ||
         (d.correo && d.correo.toLowerCase().includes(q)) ||
         (d.jvpm && d.jvpm.toLowerCase().includes(q)) ||
         String(d.id).includes(q)
       );
     });
-  }, [search, selectedGroup, onlySelected, selectedNames]);
+  }, [search, selectedGroup, onlySelected, onlySelected ? selectedNames : null]);
 
-  // Toggle single doctor
-  function handleToggleDoctor(docName) {
+  // Toggle single doctor con useCallback para mantener identidad estable
+  const handleToggleDoctor = useCallback((docName) => {
     setSelectedNames((prev) => {
       const next = new Set(prev);
       if (next.has(docName)) {
@@ -65,7 +125,7 @@ export default function SupervisorRosterModal({
       }
       return next;
     });
-  }
+  }, []);
 
   // Quick action: Select group
   function handleSelectGroup(groupName) {
@@ -97,8 +157,15 @@ export default function SupervisorRosterModal({
   }
 
   function handleSave() {
-    onSaveRoster(Array.from(selectedNames));
-    onClose();
+    setIsSaving(true);
+    try {
+      const namesList = Array.from(selectedNames);
+      onSaveRoster(namesList);
+      onClose();
+    } catch (e) {
+      console.error("Error al guardar nómina:", e);
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -275,65 +342,14 @@ export default function SupervisorRosterModal({
         {/* ================= LISTA DE MÉDICOS SELECCIONABLES ================= */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 divide-y divide-slate-100">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            {filteredDoctors.map((doc) => {
-              const isChecked = selectedNames.has(doc.nombre);
-
-              return (
-                <div
-                  key={doc.id}
-                  onClick={() => handleToggleDoctor(doc.nombre)}
-                  className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
-                    isChecked
-                      ? "bg-blue-50/80 border-[#0095FF] ring-1 ring-[#0095FF]/30 shadow-xs"
-                      : "bg-white border-slate-200 hover:bg-slate-50/90 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <button
-                      type="button"
-                      className="shrink-0 text-[#0048B5]"
-                      tabIndex={-1}
-                    >
-                      {isChecked ? (
-                        <CheckSquare size={20} className="text-[#0048B5]" />
-                      ) : (
-                        <Square size={20} className="text-slate-300" />
-                      )}
-                    </button>
-
-                    <div className="min-w-0">
-                      <p className={`text-[12.5px] font-bold leading-snug truncate ${
-                        isChecked ? "text-[#0048B5]" : "text-slate-800"
-                      }`}>
-                        {doc.nombre}
-                      </p>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        {doc.correo && (
-                          <span className="text-[10px] font-mono text-slate-500 truncate flex items-center gap-0.5">
-                            <Mail size={10} className="text-cyan-600 shrink-0" />
-                            {doc.correo}
-                          </span>
-                        )}
-                        {doc.jvpm && (
-                          <span className="text-[9.5px] font-mono bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-bold">
-                            {doc.jvpm}
-                          </span>
-                        )}
-                        {doc.grupo && (
-                          <span className="text-[9.5px] bg-blue-50 text-[#0048B5] px-1 py-0.2 rounded font-semibold">
-                            {doc.grupo}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <span className="text-[10px] font-mono font-bold text-slate-400 shrink-0">
-                    #{doc.id}
-                  </span>
-                </div>
-              );
-            })}
+            {filteredDoctors.map((doc) => (
+              <DoctorCheckboxCard
+                key={doc.id}
+                doc={doc}
+                isChecked={selectedNames.has(doc.nombre)}
+                onToggle={handleToggleDoctor}
+              />
+            ))}
           </div>
 
           {filteredDoctors.length === 0 && (
@@ -366,11 +382,12 @@ export default function SupervisorRosterModal({
           <button
             type="button"
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-bold text-white shadow-md hover:brightness-110 active:scale-[0.99] transition-all"
+            disabled={isSaving}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-bold text-white shadow-md hover:brightness-110 active:scale-[0.99] transition-all disabled:opacity-60"
             style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
           >
-            <Check size={16} />
-            <span>Guardar Nómina del Turno ({countSelected} Médicos)</span>
+            {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
+            <span>{isSaving ? "Guardando Nómina..." : `Guardar Nómina del Turno (${countSelected} Médicos)`}</span>
           </button>
         </div>
       </div>

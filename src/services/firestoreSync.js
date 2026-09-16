@@ -164,3 +164,56 @@ export function saveCloudHistorial(historial, clientId = "") {
     } catch (error) {}
   }, 600);
 }
+
+let rostersTimer = null;
+
+/**
+ * Escucha cambios en tiempo real de las nóminas de médicos por supervisor desde Firestore
+ */
+export function subscribeToCloudRosters(onUpdate, onError, myClientId = "") {
+  try {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "rosters");
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.metadata && snapshot.metadata.hasPendingWrites) return;
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (myClientId && data?.updatedBy === myClientId) return;
+          if (data && data.rosters && typeof data.rosters === "object") {
+            onUpdate(data.rosters);
+          }
+        }
+      },
+      (error) => {
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Guarda las nóminas de supervisores en Firestore con debounce
+ */
+export function saveCloudRosters(rosters, clientId = "") {
+  if (!isFirestoreAvailable) return;
+  if (!rosters || typeof rosters !== "object") return;
+
+  if (rostersTimer) clearTimeout(rostersTimer);
+
+  rostersTimer = setTimeout(async () => {
+    try {
+      const docRef = doc(db, "sedes", SEDE_ID, "estado", "rosters");
+      await setDoc(docRef, {
+        rosters: rosters,
+        updatedBy: clientId || "anon",
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (error) {}
+  }, 500);
+}
+

@@ -54,27 +54,33 @@ export default function DoctorAssignModal({ doctor, currentSpace, availableSpace
 
         {/* Content */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Puesto / Cubículo
-            </label>
-            <select
-              value={selectedSpaceId}
-              onChange={(e) => setSelectedSpaceId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] font-medium shadow-2xs"
-            >
-              {currentSpace && (
-                <option value={currentSpace.id}>
-                  Puesto #{currentSpace.id} (Puesto actual)
-                </option>
-              )}
-              {availableSpaces.map((s) => (
-                <option key={s.id} value={s.id}>
-                  Puesto #{s.id} — {s.marca ? `${s.marca} ` : ""} (Disponible)
-                </option>
-              ))}
-            </select>
-          </div>
+          {!currentSpace && availableSpaces.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[12px] font-semibold text-amber-800">
+              ⚠️ No hay puestos disponibles actualmente. Todos los cubículos se encuentran ocupados o inhabilitados.
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Puesto / Cubículo
+              </label>
+              <select
+                value={selectedSpaceId}
+                onChange={(e) => setSelectedSpaceId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] font-medium shadow-2xs outline-none focus:ring-2 focus:ring-[#0095FF]"
+              >
+                {currentSpace && (
+                  <option value={currentSpace.id}>
+                    Puesto #{currentSpace.id} (Puesto actual)
+                  </option>
+                )}
+                {availableSpaces.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    Puesto #{s.id} — {s.marca ? `${s.marca} ` : ""} (Disponible)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -83,7 +89,7 @@ export default function DoctorAssignModal({ doctor, currentSpace, availableSpace
             <select
               value={selectedHorario}
               onChange={(e) => setSelectedHorario(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] font-medium shadow-2xs"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] font-medium shadow-2xs outline-none focus:ring-2 focus:ring-[#0095FF]"
             >
               {HORARIOS.map((h) => (
                 <option key={h} value={h}>
@@ -119,7 +125,8 @@ export default function DoctorAssignModal({ doctor, currentSpace, availableSpace
               </button>
               <button
                 type="submit"
-                className="rounded-xl px-4 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 shadow-sm"
+                disabled={!selectedSpaceId}
+                className="rounded-xl px-4 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
               >
                 Confirmar Asignación

@@ -29,6 +29,8 @@ import {
   saveCloudBodega,
   subscribeToCloudHistorial,
   saveCloudHistorial,
+  subscribeToCloudRosters,
+  saveCloudRosters,
 } from "./services/firestoreSync";
 import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
@@ -126,6 +128,17 @@ export default function App() {
   const isRemoteSpacesRef = React.useRef(false);
   const isRemoteBodegaRef = React.useRef(false);
   const isRemoteHistorialRef = React.useRef(false);
+  const isRemoteRostersRef = React.useRef(false);
+
+  // 4. Nóminas de médicos asignadas a cada supervisor (sincronizadas en tiempo real con Firestore)
+  const [rosters, setRosters] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_SUPERVISOR_ROSTERS_V2");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
 
   // Reconexión automática de sesión de Firebase Auth tras recargar página
   useEffect(() => {
@@ -223,19 +236,41 @@ export default function App() {
               const cloudMatch = res.data.find((item) => Number(item.id) === Number(s.id));
               if (!cloudMatch) return s;
 
-              const doctorChanged = (cloudMatch.doctor || null) !== (s.doctor || null);
-              const estadoChanged = cloudMatch.estado !== s.estado;
-              const horarioChanged = (cloudMatch.horario || null) !== (s.horario || null);
-              const obsChanged = (cloudMatch.observaciones || "") !== (s.observaciones || "");
+              // Si Google Sheets trae un médico no vacío y difiere del actual, actualizar.
+              // NUNCA borrar a un médico ya asignado localmente si Sheets retorna vacío o null (evita desfases y pérdida de datos).
+              const cloudDoc = cloudMatch.doctor ? String(cloudMatch.doctor).trim() : null;
+              const localDoc = s.doctor ? String(s.doctor).trim() : null;
 
-              if (doctorChanged || estadoChanged || horarioChanged || obsChanged) {
+              let finalDoctor = localDoc;
+              if (cloudDoc && cloudDoc !== localDoc) {
+                finalDoctor = cloudDoc;
+              }
+
+              // Si el puesto tiene un médico asignado, su estado DEBE ser OCUPADO
+              let finalEstado = s.estado;
+              if (finalDoctor) {
+                finalEstado = "OCUPADO";
+              } else if (cloudMatch.estado && !localDoc) {
+                finalEstado = cloudMatch.estado;
+              }
+
+              const doctorChanged = finalDoctor !== (s.doctor || null);
+              const estadoChanged = finalEstado !== s.estado;
+              const horarioChanged = cloudMatch.horario && (cloudMatch.horario !== s.horario);
+              const obsChanged = cloudMatch.observaciones !== undefined && (cloudMatch.observaciones !== (s.observaciones || ""));
+              const hardwareChanged =
+                (cloudMatch.marca && cloudMatch.marca !== s.marca) ||
+                (cloudMatch.modelo && cloudMatch.modelo !== s.modelo) ||
+                (cloudMatch.activoPc && cloudMatch.activoPc !== s.activoPc);
+
+              if (doctorChanged || estadoChanged || horarioChanged || obsChanged || hardwareChanged) {
                 hasChanges = true;
                 return {
                   ...s,
-                  estado: cloudMatch.estado || s.estado,
-                  doctor: cloudMatch.doctor || null,
-                  horario: cloudMatch.horario || null,
-                  observaciones: cloudMatch.observaciones || s.observaciones,
+                  estado: finalEstado,
+                  doctor: finalDoctor,
+                  horario: cloudMatch.horario || s.horario || null,
+                  observaciones: cloudMatch.observaciones !== undefined ? cloudMatch.observaciones : s.observaciones,
                   marca: cloudMatch.marca || s.marca,
                   modelo: cloudMatch.modelo || s.modelo,
                   activoPc: cloudMatch.activoPc || s.activoPc,
@@ -352,6 +387,24 @@ export default function App() {
     }
   }, [historial]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem("DOCTORSV_SUPERVISOR_ROSTERS_V2", JSON.stringify(rosters));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "ROSTERS_UPDATED", payload: rosters, sender: myClientId.current });
+        bc.close();
+      }
+      if (isRemoteRostersRef.current) {
+        isRemoteRostersRef.current = false;
+        return;
+      }
+      saveCloudRosters(rosters, myClientId.current);
+    } catch (e) {
+      console.error("Error saving rosters:", e);
+    }
+  }, [rosters]);
+
   // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo sin bucles
   useEffect(() => {
     const unsubSpaces = subscribeToCloudSpaces((cloudSpaces) => {
@@ -381,10 +434,18 @@ export default function App() {
       }
     }, null, myClientId.current);
 
+    const unsubRosters = subscribeToCloudRosters((cloudRosters) => {
+      if (cloudRosters && typeof cloudRosters === "object") {
+        isRemoteRostersRef.current = true;
+        setRosters(cloudRosters);
+      }
+    }, null, myClientId.current);
+
     return () => {
       if (unsubSpaces) unsubSpaces();
       if (unsubBodega) unsubBodega();
       if (unsubHistorial) unsubHistorial();
+      if (unsubRosters) unsubRosters();
     };
   }, []);
 
@@ -429,6 +490,9 @@ export default function App() {
           } else if (type === "BODEGA_UPDATED" && payload) {
             isRemoteBodegaRef.current = true;
             setBodegaStock(payload);
+          } else if (type === "ROSTERS_UPDATED" && payload) {
+            isRemoteRostersRef.current = true;
+            setRosters(payload);
           } else if (type === "FORCE_SYNC") {
             try {
               const saved = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
@@ -580,28 +644,36 @@ export default function App() {
   }
 
   function handleAssignDoctor(doctorName, spaceId, horario) {
+    if (!doctorName) return;
+    const cleanDoc = String(doctorName).trim();
+    const cleanSpaceId = Number(spaceId);
     const assignedHorario = horario || "07:00 AM – 12:00 PM";
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
     setSpaces((prev) =>
       prev.map((s) => {
-        if (s.doctor === doctorName && s.id !== spaceId) {
-          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO" };
+        // Liberar puesto anterior si el médico estaba asignado en otro cubículo
+        if (s.doctor && safeLower(s.doctor) === safeLower(cleanDoc) && Number(s.id) !== cleanSpaceId) {
+          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO", ultimoMovimiento: nowTime };
         }
-        if (s.id === spaceId) {
+        // Asignar al nuevo puesto
+        if (Number(s.id) === cleanSpaceId) {
           return {
             ...s,
-            doctor: doctorName,
+            doctor: cleanDoc,
             horario: assignedHorario,
             estado: "OCUPADO",
-            ultimoMovimiento: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+            ultimoMovimiento: nowTime,
           };
         }
         return s;
       })
     );
+
     if (isGoogleSheetsConfigured()) {
       updateSpaceInGoogleSheets({
-        id: spaceId,
-        doctor: doctorName,
+        id: cleanSpaceId,
+        doctor: cleanDoc,
         horario: assignedHorario,
         estado: "OCUPADO",
       });
@@ -609,27 +681,45 @@ export default function App() {
   }
 
   function handleUnassignDoctor(doctorName, spaceId) {
+    const cleanDoc = doctorName ? safeLower(doctorName).trim() : null;
+    const cleanSpaceId = spaceId !== undefined && spaceId !== null ? Number(spaceId) : null;
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
     setSpaces((prev) =>
       prev.map((s) => {
-        if (s.id === spaceId || s.doctor === doctorName) {
+        const matchesSpace = cleanSpaceId !== null && Number(s.id) === cleanSpaceId;
+        const matchesDoc = cleanDoc && s.doctor && safeLower(s.doctor) === cleanDoc;
+
+        if (matchesSpace || matchesDoc) {
           return {
             ...s,
             doctor: null,
             horario: null,
             estado: s.marca ? "DISPONIBLE" : "VACIO",
+            ultimoMovimiento: nowTime,
           };
         }
         return s;
       })
     );
-    if (isGoogleSheetsConfigured()) {
+
+    if (isGoogleSheetsConfigured() && cleanSpaceId !== null) {
       updateSpaceInGoogleSheets({
-        id: spaceId,
+        id: cleanSpaceId,
         doctor: "",
         horario: "",
         estado: "DISPONIBLE",
       });
     }
+  }
+
+  // Guardar nómina personalizada de un supervisor y sincronizarla en la nube
+  function handleSaveSupervisorRoster(supId, newNames) {
+    if (!supId) return;
+    setRosters((prev) => ({
+      ...prev,
+      [supId]: newNames,
+    }));
   }
 
   // Flujo exclusivo de Doctor: Asignación interactiva al hacer clic en un puesto del mapa
@@ -1053,6 +1143,8 @@ export default function App() {
             onOpenLiveReport={() => setLiveReportOpen(true)}
             initialSupId={currentUser?.supervisorId || null}
             onReleaseByHorario={handleReleaseByHorario}
+            rosterBySupervisor={rosters}
+            onSaveRoster={handleSaveSupervisorRoster}
           />
         )}
 

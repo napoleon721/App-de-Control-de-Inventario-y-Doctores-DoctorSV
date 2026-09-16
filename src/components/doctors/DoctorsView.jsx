@@ -15,7 +15,11 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
 
-  const availableSpaces = spaces.filter((s) => s.estado === "DISPONIBLE");
+  const availableSpaces = useMemo(() => {
+    return (spaces || []).filter(
+      (s) => (!s.doctor || (assigningDoctor && s.doctor && s.doctor.toLowerCase() === assigningDoctor.toLowerCase())) && s.estado !== "INHABILITADO"
+    );
+  }, [spaces, assigningDoctor]);
 
   // Combine master doctor list with staff categories and include all supervisors & admin
   const fullDoctorsList = useMemo(() => {
