@@ -27,7 +27,7 @@ export default function ExactCubicle({ space, onClick }) {
     borderColor = "#0095FF";
     shadowGlow = "rgba(0, 149, 255, 0.4)";
     // Extraer primer nombre o apellido significativo del médico
-    const cleanDoc = space.doctor ? space.doctor.replace(/^DR(A)?\.\s*/i, "").trim() : "";
+    const cleanDoc = space.doctor ? String(space.doctor).replace(/^DR(A)?\.\s*/i, "").trim() : "";
     const firstWord = cleanDoc.split(" ")[0] || "DOC";
     tagText = firstWord.length > 7 ? firstWord.slice(0, 6) + "." : firstWord;
     TagIcon = User;

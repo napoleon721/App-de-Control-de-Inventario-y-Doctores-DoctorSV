@@ -14,7 +14,11 @@ export default function ClaimSpaceModal({
 }) {
   if (!space) return null;
 
-  const isMySpace = currentUser && space.doctor && space.doctor.toLowerCase() === currentUser.name.toLowerCase();
+  const isMySpace = Boolean(
+    currentUser?.name &&
+    space.doctor &&
+    String(space.doctor).toLowerCase().trim() === String(currentUser.name).toLowerCase().trim()
+  );
   const isAvailable = space.estado === "DISPONIBLE" && !space.doctor;
   const isOccupiedByOther = space.doctor && !isMySpace;
   const isSupervisorSpace = [135, 136, 137, 138, 1].includes(space.id) || space.categoria === "Supervisores";

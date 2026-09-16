@@ -18,7 +18,8 @@ import LiveAttendanceReportModal from "./components/attendance/LiveAttendanceRep
 import GoogleSheetsConfigModal from "./components/config/GoogleSheetsConfigModal";
 
 import {
-  BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces
+  BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces,
+  SUPERVISORES_OFICIALES, DOCTORES_EXCEL
 } from "./constants/tokens";
 
 import {
@@ -29,13 +30,15 @@ import {
   subscribeToCloudHistorial,
   saveCloudHistorial,
 } from "./services/firestoreSync";
-import { logoutFromFirebase } from "./services/firebaseAuth";
+import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
   fetchSpacesFromGoogleSheets,
   updateSpaceInGoogleSheets,
   logMovementToGoogleSheets,
   isGoogleSheetsConfigured,
 } from "./services/googleSheetsService";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import { safeLower, safeStr } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -116,7 +119,91 @@ export default function App() {
   const [liveReportOpen, setLiveReportOpen] = useState(false);
   const [googleSheetsModalOpen, setGoogleSheetsModalOpen] = useState(false);
 
-  // Sincronizador Automático en Tiempo Real Multidispositivo (Auto-Sync en vivo sin recargar página)
+  // Identificador único de este cliente/pestaña para evitar bucles de eco
+  const myClientId = React.useRef(
+    "cli_" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36)
+  );
+  const isRemoteSpacesRef = React.useRef(false);
+  const isRemoteBodegaRef = React.useRef(false);
+  const isRemoteHistorialRef = React.useRef(false);
+
+  // Reconexión automática de sesión de Firebase Auth tras recargar página
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthChanges((firebaseUser) => {
+      if (firebaseUser && !currentUser) {
+        const email = safeLower(firebaseUser.email);
+        const envMaster = safeLower(import.meta.env.VITE_MASTER_EMAIL || "");
+        const allowedMasters = [
+          "elmer.andrade@doctorsv.gob.sv",
+          "cccalixo1998@gmail.com",
+          ...(envMaster ? envMaster.split(",").map((e) => e.trim()) : []),
+        ];
+        const isMaster = allowedMasters.includes(email) || email.startsWith("elmer.andrade@");
+
+        if (isMaster) {
+          let name = "Dr. Elmer Andrade (Master Admin)";
+          if (email.includes("cccalixo")) {
+            name = firebaseUser.displayName ? `${firebaseUser.displayName} (Master Temp)` : "Master Tester (cccalixo)";
+          } else if (firebaseUser.displayName && !email.startsWith("elmer.andrade")) {
+            name = `${firebaseUser.displayName} (Master Admin)`;
+          }
+          setCurrentUser({
+            role: "MASTER",
+            name,
+            email,
+            photoURL: firebaseUser.photoURL || null,
+            shift: "Turno Completo",
+            authProvider: "google",
+            loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+          });
+          return;
+        }
+
+        // Supervisor
+        const sup = SUPERVISORES_OFICIALES.find((s) => safeLower(s.correo) === email);
+        if (sup) {
+          setCurrentUser({
+            name: sup.nombre,
+            role: "SUPERVISOR",
+            supervisorId: sup.id,
+            puesto: sup.puesto,
+            spaceId: sup.puesto,
+            shift: sup.horario,
+            bloqueInicio: sup.bloqueInicio,
+            bloqueFin: sup.bloqueFin,
+            totalPuestos: sup.totalPuestos,
+            email: email,
+            photoURL: firebaseUser.photoURL || null,
+            authProvider: "google",
+            loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+          });
+          return;
+        }
+
+        // Doctor
+        const doc = DOCTORES_EXCEL.find((d) => safeLower(d.correo) === email);
+        setCurrentUser({
+          name: doc?.nombre || firebaseUser.displayName || email.split("@")[0],
+          role: "DOCTOR",
+          email: email,
+          photoURL: firebaseUser.photoURL || null,
+          shift: doc?.horario || "07:00 AM – 12:00 PM",
+          jvpm: doc?.jvpm || "Institucional",
+          grupo: doc?.grupo || "Grupo General",
+          tipo: doc?.tipo || "Planilla",
+          spaceId: null,
+          authProvider: "google",
+          loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+        });
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser]);
+
+  // Sincronizador en Segundo Plano con Google Sheets (moderado para no saturar cuota)
   useEffect(() => {
     let timer = null;
     let isFetching = false;
@@ -129,6 +216,7 @@ export default function App() {
       try {
         const res = await fetchSpacesFromGoogleSheets();
         if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          isRemoteSpacesRef.current = true;
           setSpaces((prevSpaces) => {
             let hasChanges = false;
             const updated = prevSpaces.map((s) => {
@@ -165,17 +253,17 @@ export default function App() {
           });
         }
       } catch (err) {
-        // Silencioso en fondo para no interrumpir al usuario
+        // Silencioso en fondo
       } finally {
         isFetching = false;
       }
     }
 
-    // Carga inicial inmediata
+    // Carga inicial
     syncFromCloud();
 
-    // Sondeo continuo en segundo plano: cada 4 segundos si la pestaña está visible
-    const getIntervalTime = () => (document.visibilityState === "hidden" ? 15000 : 4000);
+    // Sondeo moderado cada 60s (el tiempo real lo cubre Firestore de forma instantánea)
+    const getIntervalTime = () => (document.visibilityState === "hidden" ? 120000 : 60000);
 
     const scheduleNext = () => {
       timer = setTimeout(async () => {
@@ -208,16 +296,20 @@ export default function App() {
     }
   }, [horarios]);
 
-  // Sincronizar en LocalStorage, notificar a otras pestañas y persistir en Cloud Firestore
+  // Sincronizar en LocalStorage, notificar a otras pestañas y persistir en Cloud Firestore (sin bucle)
   useEffect(() => {
     try {
       localStorage.setItem("DOCTORSV_EXCEL_REAL_SPACES_V1", JSON.stringify(spaces));
       if (typeof BroadcastChannel !== "undefined") {
         const bc = new BroadcastChannel("doctorsv_sync_channel");
-        bc.postMessage({ type: "SPACES_UPDATED", payload: spaces });
+        bc.postMessage({ type: "SPACES_UPDATED", payload: spaces, sender: myClientId.current });
         bc.close();
       }
-      saveCloudSpaces(spaces);
+      if (isRemoteSpacesRef.current) {
+        isRemoteSpacesRef.current = false;
+        return; // Romper bucle: no re-enviar a Firestore lo que vino de Firestore
+      }
+      saveCloudSpaces(spaces, myClientId.current);
     } catch (e) {
       console.error("Error saving spaces:", e);
     }
@@ -229,10 +321,14 @@ export default function App() {
       localStorage.setItem("DOCTORSV_EXCEL_REAL_BODEGA_V1", JSON.stringify(simplified));
       if (typeof BroadcastChannel !== "undefined") {
         const bc = new BroadcastChannel("doctorsv_sync_channel");
-        bc.postMessage({ type: "BODEGA_UPDATED", payload: bodegaStock });
+        bc.postMessage({ type: "BODEGA_UPDATED", payload: bodegaStock, sender: myClientId.current });
         bc.close();
       }
-      saveCloudBodega(simplified);
+      if (isRemoteBodegaRef.current) {
+        isRemoteBodegaRef.current = false;
+        return;
+      }
+      saveCloudBodega(simplified, myClientId.current);
     } catch (e) {
       console.error("Error saving bodega:", e);
     }
@@ -243,26 +339,32 @@ export default function App() {
       localStorage.setItem("DOCTORSV_EXCEL_REAL_HISTORIAL_V1", JSON.stringify(historial));
       if (typeof BroadcastChannel !== "undefined") {
         const bc = new BroadcastChannel("doctorsv_sync_channel");
-        bc.postMessage({ type: "HISTORIAL_UPDATED", payload: historial });
+        bc.postMessage({ type: "HISTORIAL_UPDATED", payload: historial, sender: myClientId.current });
         bc.close();
       }
-      saveCloudHistorial(historial);
+      if (isRemoteHistorialRef.current) {
+        isRemoteHistorialRef.current = false;
+        return;
+      }
+      saveCloudHistorial(historial, myClientId.current);
     } catch (e) {
       console.error("Error saving historial:", e);
     }
   }, [historial]);
 
-  // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo
+  // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo sin bucles
   useEffect(() => {
     const unsubSpaces = subscribeToCloudSpaces((cloudSpaces) => {
       if (cloudSpaces && Array.isArray(cloudSpaces) && cloudSpaces.length > 0) {
+        isRemoteSpacesRef.current = true;
         setSpaces(cloudSpaces);
         setLastSyncTime(new Date());
       }
-    });
+    }, null, myClientId.current);
 
     const unsubBodega = subscribeToCloudBodega((cloudBodega) => {
       if (cloudBodega && Array.isArray(cloudBodega) && cloudBodega.length > 0) {
+        isRemoteBodegaRef.current = true;
         setBodegaStock((prev) =>
           prev.map((b) => {
             const match = cloudBodega.find((p) => p.key === b.key);
@@ -270,13 +372,14 @@ export default function App() {
           })
         );
       }
-    });
+    }, null, myClientId.current);
 
     const unsubHistorial = subscribeToCloudHistorial((cloudHistorial) => {
       if (cloudHistorial && Array.isArray(cloudHistorial) && cloudHistorial.length > 0) {
+        isRemoteHistorialRef.current = true;
         setHistorial(cloudHistorial);
       }
-    });
+    }, null, myClientId.current);
 
     return () => {
       if (unsubSpaces) unsubSpaces();
@@ -313,18 +416,26 @@ export default function App() {
       if (typeof BroadcastChannel !== "undefined") {
         bc = new BroadcastChannel("doctorsv_sync_channel");
         bc.onmessage = (event) => {
-          const { type, payload } = event.data || {};
+          const { type, payload, sender } = event.data || {};
+          if (sender === myClientId.current) return;
+
           if (type === "SPACES_UPDATED" && payload) {
+            isRemoteSpacesRef.current = true;
             setSpaces(payload);
             setLastSyncTime(new Date());
           } else if (type === "HISTORIAL_UPDATED" && payload) {
+            isRemoteHistorialRef.current = true;
             setHistorial(payload);
           } else if (type === "BODEGA_UPDATED" && payload) {
+            isRemoteBodegaRef.current = true;
             setBodegaStock(payload);
           } else if (type === "FORCE_SYNC") {
             try {
               const saved = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
-              if (saved) setSpaces(JSON.parse(saved));
+              if (saved) {
+                isRemoteSpacesRef.current = true;
+                setSpaces(JSON.parse(saved));
+              }
               setLastSyncTime(new Date());
             } catch {}
           }
@@ -336,18 +447,21 @@ export default function App() {
       if (e.key === "DOCTORSV_EXCEL_REAL_SPACES_V1" && e.newValue) {
         try {
           const updated = JSON.parse(e.newValue);
+          isRemoteSpacesRef.current = true;
           setSpaces(updated);
           setLastSyncTime(new Date());
         } catch {}
       }
       if (e.key === "DOCTORSV_EXCEL_REAL_HISTORIAL_V1" && e.newValue) {
         try {
+          isRemoteHistorialRef.current = true;
           setHistorial(JSON.parse(e.newValue));
         } catch {}
       }
       if (e.key === "DOCTORSV_EXCEL_REAL_BODEGA_V1" && e.newValue) {
         try {
           const updatedBodega = JSON.parse(e.newValue);
+          isRemoteBodegaRef.current = true;
           setBodegaStock((prev) =>
             prev.map((b) => {
               const match = updatedBodega.find((p) => p.key === b.key);
@@ -359,7 +473,10 @@ export default function App() {
       if (e.key === "DOCTORSV_SYNC_PING") {
         try {
           const savedSpaces = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
-          if (savedSpaces) setSpaces(JSON.parse(savedSpaces));
+          if (savedSpaces) {
+            isRemoteSpacesRef.current = true;
+            setSpaces(JSON.parse(savedSpaces));
+          }
           setLastSyncTime(new Date());
         } catch {}
       }
@@ -374,9 +491,12 @@ export default function App() {
 
   // Sincronización continua y reactiva del puesto del médico con el estado real de los cubículos
   useEffect(() => {
-    if (currentUser?.role === "DOCTOR") {
-      const myActiveSpace = spaces.find(
-        (s) => s.doctor && s.doctor.toLowerCase().trim() === currentUser.name.toLowerCase().trim()
+    if (currentUser?.role === "DOCTOR" && currentUser?.name) {
+      const docName = safeLower(currentUser.name);
+      if (!docName) return;
+
+      const myActiveSpace = (spaces || []).find(
+        (s) => s.doctor && safeLower(s.doctor) === docName
       );
 
       if (myActiveSpace) {
@@ -868,7 +988,8 @@ export default function App() {
   }, [isSupervisorRole, tab]);
 
   return (
-    <div className="min-h-screen bg-[#F4F7FB] text-slate-800 font-sans antialiased selection:bg-[#0095FF] selection:text-white">
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#F4F7FB] text-slate-800 font-sans antialiased selection:bg-[#0095FF] selection:text-white">
       {/* Header institucional */}
       <Header
         tab={tab}
@@ -1074,6 +1195,7 @@ export default function App() {
           }}
         />
       )}
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }

@@ -39,8 +39,8 @@ export default function SpaceMap({
     const matchesQuery =
       query.trim() === "" ||
       String(space.id).includes(query) ||
-      (space.doctor && space.doctor.toLowerCase().includes(query.toLowerCase())) ||
-      (space.marca && space.marca.toLowerCase().includes(query.toLowerCase()));
+      (space.doctor && String(space.doctor).toLowerCase().includes(query.toLowerCase())) ||
+      (space.marca && String(space.marca).toLowerCase().includes(query.toLowerCase()));
     const matchesEstado = filterEstado === "TODOS" || space.estado === filterEstado;
     const matchesTurno = filterTurno === "TODOS" || space.horario === filterTurno;
 
@@ -49,9 +49,11 @@ export default function SpaceMap({
     const isMySupervisorStation = currentUser?.role === "SUPERVISOR" && currentUser?.puesto === space.id;
 
     // Para el rol Doctor: determinar si este puesto está bloqueado (no seleccionable)
-    const isOwnSpace = currentUser?.name &&
+    const isOwnSpace = Boolean(
+      currentUser?.name &&
       space.doctor &&
-      space.doctor.toLowerCase() === currentUser.name.toLowerCase();
+      String(space.doctor).toLowerCase().trim() === String(currentUser.name).toLowerCase().trim()
+    );
     const isSelectableForDoctor = space.estado === "DISPONIBLE" && !space.doctor;
     const isBlockedForDoctor = isDoctorRole && !isOwnSpace && !isSelectableForDoctor;
 

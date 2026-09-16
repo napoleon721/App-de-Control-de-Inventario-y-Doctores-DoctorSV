@@ -85,7 +85,7 @@ export default function AttendanceView({
   // Attendance state by doctor name: { [doctorName]: "PRESENTE" | "AUSENTE" | "JUSTIFICADO" }
   const [attendanceRecords, setAttendanceRecords] = useState(() => {
     const map = {};
-    spaces.forEach((s) => {
+    (spaces || []).forEach((s) => {
       if (s.doctor) {
         map[s.doctor] = "PRESENTE";
       }
@@ -95,7 +95,7 @@ export default function AttendanceView({
 
   // Espacios del lote del supervisor en el mapa
   const supervisorSpaces = useMemo(() => {
-    return spaces.filter(
+    return (spaces || []).filter(
       (s) => s.id >= currentSupervisor.bloqueInicio && s.id <= currentSupervisor.bloqueFin
     );
   }, [spaces, currentSupervisor]);
@@ -107,7 +107,10 @@ export default function AttendanceView({
 
     // 1. Médicos configurados en la nómina del turno
     currentRosterNames.forEach((name) => {
-      const docObj = DOCTORES_EXCEL.find((d) => d.nombre.toLowerCase() === name.toLowerCase()) || {
+      const cleanName = String(name || "").toLowerCase().trim();
+      if (!cleanName) return;
+
+      const docObj = DOCTORES_EXCEL.find((d) => String(d.nombre || "").toLowerCase().trim() === cleanName) || {
         id: "EXT",
         nombre: name,
         tipo: "Planilla",
@@ -115,7 +118,7 @@ export default function AttendanceView({
         jvpm: "",
       };
 
-      const spaceAssigned = spaces.find((s) => s.doctor && s.doctor.toLowerCase().trim() === name.toLowerCase().trim());
+      const spaceAssigned = (spaces || []).find((s) => s.doctor && String(s.doctor).toLowerCase().trim() === cleanName);
       const status = spaceAssigned
         ? "PRESENTE"
         : (attendanceRecords[name] || "PENDIENTE");
@@ -130,13 +133,14 @@ export default function AttendanceView({
         status,
         espacio: spaceAssigned ? spaceAssigned.id : null,
       });
-      addedNames.add(name.toLowerCase().trim());
+      addedNames.add(cleanName);
     });
 
     // 2. Incluir también cualquier médico que se haya sentado físicamente en este lote (aunque no estuviera pre-agendado)
-    supervisorSpaces.forEach((s) => {
-      if (s.doctor && !addedNames.has(s.doctor.toLowerCase().trim())) {
-        const docObj = DOCTORES_EXCEL.find((d) => d.nombre.toLowerCase().trim() === s.doctor.toLowerCase().trim());
+    (supervisorSpaces || []).forEach((s) => {
+      const sDoc = String(s.doctor || "").toLowerCase().trim();
+      if (sDoc && !addedNames.has(sDoc)) {
+        const docObj = DOCTORES_EXCEL.find((d) => String(d.nombre || "").toLowerCase().trim() === sDoc);
         list.push({
           id: docObj?.id || "EXT",
           nombre: s.doctor,
@@ -148,7 +152,7 @@ export default function AttendanceView({
           espacio: s.id,
           externoAlLote: true,
         });
-        addedNames.add(s.doctor.toLowerCase().trim());
+        addedNames.add(sDoc);
       }
     });
 
@@ -705,7 +709,7 @@ export default function AttendanceView({
                     </div>
 
                     <div className="truncate text-[9.5px] font-semibold">
-                      {s.doctor ? s.doctor.replace("Dr. ", "").replace("Dra. ", "") : s.estado}
+                      {s.doctor ? String(s.doctor).replace("Dr. ", "").replace("Dra. ", "") : s.estado}
                     </div>
 
                     <div className="text-[8px] font-bold uppercase tracking-wider">

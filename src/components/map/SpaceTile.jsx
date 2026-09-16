@@ -52,7 +52,7 @@ export default function SpaceTile({ s, index, onClick }) {
         style={{ color: s.doctor ? "#0048B5" : (e.textDark || e.color) }}
         title={s.doctor || e.label}
       >
-        {s.doctor ? s.doctor.replace("Dr. ", "").replace("Dra. ", "") : e.label}
+        {s.doctor ? String(s.doctor).replace("Dr. ", "").replace("Dra. ", "") : e.label}
       </div>
 
       {/* Hover ring effect */}

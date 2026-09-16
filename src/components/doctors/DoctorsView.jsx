@@ -87,21 +87,24 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
   }, [customStaff]);
 
   const filteredDoctors = useMemo(() => {
+    const q = (searchDoctor || "").toLowerCase().trim();
     return fullDoctorsList.filter((d) => {
-      const assignedSpace = spaces.find((s) => s.doctor && s.doctor.toLowerCase().includes(d.nombre.toLowerCase()));
+      const docName = String(d.nombre || "").toLowerCase();
+      const assignedSpace = (spaces || []).find((s) => s.doctor && String(s.doctor).toLowerCase().includes(docName));
       const matchesSearch =
-        d.nombre.toLowerCase().includes(searchDoctor.toLowerCase()) ||
-        String(d.id).toLowerCase().includes(searchDoctor.toLowerCase()) ||
-        (d.correo && d.correo.toLowerCase().includes(searchDoctor.toLowerCase())) ||
-        (d.jvpm && d.jvpm.toLowerCase().includes(searchDoctor.toLowerCase())) ||
-        (d.puestoOficial && String(d.puestoOficial).includes(searchDoctor)) ||
-        (assignedSpace && String(assignedSpace.id).includes(searchDoctor));
+        !q ||
+        docName.includes(q) ||
+        String(d.id || "").toLowerCase().includes(q) ||
+        (d.correo && String(d.correo).toLowerCase().includes(q)) ||
+        (d.jvpm && String(d.jvpm).toLowerCase().includes(q)) ||
+        (d.puestoOficial && String(d.puestoOficial).includes(q)) ||
+        (assignedSpace && String(assignedSpace.id).includes(q));
 
       const matchesCategory = filterCategory === "TODOS" || d.categoria === filterCategory;
       const matchesShift =
         filterShift === "TODOS" ||
         (assignedSpace && assignedSpace.horario === filterShift) ||
-        d.horarioDefault.includes(filterShift);
+        (d.horarioDefault ? String(d.horarioDefault).includes(filterShift) : false);
 
       return matchesSearch && matchesCategory && matchesShift;
     });
@@ -220,12 +223,14 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
           </thead>
           <tbody className="divide-y divide-slate-100">
             {paginatedDoctors.map((d, i) => {
-              const assignedSpace = spaces.find((s) => s.doctor && s.doctor.toLowerCase().includes(d.nombre.toLowerCase()));
+              const docName = String(d.nombre || "");
+              const assignedSpace = (spaces || []).find((s) => s.doctor && String(s.doctor).toLowerCase().includes(docName.toLowerCase()));
               const isSupervisor = d.categoria === "Supervisores";
-              const initials = d.nombre
+              const initials = docName
                 .replace("Dr. ", "")
                 .replace("Dra. ", "")
                 .split(" ")
+                .filter(Boolean)
                 .map((p) => p[0])
                 .slice(0, 2)
                 .join("");
