@@ -116,6 +116,62 @@ export async function updateSpaceInGoogleSheets(space) {
 }
 
 /**
+ * Actualiza una lista de puestos en Google Sheets de forma agrupada (batch)
+ * o secuencial sin bloquear el hilo principal de la interfaz.
+ */
+export async function updateSpacesBatchInGoogleSheets(spacesList) {
+  const url = getSheetsApiUrl();
+  if (!url || !Array.isArray(spacesList) || spacesList.length === 0) return false;
+
+  const payload = spacesList.map((space) => ({
+    spaceId: space.id,
+    estado: space.estado,
+    doctor: space.doctor || "",
+    horario: space.horario || "",
+    marca: space.marca || "",
+    observaciones: space.observaciones || "",
+    timestamp: new Date().toISOString(),
+  }));
+
+  try {
+    // Intentar acción batch en 1 sola llamada HTTP
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "updateSpacesBatch",
+        spaces: payload,
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (json && json.success) return true;
+  } catch (error) {
+    console.warn("Fallo batch en Google Sheets, ejecutando fallback amortiguado:", error);
+  }
+
+  // Fallback: procesar en segundo plano con pequeños delays para no saturar el navegador
+  setTimeout(async () => {
+    for (const item of payload) {
+      try {
+        await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "updateSpace",
+            ...item,
+          }),
+        });
+        await new Promise((r) => setTimeout(r, 60)); // Pausa de 60ms entre llamadas
+      } catch (e) {
+        // Silencioso en fondo
+      }
+    }
+  }, 10);
+
+  return true;
+}
+
+/**
  * Registra un movimiento o relevo en la hoja de historial de Google Sheets
  */
 export async function logMovementToGoogleSheets(movement) {

@@ -38,6 +38,7 @@ import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseA
 import {
   fetchSpacesFromGoogleSheets,
   updateSpaceInGoogleSheets,
+  updateSpacesBatchInGoogleSheets,
   logMovementToGoogleSheets,
   isGoogleSheetsConfigured,
 } from "./services/googleSheetsService";
@@ -954,15 +955,14 @@ export default function App() {
 
     if (isGoogleSheetsConfigured()) {
       logMovementToGoogleSheets(newEntry);
-      spacesToRelease.forEach((s) => {
-        updateSpaceInGoogleSheets({
-          id: s.id,
-          doctor: "",
-          horario: "",
-          estado: s.marca ? "DISPONIBLE" : "VACIO",
-          observaciones: s.observaciones || "",
-        });
-      });
+      const batchPayload = spacesToRelease.map((s) => ({
+        id: s.id,
+        doctor: "",
+        horario: "",
+        estado: s.marca ? "DISPONIBLE" : "VACIO",
+        observaciones: s.observaciones || "",
+      }));
+      updateSpacesBatchInGoogleSheets(batchPayload);
     }
   }
 
@@ -1001,15 +1001,14 @@ export default function App() {
 
     if (isGoogleSheetsConfigured()) {
       logMovementToGoogleSheets(newEntry);
-      spacesToRelease.forEach((s) => {
-        updateSpaceInGoogleSheets({
-          id: s.id,
-          doctor: "",
-          horario: "",
-          estado: s.marca ? "DISPONIBLE" : "VACIO",
-          observaciones: s.observaciones || "",
-        });
-      });
+      const batchPayload = spacesToRelease.map((s) => ({
+        id: s.id,
+        doctor: "",
+        horario: "",
+        estado: s.marca ? "DISPONIBLE" : "VACIO",
+        observaciones: s.observaciones || "",
+      }));
+      updateSpacesBatchInGoogleSheets(batchPayload);
     }
   }
 

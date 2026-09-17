@@ -378,6 +378,56 @@ function doPost(e) {
       }
     }
 
+    // 1.1 Actualización por lote (Batch) de múltiples puestos en una sola transacción
+    if (action === "updateSpacesBatch") {
+      var ss = getSpacesSpreadsheet();
+      var sheet = getInventorySheet(ss);
+      var map = getColumnMapping(sheet);
+      var data = sheet.getDataRange().getValues();
+      var batchList = Array.isArray(body.spaces) ? body.spaces : [];
+      var updatedCount = 0;
+
+      // Crear índice de fila para búsqueda O(1)
+      var rowIndexMap = {};
+      for (var r = 1; r < data.length; r++) {
+        var spId = Number(data[r][map.idCol - 1]);
+        if (spId > 0) {
+          rowIndexMap[spId] = r + 1; // 1-indexed
+        }
+      }
+
+      for (var b = 0; b < batchList.length; b++) {
+        var item = batchList[b];
+        var sId = Number(item.spaceId);
+        var rIdx = rowIndexMap[sId];
+        if (rIdx) {
+          if (item.estado !== undefined && map.estadoCol > 0) {
+            sheet.getRange(rIdx, map.estadoCol).setValue(item.estado);
+          }
+          if (item.doctor !== undefined && map.doctorCol > 0) {
+            sheet.getRange(rIdx, map.doctorCol).setValue(item.doctor);
+          }
+          if (item.horario !== undefined && map.horarioCol > 0) {
+            sheet.getRange(rIdx, map.horarioCol).setValue(item.horario);
+          }
+          if (item.observaciones !== undefined && map.obsCol > 0) {
+            sheet.getRange(rIdx, map.obsCol).setValue(item.observaciones);
+          }
+          if (map.ultimoMovCol > 0) {
+            sheet.getRange(rIdx, map.ultimoMovCol).setValue(new Date());
+          }
+          updatedCount++;
+        }
+      }
+
+      return createJsonResponse({
+        success: true,
+        updatedCount: updatedCount,
+        book: ss.getName(),
+        sheet: sheet.getName()
+      });
+    }
+
     // 2. Registrar movimiento en la hoja de Historial / Auditoría
     if (action === "logMovement") {
       var ss = getSpacesSpreadsheet();
