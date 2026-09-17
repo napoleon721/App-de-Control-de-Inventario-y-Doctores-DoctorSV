@@ -5,6 +5,7 @@ import Pill from "../common/Pill";
 import DoctorAssignModal from "./DoctorAssignModal";
 import AddStaffModal from "./AddStaffModal";
 import { HORARIOS, DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../../constants/tokens";
+import { isSameDoctor } from "../../utils/safeHelpers";
 
 export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, customStaff = [], onAddStaff, onRemoveStaff }) {
   const [filterCategory, setFilterCategory] = useState("TODOS");
@@ -17,7 +18,7 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
 
   const availableSpaces = useMemo(() => {
     return (spaces || []).filter(
-      (s) => (!s.doctor || (assigningDoctor && s.doctor && s.doctor.toLowerCase() === assigningDoctor.toLowerCase())) && s.estado !== "INHABILITADO"
+      (s) => (!s.doctor || (assigningDoctor && isSameDoctor(s.doctor, assigningDoctor))) && s.estado !== "INHABILITADO"
     );
   }, [spaces, assigningDoctor]);
 
@@ -93,8 +94,8 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
   const filteredDoctors = useMemo(() => {
     const q = (searchDoctor || "").toLowerCase().trim();
     return fullDoctorsList.filter((d) => {
-      const docName = String(d.nombre || "").toLowerCase();
-      const assignedSpace = (spaces || []).find((s) => s.doctor && String(s.doctor).toLowerCase().includes(docName));
+      const docName = String(d.nombre || "");
+      const assignedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
       const matchesSearch =
         !q ||
         docName.includes(q) ||
@@ -228,7 +229,7 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
           <tbody className="divide-y divide-slate-100">
             {paginatedDoctors.map((d, i) => {
               const docName = String(d.nombre || "");
-              const assignedSpace = (spaces || []).find((s) => s.doctor && String(s.doctor).toLowerCase().includes(docName.toLowerCase()));
+              const assignedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, docName));
               const isSupervisor = d.categoria === "Supervisores";
               const initials = docName
                 .replace("Dr. ", "")
@@ -398,7 +399,7 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
       {assigningDoctor && (
         <DoctorAssignModal
           doctor={assigningDoctor}
-          currentSpace={spaces.find((s) => s.doctor && s.doctor.toLowerCase() === assigningDoctor.toLowerCase())}
+          currentSpace={spaces.find((s) => s.doctor && isSameDoctor(s.doctor, assigningDoctor))}
           availableSpaces={availableSpaces}
           onClose={() => setAssigningDoctor(null)}
           onAssign={onAssignDoctor}

@@ -40,7 +40,7 @@ import {
   isGoogleSheetsConfigured,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import { safeLower, safeStr } from "./utils/safeHelpers";
+import { safeLower, safeStr, isSameDoctor, normalizeDocName } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -556,23 +556,24 @@ export default function App() {
   // Sincronización continua y reactiva del puesto del médico con el estado real de los cubículos
   useEffect(() => {
     if (currentUser?.role === "DOCTOR" && currentUser?.name) {
-      const docName = safeLower(currentUser.name);
-      if (!docName) return;
-
+      // Buscar si algún puesto tiene a este médico asignado (coincidencia inteligente sin importar Dr./Dra. o mayúsculas)
       const myActiveSpace = (spaces || []).find(
-        (s) => s.doctor && safeLower(s.doctor) === docName
+        (s) => s.doctor && isSameDoctor(s.doctor, currentUser.name)
       );
 
       if (myActiveSpace) {
-        if (currentUser.spaceId !== myActiveSpace.id) {
-          setCurrentUser((prev) => (prev ? { ...prev, spaceId: myActiveSpace.id } : null));
+        if (Number(currentUser.spaceId) !== Number(myActiveSpace.id)) {
+          setCurrentUser((prev) => (prev ? { ...prev, spaceId: Number(myActiveSpace.id) } : null));
         }
       } else if (currentUser.spaceId) {
-        // ¡Si el master o supervisor liberó la franja o el puesto, desvincular inmediatamente al médico!
-        setCurrentUser((prev) => (prev ? { ...prev, spaceId: null } : null));
+        // Solo desvincular si el puesto actual fue explícitamente liberado o reasignado a otro médico
+        const currentSpaceObj = (spaces || []).find((s) => Number(s.id) === Number(currentUser.spaceId));
+        if (currentSpaceObj && (!currentSpaceObj.doctor || !isSameDoctor(currentSpaceObj.doctor, currentUser.name))) {
+          setCurrentUser((prev) => (prev ? { ...prev, spaceId: null } : null));
+        }
       }
     }
-  }, [spaces, currentUser?.name, currentUser?.role, currentUser?.spaceId]);
+  }, [spaces, currentUser?.name, currentUser?.role]);
 
   // Conteos calculados reactivamente
   const counts = useMemo(() => {
@@ -727,15 +728,16 @@ export default function App() {
     if (!currentUser) return;
     const docName = currentUser.name;
     const shift = currentUser.shift;
+    const cleanSpaceId = Number(space.id);
     const timeNow = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
     setSpaces((prev) =>
       prev.map((s) => {
         // Liberar puesto anterior si tenía uno asignado
-        if (s.doctor && s.doctor.toLowerCase() === docName.toLowerCase() && s.id !== space.id) {
-          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO" };
+        if (s.doctor && isSameDoctor(s.doctor, docName) && Number(s.id) !== cleanSpaceId) {
+          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO", ultimoMovimiento: timeNow };
         }
-        if (s.id === space.id) {
+        if (Number(s.id) === cleanSpaceId) {
           return {
             ...s,
             doctor: docName,
@@ -748,7 +750,7 @@ export default function App() {
       })
     );
 
-    setCurrentUser((prev) => (prev ? { ...prev, spaceId: space.id } : null));
+    setCurrentUser((prev) => (prev ? { ...prev, spaceId: cleanSpaceId } : null));
 
     // Auditoría
     const newLog = {
@@ -844,12 +846,13 @@ export default function App() {
   }
 
   function handleConfirmCheckIn({ doctor, spaceId, horario, timestamp }) {
+    const cleanSpaceId = Number(spaceId);
     setSpaces((prev) =>
       prev.map((s) => {
-        if (s.doctor && s.doctor.toLowerCase() === doctor.toLowerCase() && s.id !== spaceId) {
+        if (s.doctor && isSameDoctor(s.doctor, doctor) && Number(s.id) !== cleanSpaceId) {
           return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO" };
         }
-        if (s.id === spaceId) {
+        if (Number(s.id) === cleanSpaceId) {
           return {
             ...s,
             doctor,

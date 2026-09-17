@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
 import { ESTADOS, MARCAS, HORARIOS } from "../../constants/tokens";
+import { isSameDoctor } from "../../utils/safeHelpers";
 
 export default function SpaceMap({
   spaces,
@@ -45,16 +46,17 @@ export default function SpaceMap({
     const matchesTurno = filterTurno === "TODOS" || space.horario === filterTurno;
 
     const isMatch = matchesQuery && matchesEstado && matchesTurno;
-    const isMyAssignedSpace = currentUser?.spaceId === space.id;
-    const isMySupervisorStation = currentUser?.role === "SUPERVISOR" && currentUser?.puesto === space.id;
 
-    // Para el rol Doctor: determinar si este puesto está bloqueado (no seleccionable)
+    // Para el rol Doctor: determinar si este puesto le pertenece
     const isOwnSpace = Boolean(
       currentUser?.name &&
       space.doctor &&
-      String(space.doctor).toLowerCase().trim() === String(currentUser.name).toLowerCase().trim()
+      isSameDoctor(space.doctor, currentUser.name)
     );
-    const isSelectableForDoctor = space.estado === "DISPONIBLE" && !space.doctor;
+    const isMyAssignedSpace = (Number(currentUser?.spaceId) === Number(space.id)) || isOwnSpace;
+    const isMySupervisorStation = currentUser?.role === "SUPERVISOR" && Number(currentUser?.puesto) === Number(space.id);
+
+    const isSelectableForDoctor = (!space.doctor || space.estado === "DISPONIBLE") && space.estado !== "INHABILITADO";
     const isBlockedForDoctor = isDoctorRole && !isOwnSpace && !isSelectableForDoctor;
 
     // Para el rol Master y Supervisor: destacar visualmente los espacios ocupados por médicos

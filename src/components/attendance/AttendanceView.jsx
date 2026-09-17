@@ -7,6 +7,7 @@ import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import SupervisorRosterModal from "./SupervisorRosterModal";
+import { isSameDoctor } from "../../utils/safeHelpers";
 
 export default function AttendanceView({
   spaces,
@@ -146,7 +147,10 @@ export default function AttendanceView({
         jvpm: "",
       };
 
-      const spaceAssigned = spacesByDoctor.get(cleanName);
+      // Buscar si algún puesto tiene a este médico asignado (coincidencia rápida o inteligente con isSameDoctor)
+      const spaceAssigned = spacesByDoctor.get(cleanName) ||
+        (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, name));
+
       const status = spaceAssigned
         ? "PRESENTE"
         : (attendanceRecords[name] || "PENDIENTE");
@@ -159,33 +163,34 @@ export default function AttendanceView({
         tipo: docObj.tipo || "Planilla",
         horario: currentSupervisor.horario,
         status,
-        espacio: spaceAssigned ? spaceAssigned.id : null,
+        espacio: spaceAssigned ? Number(spaceAssigned.id) : null,
       });
       addedNames.add(cleanName);
     });
 
     // 2. Incluir también cualquier médico que se haya sentado físicamente en este lote (aunque no estuviera pre-agendado)
     (supervisorSpaces || []).forEach((s) => {
-      const sDoc = String(s.doctor || "").toLowerCase().trim();
-      if (sDoc && !addedNames.has(sDoc)) {
-        const docObj = doctorsMap.get(sDoc);
-        list.push({
-          id: docObj?.id || "EXT",
-          nombre: s.doctor,
-          correo: docObj?.correo || "",
-          jvpm: docObj?.jvpm || "",
-          tipo: docObj?.tipo || "Planilla",
-          horario: s.horario || currentSupervisor.horario,
-          status: "PRESENTE",
-          espacio: s.id,
-          externoAlLote: true,
-        });
-        addedNames.add(sDoc);
+      if (s.doctor) {
+        const alreadyInList = list.some((item) => isSameDoctor(item.nombre, s.doctor));
+        if (!alreadyInList) {
+          const docObj = DOCTORES_EXCEL.find((d) => isSameDoctor(d.nombre, s.doctor));
+          list.push({
+            id: docObj?.id || "EXT",
+            nombre: s.doctor,
+            correo: docObj?.correo || "",
+            jvpm: docObj?.jvpm || "",
+            tipo: docObj?.tipo || "Planilla",
+            horario: s.horario || currentSupervisor.horario,
+            status: "PRESENTE",
+            espacio: Number(s.id),
+            externoAlLote: true,
+          });
+        }
       }
     });
 
     return list;
-  }, [currentRosterNames, doctorsMap, spacesByDoctor, attendanceRecords, currentSupervisor, supervisorSpaces]);
+  }, [currentRosterNames, doctorsMap, spacesByDoctor, spaces, attendanceRecords, currentSupervisor, supervisorSpaces]);
 
   // Médicos filtrados
   const filteredBatch = useMemo(() => {

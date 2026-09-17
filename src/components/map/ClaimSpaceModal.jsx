@@ -4,6 +4,7 @@ import {
   Wrench, XCircle, LogOut, Check, X, ArrowRight
 } from "lucide-react";
 import { ESTADOS } from "../../constants/tokens";
+import { isSameDoctor } from "../../utils/safeHelpers";
 
 export default function ClaimSpaceModal({
   space,
@@ -17,11 +18,12 @@ export default function ClaimSpaceModal({
   const isMySpace = Boolean(
     currentUser?.name &&
     space.doctor &&
-    String(space.doctor).toLowerCase().trim() === String(currentUser.name).toLowerCase().trim()
-  );
-  const isAvailable = space.estado === "DISPONIBLE" && !space.doctor;
-  const isOccupiedByOther = space.doctor && !isMySpace;
+    isSameDoctor(space.doctor, currentUser.name)
+  ) || (currentUser?.spaceId !== undefined && currentUser?.spaceId !== null && Number(currentUser.spaceId) === Number(space.id));
+
   const isSupervisorSpace = [135, 136, 137, 138, 1].includes(space.id) || space.categoria === "Supervisores";
+  const isAvailable = (!space.doctor || space.estado === "DISPONIBLE") && space.estado !== "INHABILITADO" && !isSupervisorSpace && !isMySpace;
+  const isOccupiedByOther = Boolean(space.doctor && !isMySpace);
 
   return (
     <div
