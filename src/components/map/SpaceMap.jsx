@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
 import { ESTADOS, MARCAS, HORARIOS } from "../../constants/tokens";
-import { isSameDoctor } from "../../utils/safeHelpers";
+import { isSameDoctor, isSameHorario } from "../../utils/safeHelpers";
 
 export default function SpaceMap({
   spaces,
@@ -43,7 +43,9 @@ export default function SpaceMap({
       (space.doctor && String(space.doctor).toLowerCase().includes(query.toLowerCase())) ||
       (space.marca && String(space.marca).toLowerCase().includes(query.toLowerCase()));
     const matchesEstado = filterEstado === "TODOS" || space.estado === filterEstado;
-    const matchesTurno = filterTurno === "TODOS" || space.horario === filterTurno;
+    const matchesTurno =
+      filterTurno === "TODOS" ||
+      (space.horario && isSameHorario(space.horario, filterTurno));
 
     const isMatch = matchesQuery && matchesEstado && matchesTurno;
 
@@ -108,6 +110,27 @@ export default function SpaceMap({
   // Conteo de puestos ocupados por turno
   const occupiedSpaces = spaces.filter((s) => s.doctor);
 
+  // Lista unificada y dinámica de franjas horarias:
+  // Combina las franjas configuradas con cualquier franja presente en espacios ocupados (ej. rotativos o personalizados)
+  const availableShifts = useMemo(() => {
+    const list = [...(horarios || HORARIOS)];
+    occupiedSpaces.forEach((s) => {
+      if (s.horario && !list.some((h) => isSameHorario(h, s.horario))) {
+        list.push(s.horario);
+      }
+    });
+    return list;
+  }, [horarios, occupiedSpaces]);
+
+  // Mapa de conteo de puestos ocupados por franja normalizada
+  const shiftCounts = useMemo(() => {
+    const countsMap = {};
+    availableShifts.forEach((shift) => {
+      countsMap[shift] = occupiedSpaces.filter((s) => isSameHorario(s.horario, shift)).length;
+    });
+    return countsMap;
+  }, [availableShifts, occupiedSpaces]);
+
   return (
     <div className="flex flex-col gap-6 select-none">
       {/* Barra Superior de Control, Filtros y Transición de Turnos */}
@@ -156,8 +179,8 @@ export default function SpaceMap({
               className="bg-transparent text-[12px] outline-none font-bold text-slate-700 cursor-pointer"
             >
               <option value="TODOS">Todos los turnos ({occupiedSpaces.length})</option>
-              {(horarios || HORARIOS).map((h) => {
-                const count = spaces.filter((s) => s.horario === h).length;
+              {availableShifts.map((h) => {
+                const count = shiftCounts[h] || 0;
                 return (
                   <option key={h} value={h}>
                     {h} ({count})
@@ -194,11 +217,11 @@ export default function SpaceMap({
                   <select
                     value={releaseHorarioTarget}
                     onChange={(e) => setReleaseHorarioTarget(e.target.value)}
-                    className="bg-transparent text-[11.5px] font-bold text-amber-800 outline-none cursor-pointer max-w-[140px]"
+                    className="bg-transparent text-[11.5px] font-bold text-amber-800 outline-none cursor-pointer max-w-[150px]"
                   >
                     <option value="">Liberar por franja...</option>
-                    {horarios.map((h) => {
-                      const cnt = occupiedSpaces.filter((s) => s.horario === h).length;
+                    {availableShifts.map((h) => {
+                      const cnt = shiftCounts[h] || 0;
                       return cnt > 0 ? (
                         <option key={h} value={h}>{h} ({cnt})</option>
                       ) : null;
@@ -207,8 +230,8 @@ export default function SpaceMap({
                   {releaseHorarioTarget && (
                     <button
                       onClick={() => {
-                        const cnt = occupiedSpaces.filter((s) => s.horario === releaseHorarioTarget).length;
-                        if (window.confirm(`¿Liberar ${cnt} puesto(s) de la franja "${releaseHorarioTarget}"?\nUsa esto si un médico olvidou salirse o para hacer relevo parcial.`)) {
+                        const cnt = shiftCounts[releaseHorarioTarget] || occupiedSpaces.filter((s) => isSameHorario(s.horario, releaseHorarioTarget)).length;
+                        if (window.confirm(`¿Liberar ${cnt} puesto(s) de la franja "${releaseHorarioTarget}"?\nUsa esto si un médico olvidó salirse o para hacer relevo parcial.`)) {
                           onReleaseByHorario(releaseHorarioTarget);
                           setReleaseHorarioTarget("");
                         }

@@ -166,6 +166,57 @@ export function saveCloudHistorial(historial, clientId = "") {
 }
 
 let rostersTimer = null;
+let horariosTimer = null;
+
+/**
+ * Escucha cambios en tiempo real de los horarios configurados desde Firestore
+ */
+export function subscribeToCloudHorarios(onUpdate, onError, myClientId = "") {
+  try {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "config");
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.metadata && snapshot.metadata.hasPendingWrites) return;
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (myClientId && data?.updatedBy === myClientId) return;
+          if (data && Array.isArray(data.horarios) && data.horarios.length > 0) {
+            onUpdate(data.horarios);
+          }
+        }
+      },
+      (error) => {
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Guarda los horarios configurados en Firestore con debounce
+ */
+export function saveCloudHorarios(horarios, clientId = "") {
+  if (!isFirestoreAvailable) return;
+  if (!Array.isArray(horarios) || horarios.length === 0) return;
+
+  if (horariosTimer) clearTimeout(horariosTimer);
+
+  horariosTimer = setTimeout(async () => {
+    try {
+      const docRef = doc(db, "sedes", SEDE_ID, "estado", "config");
+      await setDoc(docRef, {
+        horarios: horarios,
+        updatedBy: clientId || "anon",
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (error) {}
+  }, 500);
+}
 
 /**
  * Escucha cambios en tiempo real de las nóminas de médicos por supervisor desde Firestore

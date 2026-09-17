@@ -7,7 +7,7 @@ import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import SupervisorRosterModal from "./SupervisorRosterModal";
-import { isSameDoctor } from "../../utils/safeHelpers";
+import { isSameDoctor, isSameHorario } from "../../utils/safeHelpers";
 
 export default function AttendanceView({
   spaces,
@@ -19,6 +19,7 @@ export default function AttendanceView({
   onReleaseByHorario,
   rosterBySupervisor: propRosters = null,
   onSaveRoster = null,
+  horarios = HORARIOS,
 }) {
   const [selectedSupId, setSelectedSupId] = useState(
     initialSupId && SUPERVISORES_OFICIALES.find((s) => s.id === initialSupId)
@@ -206,7 +207,9 @@ export default function AttendanceView({
       else if (filterStatus === "SIN_PUESTO") matchesStatus = d.espacio === null;
       else matchesStatus = d.status === filterStatus;
 
-      const matchesHorario = filterHorario === "TODOS" || d.horario === filterHorario;
+      const matchesHorario =
+        filterHorario === "TODOS" ||
+        (d.horario && isSameHorario(d.horario, filterHorario));
       return matchesSearch && matchesStatus && matchesHorario;
     });
   }, [batchDoctors, searchQuery, filterStatus, filterHorario]);
@@ -398,9 +401,22 @@ export default function AttendanceView({
               }`}
             >
               <option value="TODOS">Todas las franjas</option>
-              {HORARIOS.map((h) => (
-                <option key={h} value={h}>{h}</option>
-              ))}
+              {(() => {
+                const shiftList = [...(horarios || HORARIOS)];
+                (spaces || []).forEach((s) => {
+                  if (s.doctor && s.horario && !shiftList.some((h) => isSameHorario(h, s.horario))) {
+                    shiftList.push(s.horario);
+                  }
+                });
+                return shiftList.map((h) => {
+                  const occupiedCount = (spaces || []).filter((s) => s.doctor && isSameHorario(s.horario, h)).length;
+                  return (
+                    <option key={h} value={h}>
+                      {h} {occupiedCount > 0 ? `(${occupiedCount} en turno)` : ""}
+                    </option>
+                  );
+                });
+              })()}
             </select>
           </div>
 
@@ -451,7 +467,7 @@ export default function AttendanceView({
           {/* Botón Liberar Franja */}
           {onReleaseByHorario && (() => {
             const franjaTarget = filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario;
-            const ocupadosEnFranja = spaces.filter((s) => s.doctor && s.horario === franjaTarget).length;
+            const ocupadosEnFranja = spaces.filter((s) => s.doctor && isSameHorario(s.horario, franjaTarget)).length;
             return ocupadosEnFranja > 0 ? (
               <button
                 onClick={() => {

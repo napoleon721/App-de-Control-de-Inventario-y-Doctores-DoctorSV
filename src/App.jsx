@@ -31,6 +31,8 @@ import {
   saveCloudHistorial,
   subscribeToCloudRosters,
   saveCloudRosters,
+  subscribeToCloudHorarios,
+  saveCloudHorarios,
 } from "./services/firestoreSync";
 import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
@@ -40,7 +42,7 @@ import {
   isGoogleSheetsConfigured,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import { safeLower, safeStr, isSameDoctor, normalizeDocName } from "./utils/safeHelpers";
+import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -129,6 +131,7 @@ export default function App() {
   const isRemoteBodegaRef = React.useRef(false);
   const isRemoteHistorialRef = React.useRef(false);
   const isRemoteRostersRef = React.useRef(false);
+  const isRemoteHorariosRef = React.useRef(false);
 
   // 4. Nóminas de médicos asignadas a cada supervisor (sincronizadas en tiempo real con Firestore)
   const [rosters, setRosters] = useState(() => {
@@ -326,6 +329,16 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem("DOCTORSV_CONFIG_HORARIOS_V1", JSON.stringify(horarios));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "HORARIOS_UPDATED", payload: horarios, sender: myClientId.current });
+        bc.close();
+      }
+      if (isRemoteHorariosRef.current) {
+        isRemoteHorariosRef.current = false;
+        return;
+      }
+      saveCloudHorarios(horarios, myClientId.current);
     } catch (e) {
       console.error("Error saving horarios config:", e);
     }
@@ -441,11 +454,19 @@ export default function App() {
       }
     }, null, myClientId.current);
 
+    const unsubHorarios = subscribeToCloudHorarios((cloudHorarios) => {
+      if (cloudHorarios && Array.isArray(cloudHorarios) && cloudHorarios.length > 0) {
+        isRemoteHorariosRef.current = true;
+        setHorarios(cloudHorarios);
+      }
+    }, null, myClientId.current);
+
     return () => {
       if (unsubSpaces) unsubSpaces();
       if (unsubBodega) unsubBodega();
       if (unsubHistorial) unsubHistorial();
       if (unsubRosters) unsubRosters();
+      if (unsubHorarios) unsubHorarios();
     };
   }, []);
 
@@ -493,6 +514,9 @@ export default function App() {
           } else if (type === "ROSTERS_UPDATED" && payload) {
             isRemoteRostersRef.current = true;
             setRosters(payload);
+          } else if (type === "HORARIOS_UPDATED" && payload) {
+            isRemoteHorariosRef.current = true;
+            setHorarios(payload);
           } else if (type === "FORCE_SYNC") {
             try {
               const saved = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
@@ -508,6 +532,13 @@ export default function App() {
     } catch {}
 
     function handleStorageSync(e) {
+      if (e.key === "DOCTORSV_CONFIG_HORARIOS_V1" && e.newValue) {
+        try {
+          const updated = JSON.parse(e.newValue);
+          isRemoteHorariosRef.current = true;
+          setHorarios(updated);
+        } catch {}
+      }
       if (e.key === "DOCTORSV_EXCEL_REAL_SPACES_V1" && e.newValue) {
         try {
           const updated = JSON.parse(e.newValue);
@@ -936,11 +967,13 @@ export default function App() {
   }
 
   function handleReleaseByHorario(horario) {
-    const spacesToRelease = spaces.filter((s) => s.doctor && s.horario === horario);
+    const spacesToRelease = spaces.filter((s) => s.doctor && isSameHorario(s.horario, horario));
+
+    if (spacesToRelease.length === 0) return;
 
     setSpaces((prev) =>
       prev.map((s) => {
-        if (s.doctor && s.horario === horario) {
+        if (s.doctor && isSameHorario(s.horario, horario)) {
           return {
             ...s,
             doctor: null,
@@ -1148,6 +1181,7 @@ export default function App() {
             onReleaseByHorario={handleReleaseByHorario}
             rosterBySupervisor={rosters}
             onSaveRoster={handleSaveSupervisorRoster}
+            horarios={horarios}
           />
         )}
 

@@ -65,3 +65,25 @@ export function isSameDoctor(nameA, nameB) {
   return false;
 }
 
+/**
+ * Normaliza una franja horaria para comparación tolerante a diferencias de guiones (– vs -),
+ * espacios múltiples y mayúsculas/minúsculas.
+ */
+export function normalizeHorario(val) {
+  if (!val) return "";
+  return String(val)
+    .replace(/[\u2013\u2014\u2212]/g, "-") // Normaliza en-dash, em-dash a guion normal "-"
+    .replace(/\s+/g, " ")
+    .toUpperCase()
+    .trim();
+}
+
+/**
+ * Compara dos cadenas de horario de forma tolerante
+ */
+export function isSameHorario(h1, h2) {
+  const norm1 = normalizeHorario(h1);
+  const norm2 = normalizeHorario(h2);
+  if (!norm1 || !norm2) return false;
+  return norm1 === norm2;
+}
