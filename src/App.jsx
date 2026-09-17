@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, lazy, Suspense } from "react";
 import {
   LayoutGrid, Droplets, AlertTriangle, Wrench, Warehouse, Sparkles, UserCheck
 } from "lucide-react";
@@ -7,16 +7,18 @@ import KpiCard from "./components/common/KpiCard";
 import SpaceMap from "./components/map/SpaceMap";
 import SpaceDetailModal from "./components/map/SpaceDetailModal";
 import ClaimSpaceModal from "./components/map/ClaimSpaceModal";
-import WarehouseView from "./components/warehouse/WarehouseView";
-import DoctorsView from "./components/doctors/DoctorsView";
-import HistoryView from "./components/history/HistoryView";
-import AttendanceView from "./components/attendance/AttendanceView";
-import QuickCheckInModal from "./components/attendance/QuickCheckInModal";
 import AuthPortal from "./components/auth/AuthPortal";
-import ShiftConfigModal from "./components/config/ShiftConfigModal";
-import SupervisorConfigModal from "./components/config/SupervisorConfigModal";
-import LiveAttendanceReportModal from "./components/attendance/LiveAttendanceReportModal";
-import GoogleSheetsConfigModal from "./components/config/GoogleSheetsConfigModal";
+
+// Carga diferida (Code-Splitting) para vistas y modales secundarios
+const WarehouseView = lazy(() => import("./components/warehouse/WarehouseView"));
+const DoctorsView = lazy(() => import("./components/doctors/DoctorsView"));
+const HistoryView = lazy(() => import("./components/history/HistoryView"));
+const AttendanceView = lazy(() => import("./components/attendance/AttendanceView"));
+const QuickCheckInModal = lazy(() => import("./components/attendance/QuickCheckInModal"));
+const ShiftConfigModal = lazy(() => import("./components/config/ShiftConfigModal"));
+const SupervisorConfigModal = lazy(() => import("./components/config/SupervisorConfigModal"));
+const LiveAttendanceReportModal = lazy(() => import("./components/attendance/LiveAttendanceReportModal"));
+const GoogleSheetsConfigModal = lazy(() => import("./components/config/GoogleSheetsConfigModal"));
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces,
@@ -1221,52 +1223,61 @@ export default function App() {
           />
         )}
 
-        {!isDoctorRole && tab === "asistencia" && (
-          <AttendanceView
-            spaces={spaces}
-            onAssignDoctor={handleAssignDoctor}
-            onUnassignDoctor={handleUnassignDoctor}
-            onOpenCheckIn={() => setCheckInModalOpen(true)}
-            onOpenLiveReport={() => setLiveReportOpen(true)}
-            initialSupId={currentUser?.supervisorId || null}
-            onReleaseByHorario={handleReleaseByHorario}
-            rosterBySupervisor={rosters}
-            onSaveRoster={handleSaveSupervisorRoster}
-            horarios={horarios}
-            supervisores={supervisores}
-            onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
-            currentUser={currentUser}
-          />
-        )}
+        <Suspense
+          fallback={
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400 animate-pulse">
+              <div className="h-9 w-9 rounded-full border-3 border-[#0095FF] border-t-transparent animate-spin" />
+              <span className="text-[13px] font-bold text-slate-500">Cargando módulo...</span>
+            </div>
+          }
+        >
+          {!isDoctorRole && tab === "asistencia" && (
+            <AttendanceView
+              spaces={spaces}
+              onAssignDoctor={handleAssignDoctor}
+              onUnassignDoctor={handleUnassignDoctor}
+              onOpenCheckIn={() => setCheckInModalOpen(true)}
+              onOpenLiveReport={() => setLiveReportOpen(true)}
+              initialSupId={currentUser?.supervisorId || null}
+              onReleaseByHorario={handleReleaseByHorario}
+              rosterBySupervisor={rosters}
+              onSaveRoster={handleSaveSupervisorRoster}
+              horarios={horarios}
+              supervisores={supervisores}
+              onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
+              currentUser={currentUser}
+            />
+          )}
 
-        {!isDoctorRole && !isSupervisorRole && tab === "bodega" && (
-          <WarehouseView
-            bodegaStock={bodegaStock}
-            spaces={spaces}
-            onRegisterMovement={handleRegisterMovement}
-            historial={historial}
-          />
-        )}
+          {!isDoctorRole && !isSupervisorRole && tab === "bodega" && (
+            <WarehouseView
+              bodegaStock={bodegaStock}
+              spaces={spaces}
+              onRegisterMovement={handleRegisterMovement}
+              historial={historial}
+            />
+          )}
 
-        {!isDoctorRole && !isSupervisorRole && tab === "medicos" && (
-          <DoctorsView
-            spaces={spaces}
-            onAssignDoctor={handleAssignDoctor}
-            onUnassignDoctor={handleUnassignDoctor}
-            customStaff={customStaff}
-            onAddStaff={(member) => setCustomStaff((prev) => [...prev, member])}
-            onRemoveStaff={(id) => setCustomStaff((prev) => prev.filter((m) => m.id !== id))}
-            supervisores={supervisores}
-          />
-        )}
+          {!isDoctorRole && !isSupervisorRole && tab === "medicos" && (
+            <DoctorsView
+              spaces={spaces}
+              onAssignDoctor={handleAssignDoctor}
+              onUnassignDoctor={handleUnassignDoctor}
+              customStaff={customStaff}
+              onAddStaff={(member) => setCustomStaff((prev) => [...prev, member])}
+              onRemoveStaff={(id) => setCustomStaff((prev) => prev.filter((m) => m.id !== id))}
+              supervisores={supervisores}
+            />
+          )}
 
-        {!isDoctorRole && !isSupervisorRole && tab === "historial" && (
-          <HistoryView
-            historial={historial}
-            spaces={spaces}
-            onRegisterMovement={handleRegisterMovement}
-          />
-        )}
+          {!isDoctorRole && !isSupervisorRole && tab === "historial" && (
+            <HistoryView
+              historial={historial}
+              spaces={spaces}
+              onRegisterMovement={handleRegisterMovement}
+            />
+          )}
+        </Suspense>
 
         {/* Footer institucional DoctorSV */}
         <footer className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-[12px] text-slate-500 shadow-2xs">
@@ -1313,16 +1324,6 @@ export default function App() {
         />
       )}
 
-      {/* Modal de Auto Check-In de Médico (Master) */}
-      {checkInModalOpen && (
-        <QuickCheckInModal
-          spaces={spaces}
-          onClose={() => setCheckInModalOpen(false)}
-          onConfirmCheckIn={handleConfirmCheckIn}
-          horarios={horarios}
-        />
-      )}
-
       {/* Portal de Acceso Multi-Usuario (Doctor Master vs Supervisor vs Doctor Operativo) */}
       {(authPortalOpen || !currentUser) && (
         <AuthPortal
@@ -1353,43 +1354,51 @@ export default function App() {
         />
       )}
 
-      {/* Modal de Configuración de Horarios & Turnos (Master) */}
-      {shiftConfigOpen && (
-        <ShiftConfigModal
-          horarios={horarios}
-          onSaveHorarios={(newHorarios) => setHorarios(newHorarios)}
-          onClose={() => setShiftConfigOpen(false)}
-        />
-      )}
+      {/* Modales con Carga Diferida (Lazy) */}
+      <Suspense fallback={null}>
+        {checkInModalOpen && (
+          <QuickCheckInModal
+            spaces={spaces}
+            onClose={() => setCheckInModalOpen(false)}
+            onConfirmCheckIn={handleConfirmCheckIn}
+            horarios={horarios}
+          />
+        )}
 
-      {/* Modal de Configuración de Supervisores & Lotes (Master) */}
-      {supervisorConfigOpen && (
-        <SupervisorConfigModal
-          supervisores={supervisores}
-          onSaveSupervisores={(newSupervisores) => setSupervisores(newSupervisores)}
-          onClose={() => setSupervisorConfigOpen(false)}
-          horarios={horarios}
-        />
-      )}
+        {shiftConfigOpen && (
+          <ShiftConfigModal
+            horarios={horarios}
+            onSaveHorarios={(newHorarios) => setHorarios(newHorarios)}
+            onClose={() => setShiftConfigOpen(false)}
+          />
+        )}
 
-      {/* Modal de Reporte de Asistencia & Alimentación en Tiempo Real (Master) */}
-      {liveReportOpen && (
-        <LiveAttendanceReportModal
-          spaces={spaces}
-          historial={historial}
-          onClose={() => setLiveReportOpen(false)}
-        />
-      )}
+        {supervisorConfigOpen && (
+          <SupervisorConfigModal
+            supervisores={supervisores}
+            onSaveSupervisores={(newSupervisores) => setSupervisores(newSupervisores)}
+            onClose={() => setSupervisorConfigOpen(false)}
+            horarios={horarios}
+          />
+        )}
 
-      {/* Modal de Configuración y Enlace con Google Sheets (Master / Admin) */}
-      {googleSheetsModalOpen && (
-        <GoogleSheetsConfigModal
-          onClose={() => setGoogleSheetsModalOpen(false)}
-          onConnected={() => {
-            handleSync();
-          }}
-        />
-      )}
+        {liveReportOpen && (
+          <LiveAttendanceReportModal
+            spaces={spaces}
+            historial={historial}
+            onClose={() => setLiveReportOpen(false)}
+          />
+        )}
+
+        {googleSheetsModalOpen && (
+          <GoogleSheetsConfigModal
+            onClose={() => setGoogleSheetsModalOpen(false)}
+            onConnected={() => {
+              handleSync();
+            }}
+          />
+        )}
+      </Suspense>
       </div>
     </ErrorBoundary>
   );
