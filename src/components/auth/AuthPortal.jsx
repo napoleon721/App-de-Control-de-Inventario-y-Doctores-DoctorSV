@@ -15,6 +15,7 @@ export default function AuthPortal({
   onClose,
   isModal = false,
   horarios = HORARIOS,
+  supervisores = SUPERVISORES_OFICIALES,
 }) {
   const [activeTab, setActiveTab] = useState("doctor"); // 'doctor' | 'supervisor' | 'master'
 
@@ -27,7 +28,7 @@ export default function AuthPortal({
   const [masterError, setMasterError] = useState("");
 
   // Supervisor State
-  const [selectedSupId, setSelectedSupId] = useState(SUPERVISORES_OFICIALES[0]?.id || "sup-1");
+  const [selectedSupId, setSelectedSupId] = useState(supervisores[0]?.id || "sup-1");
   const [supervisorPin, setSupervisorPin] = useState("");
   const [showSupPin, setShowSupPin] = useState(false);
   const [supervisorError, setSupervisorError] = useState("");
@@ -42,12 +43,12 @@ export default function AuthPortal({
   const [doctorError, setDoctorError] = useState("");
   const [selectedSupervisor, setSelectedSupervisor] = useState(null);
 
-  // Helper para identificar si el usuario logueado es uno de los 5 supervisores oficiales
+  // Helper para identificar si el usuario logueado es uno de los supervisores
   function findSupervisorByEmailOrName(email = "", displayName = "") {
     const normEmail = email.toLowerCase().trim();
     const normName = displayName.toLowerCase().trim();
 
-    return SUPERVISORES_OFICIALES.find((s) => {
+    return supervisores.find((s) => {
       const sEmail = (s.correo || "").toLowerCase().trim();
       const sName = (s.nombre || "").toLowerCase().trim();
       if (sEmail && normEmail === sEmail) return true;
@@ -324,7 +325,7 @@ export default function AuthPortal({
 
   function handleSupervisorSubmit(e) {
     e.preventDefault();
-    const sup = SUPERVISORES_OFICIALES.find((s) => s.id === selectedSupId) || SUPERVISORES_OFICIALES[0];
+    const sup = supervisores.find((s) => s.id === selectedSupId) || supervisores[0] || SUPERVISORES_OFICIALES[0];
     const cleanPin = supervisorPin.trim().toLowerCase();
     if (!cleanPin || ["2026", "sup2026", "supervisor", "admin", "1234", "doctorsv"].includes(cleanPin)) {
       setSupervisorError("");
@@ -828,7 +829,7 @@ export default function AuthPortal({
                   Selecciona tu Nombre de Supervisor
                 </label>
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {SUPERVISORES_OFICIALES.map((sup) => {
+                  {supervisores.map((sup) => {
                     const isSelected = selectedSupId === sup.id;
                     return (
                       <div
@@ -848,22 +849,19 @@ export default function AuthPortal({
                             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[12px] font-bold ${
                               isSelected
                                 ? "bg-[#0048B5] text-white"
-                                : "bg-white text-slate-600 border border-slate-200"
+                                : "bg-white text-slate-700 border border-slate-200"
                             }`}
                           >
-                            #{sup.puesto}
+                            <UserCheck size={16} />
                           </span>
                           <div>
-                            <p className="font-heading text-[13px] font-bold text-slate-900 leading-tight">
+                            <p className={`text-[12.5px] font-bold ${isSelected ? "text-[#0048B5]" : "text-slate-800"}`}>
                               {sup.nombre}
                             </p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                              {sup.rol} · <strong className="text-slate-700">{sup.horario}</strong>
+                            <p className="text-[11px] text-slate-500 font-mono">
+                              Estación #{sup.puesto} · Lote #{sup.bloqueInicio} al #{sup.bloqueFin}
                             </p>
-                            <p className="text-[10px] text-cyan-700 font-semibold mt-0.5">
-                              Lote: Puestos #{sup.bloqueInicio} al #{sup.bloqueFin} ({sup.totalPuestos} médicos)
-                            </p>
-                            <p className="text-[10.5px] font-mono text-[#0048B5] font-semibold mt-0.5 flex items-center gap-1">
+                            <p className="text-[10.5px] font-mono text-[#0048B5] font-semibold flex items-center gap-1">
                               <Mail size={11} className="text-[#0095FF] shrink-0" />
                               <span>{sup.correo}</span>
                             </p>

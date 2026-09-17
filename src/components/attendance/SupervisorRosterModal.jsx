@@ -75,7 +75,8 @@ export default function SupervisorRosterModal({
       return new Set(currentDoctorNames);
     }
     // Default: first N doctors matching capacity
-    const count = supervisor?.totalPuestos || 40;
+    const count = supervisor?.totalPuestos ||
+      (supervisor?.bloqueFin && supervisor?.bloqueInicio ? (Number(supervisor.bloqueFin) - Number(supervisor.bloqueInicio) + 1) : 40);
     return new Set(DOCTORES_EXCEL.slice(0, count).map((d) => d.nombre));
   });
 
@@ -83,7 +84,8 @@ export default function SupervisorRosterModal({
   const [selectedGroup, setSelectedGroup] = useState("TODOS");
   const [onlySelected, setOnlySelected] = useState(false);
 
-  const capacity = supervisor?.totalPuestos || 40;
+  const capacity = supervisor?.totalPuestos ||
+    (supervisor?.bloqueFin && supervisor?.bloqueInicio ? (Number(supervisor.bloqueFin) - Number(supervisor.bloqueInicio) + 1) : 40);
   const countSelected = selectedNames.size;
 
   // Groups extracted from official list

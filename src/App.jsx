@@ -14,6 +14,7 @@ import AttendanceView from "./components/attendance/AttendanceView";
 import QuickCheckInModal from "./components/attendance/QuickCheckInModal";
 import AuthPortal from "./components/auth/AuthPortal";
 import ShiftConfigModal from "./components/config/ShiftConfigModal";
+import SupervisorConfigModal from "./components/config/SupervisorConfigModal";
 import LiveAttendanceReportModal from "./components/attendance/LiveAttendanceReportModal";
 import GoogleSheetsConfigModal from "./components/config/GoogleSheetsConfigModal";
 
@@ -33,6 +34,8 @@ import {
   saveCloudRosters,
   subscribeToCloudHorarios,
   saveCloudHorarios,
+  subscribeToCloudSupervisores,
+  saveCloudSupervisores,
 } from "./services/firestoreSync";
 import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
@@ -124,6 +127,17 @@ export default function App() {
   const [liveReportOpen, setLiveReportOpen] = useState(false);
   const [googleSheetsModalOpen, setGoogleSheetsModalOpen] = useState(false);
 
+  // 3.1 Supervisores oficiales configurables dinámicamente por el Doctor Master
+  const [supervisores, setSupervisores] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_SUPERVISORES_CONFIG_V1");
+      return saved ? JSON.parse(saved) : SUPERVISORES_OFICIALES;
+    } catch {
+      return SUPERVISORES_OFICIALES;
+    }
+  });
+  const [supervisorConfigOpen, setSupervisorConfigOpen] = useState(false);
+
   // Identificador único de este cliente/pestaña para evitar bucles de eco
   const myClientId = React.useRef(
     "cli_" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36)
@@ -133,6 +147,7 @@ export default function App() {
   const isRemoteHistorialRef = React.useRef(false);
   const isRemoteRostersRef = React.useRef(false);
   const isRemoteHorariosRef = React.useRef(false);
+  const isRemoteSupervisoresRef = React.useRef(false);
 
   // 4. Nóminas de médicos asignadas a cada supervisor (sincronizadas en tiempo real con Firestore)
   const [rosters, setRosters] = useState(() => {
@@ -177,7 +192,7 @@ export default function App() {
         }
 
         // Supervisor
-        const sup = SUPERVISORES_OFICIALES.find((s) => safeLower(s.correo) === email);
+        const sup = supervisores.find((s) => safeLower(s.correo) === email);
         if (sup) {
           setCurrentUser({
             name: sup.nombre,
@@ -345,6 +360,24 @@ export default function App() {
     }
   }, [horarios]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(supervisores));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "SUPERVISORES_UPDATED", payload: supervisores, sender: myClientId.current });
+        bc.close();
+      }
+      if (isRemoteSupervisoresRef.current) {
+        isRemoteSupervisoresRef.current = false;
+        return;
+      }
+      saveCloudSupervisores(supervisores, myClientId.current);
+    } catch (e) {
+      console.error("Error saving supervisores config:", e);
+    }
+  }, [supervisores]);
+
   // Sincronizar en LocalStorage, notificar a otras pestañas y persistir en Cloud Firestore (sin bucle)
   useEffect(() => {
     try {
@@ -462,12 +495,20 @@ export default function App() {
       }
     }, null, myClientId.current);
 
+    const unsubSupervisores = subscribeToCloudSupervisores((cloudSupervisores) => {
+      if (cloudSupervisores && Array.isArray(cloudSupervisores) && cloudSupervisores.length > 0) {
+        isRemoteSupervisoresRef.current = true;
+        setSupervisores(cloudSupervisores);
+      }
+    }, null, myClientId.current);
+
     return () => {
       if (unsubSpaces) unsubSpaces();
       if (unsubBodega) unsubBodega();
       if (unsubHistorial) unsubHistorial();
       if (unsubRosters) unsubRosters();
       if (unsubHorarios) unsubHorarios();
+      if (unsubSupervisores) unsubSupervisores();
     };
   }, []);
 
@@ -518,6 +559,9 @@ export default function App() {
           } else if (type === "HORARIOS_UPDATED" && payload) {
             isRemoteHorariosRef.current = true;
             setHorarios(payload);
+          } else if (type === "SUPERVISORES_UPDATED" && payload) {
+            isRemoteSupervisoresRef.current = true;
+            setSupervisores(payload);
           } else if (type === "FORCE_SYNC") {
             try {
               const saved = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
@@ -533,6 +577,13 @@ export default function App() {
     } catch {}
 
     function handleStorageSync(e) {
+      if (e.key === "DOCTORSV_SUPERVISORES_CONFIG_V1" && e.newValue) {
+        try {
+          const updated = JSON.parse(e.newValue);
+          isRemoteSupervisoresRef.current = true;
+          setSupervisores(updated);
+        } catch {}
+      }
       if (e.key === "DOCTORSV_CONFIG_HORARIOS_V1" && e.newValue) {
         try {
           const updated = JSON.parse(e.newValue);
@@ -1128,6 +1179,7 @@ export default function App() {
         onLogout={handleLogout}
         onOpenAuthPortal={() => setAuthPortalOpen(true)}
         onOpenShiftConfig={() => setShiftConfigOpen(true)}
+        onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
         onOpenLiveReport={() => setLiveReportOpen(true)}
         onOpenGoogleSheetsConfig={() => setGoogleSheetsModalOpen(true)}
       />
@@ -1181,6 +1233,9 @@ export default function App() {
             rosterBySupervisor={rosters}
             onSaveRoster={handleSaveSupervisorRoster}
             horarios={horarios}
+            supervisores={supervisores}
+            onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
+            currentUser={currentUser}
           />
         )}
 
@@ -1201,6 +1256,7 @@ export default function App() {
             customStaff={customStaff}
             onAddStaff={(member) => setCustomStaff((prev) => [...prev, member])}
             onRemoveStaff={(id) => setCustomStaff((prev) => prev.filter((m) => m.id !== id))}
+            supervisores={supervisores}
           />
         )}
 
@@ -1293,6 +1349,7 @@ export default function App() {
           onClose={currentUser ? () => setAuthPortalOpen(false) : null}
           isModal={!!currentUser}
           horarios={horarios}
+          supervisores={supervisores}
         />
       )}
 
@@ -1302,6 +1359,16 @@ export default function App() {
           horarios={horarios}
           onSaveHorarios={(newHorarios) => setHorarios(newHorarios)}
           onClose={() => setShiftConfigOpen(false)}
+        />
+      )}
+
+      {/* Modal de Configuración de Supervisores & Lotes (Master) */}
+      {supervisorConfigOpen && (
+        <SupervisorConfigModal
+          supervisores={supervisores}
+          onSaveSupervisores={(newSupervisores) => setSupervisores(newSupervisores)}
+          onClose={() => setSupervisorConfigOpen(false)}
+          horarios={horarios}
         />
       )}
 

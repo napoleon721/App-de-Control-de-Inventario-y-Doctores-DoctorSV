@@ -268,3 +268,55 @@ export function saveCloudRosters(rosters, clientId = "") {
   }, 500);
 }
 
+let supervisoresTimer = null;
+
+/**
+ * Escucha cambios en tiempo real de los supervisores y sus lotes desde Firestore
+ */
+export function subscribeToCloudSupervisores(onUpdate, onError, myClientId = "") {
+  try {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "supervisores");
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.metadata && snapshot.metadata.hasPendingWrites) return;
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (myClientId && data?.updatedBy === myClientId) return;
+          if (data && Array.isArray(data.list) && data.list.length > 0) {
+            onUpdate(data.list);
+          }
+        }
+      },
+      (error) => {
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Guarda la configuración de supervisores en Firestore con debounce
+ */
+export function saveCloudSupervisores(supervisores, clientId = "") {
+  if (!isFirestoreAvailable) return;
+  if (!Array.isArray(supervisores) || supervisores.length === 0) return;
+
+  if (supervisoresTimer) clearTimeout(supervisoresTimer);
+
+  supervisoresTimer = setTimeout(async () => {
+    try {
+      const docRef = doc(db, "sedes", SEDE_ID, "estado", "supervisores");
+      await setDoc(docRef, {
+        list: supervisores,
+        updatedBy: clientId || "anon",
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (error) {}
+  }, 500);
+}
+

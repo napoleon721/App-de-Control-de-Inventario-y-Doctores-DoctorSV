@@ -19,6 +19,7 @@ export default function Header({
   onLogout,
   onOpenAuthPortal,
   onOpenShiftConfig,
+  onOpenSupervisorConfig,
   onOpenLiveReport,
   onOpenGoogleSheetsConfig,
 }) {
@@ -172,6 +173,18 @@ export default function Header({
             >
               <SheetIcon size={14} className="text-white" />
               <span>Google Sheets</span>
+            </button>
+          )}
+
+          {/* Configuración de Lotes / Supervisores (Exclusivo Master) */}
+          {isMasterRole && onOpenSupervisorConfig && (
+            <button
+              onClick={onOpenSupervisorConfig}
+              className="hidden md:flex items-center gap-1.5 rounded-xl border border-sky-300 bg-sky-50/80 hover:bg-sky-100/80 px-3 py-1.5 text-[12px] font-bold text-sky-800 transition shadow-2xs active:scale-95"
+              title="Configurar y editar los rangos de puestos y lotes asignados a cada supervisor"
+            >
+              <Shield size={13} className="text-sky-600" />
+              <span>Lotes Supervisores</span>
             </button>
           )}
 

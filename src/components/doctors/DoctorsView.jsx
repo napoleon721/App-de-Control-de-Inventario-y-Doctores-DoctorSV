@@ -7,7 +7,15 @@ import AddStaffModal from "./AddStaffModal";
 import { HORARIOS, DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import { isSameDoctor } from "../../utils/safeHelpers";
 
-export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, customStaff = [], onAddStaff, onRemoveStaff }) {
+export default function DoctorsView({
+  spaces,
+  onAssignDoctor,
+  onUnassignDoctor,
+  customStaff = [],
+  onAddStaff,
+  onRemoveStaff,
+  supervisores = SUPERVISORES_OFICIALES,
+}) {
   const [filterCategory, setFilterCategory] = useState("TODOS");
   const [filterShift, setFilterShift] = useState("TODOS");
   const [searchDoctor, setSearchDoctor] = useState("");
@@ -28,7 +36,7 @@ export default function DoctorsView({ spaces, onAssignDoctor, onUnassignDoctor, 
     const addedNames = new Set();
 
     // 1. First add all official supervisors with their assigned station
-    SUPERVISORES_OFICIALES.forEach((sup, idx) => {
+    (supervisores || SUPERVISORES_OFICIALES).forEach((sup, idx) => {
       list.push({
         id: `SUP-${idx + 1}`,
         nombre: sup.nombre,

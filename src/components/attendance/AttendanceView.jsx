@@ -20,20 +20,25 @@ export default function AttendanceView({
   rosterBySupervisor: propRosters = null,
   onSaveRoster = null,
   horarios = HORARIOS,
+  supervisores = SUPERVISORES_OFICIALES,
+  onOpenSupervisorConfig = null,
+  currentUser = null,
 }) {
+  const isMaster = currentUser?.role === "MASTER";
+
   const [selectedSupId, setSelectedSupId] = useState(
-    initialSupId && SUPERVISORES_OFICIALES.find((s) => s.id === initialSupId)
+    initialSupId && supervisores.find((s) => s.id === initialSupId)
       ? initialSupId
-      : SUPERVISORES_OFICIALES[0].id
+      : (supervisores[0]?.id || "sup-1")
   );
 
   useEffect(() => {
-    if (initialSupId && SUPERVISORES_OFICIALES.some((s) => s.id === initialSupId)) {
+    if (initialSupId && supervisores.some((s) => s.id === initialSupId)) {
       setSelectedSupId(initialSupId);
     }
-  }, [initialSupId]);
+  }, [initialSupId, supervisores]);
 
-  const [autoSelected] = useState(!!initialSupId && SUPERVISORES_OFICIALES.some((s) => s.id === initialSupId));
+  const [autoSelected] = useState(!!initialSupId && supervisores.some((s) => s.id === initialSupId));
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("TODOS");
   const [filterHorario, setFilterHorario] = useState("TODOS");
@@ -54,8 +59,8 @@ export default function AttendanceView({
     : localRosters;
 
   const currentSupervisor = useMemo(() => {
-    return SUPERVISORES_OFICIALES.find((s) => s.id === selectedSupId) || SUPERVISORES_OFICIALES[0];
-  }, [selectedSupId]);
+    return supervisores.find((s) => s.id === selectedSupId) || supervisores[0] || SUPERVISORES_OFICIALES[0];
+  }, [selectedSupId, supervisores]);
 
   // Lista de nombres de médicos asignados al supervisor actual
   const currentRosterNames = useMemo(() => {
@@ -378,9 +383,9 @@ export default function AttendanceView({
               onChange={(e) => setSelectedSupId(e.target.value)}
               className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-[13px] font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs"
             >
-              {SUPERVISORES_OFICIALES.map((s) => (
+              {supervisores.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.nombre} · Puesto #{s.puesto} ({s.totalPuestos} médicos)
+                  {s.nombre} · Puesto #{s.puesto} ({s.totalPuestos || (s.bloqueFin - s.bloqueInicio + 1)} médicos)
                 </option>
               ))}
             </select>
@@ -430,9 +435,22 @@ export default function AttendanceView({
           </div>
 
           <div className="border-l border-slate-200 pl-3">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-              Lote Asignado por Central
-            </span>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Lote Asignado por Central
+              </span>
+              {isMaster && onOpenSupervisorConfig && (
+                <button
+                  type="button"
+                  onClick={onOpenSupervisorConfig}
+                  className="text-[10.5px] font-bold text-[#0048B5] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-lg border border-blue-200 transition-colors flex items-center gap-1"
+                  title="Cambiar rango de ubicación y puestos de este supervisor"
+                >
+                  <Settings2 size={11} />
+                  <span>Editar Rango</span>
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-[#0048B5] bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200">
               <MapPin size={14} /> Puestos #{currentSupervisor.bloqueInicio} al #{currentSupervisor.bloqueFin}
             </div>
