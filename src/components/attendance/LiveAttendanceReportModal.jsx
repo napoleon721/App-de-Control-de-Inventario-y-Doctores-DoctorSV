@@ -1,50 +1,99 @@
 import React, { useMemo, useState } from "react";
 import {
   FileSpreadsheet, Download, Copy, Printer, CheckCircle2, User,
-  Clock, Laptop, Search, Filter, X, Check, FileText, ArrowUpDown
+  Clock, Laptop, Search, Filter, X, Check, FileText, ArrowUpDown, Shield
 } from "lucide-react";
-import { HORARIOS } from "../../constants/tokens";
+import { HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
+import { isSameHorario, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
 export default function LiveAttendanceReportModal({
   spaces,
   historial,
   onClose,
+  horarios = HORARIOS,
+  supervisores = SUPERVISORES_OFICIALES,
+  rosterBySupervisor = {},
 }) {
   const [query, setQuery] = useState("");
   const [filterTurno, setFilterTurno] = useState("TODOS");
+  const [filterSupervisor, setFilterSupervisor] = useState("TODOS");
   const [copied, setCopied] = useState(false);
 
-  // Active occupied stations with doctors
+  // Active occupied stations with doctors and supervisor resolution
   const activeAssignments = useMemo(() => {
     return spaces
       .filter((s) => s.doctor)
-      .map((s) => ({
-        puesto: s.id,
-        doctor: s.doctor,
-        horario: s.horario || "Turno Activo",
-        marca: s.marca || "PC",
-        modelo: s.modelo || "OptiPlex 3080",
-        activoPc: s.activoPc || `PC-${s.id}`,
-        horaIngreso: s.ultimoMovimiento || "07:00 AM",
-        categoria: s.categoria || "Médico",
-      }));
-  }, [spaces]);
+      .map((s) => {
+        const supInfo = getDoctorSupervisorInfo({
+          docName: s.doctor,
+          rosters: rosterBySupervisor,
+          supervisores,
+          spaces,
+          filterHorario: s.horario,
+        });
 
-  // Count per franja (all HORARIOS, even if 0)
+        const supervisorNombre = s.supervisorNombre || supInfo?.supervisorNombre || "Sin Asignar";
+        const supervisorId = s.supervisorId || supInfo?.supervisorId || "";
+        const loteInfo = supInfo?.supervisor?.bloqueInicio
+          ? `#${supInfo.supervisor.bloqueInicio}-#${supInfo.supervisor.bloqueFin}`
+          : "";
+
+        return {
+          puesto: s.id,
+          doctor: s.doctor,
+          horario: s.horario || "Turno Activo",
+          marca: s.marca || "PC",
+          modelo: s.modelo || "OptiPlex 3080",
+          activoPc: s.activoPc || `PC-${s.id}`,
+          horaIngreso: s.ultimoMovimiento || "07:00 AM",
+          categoria: s.categoria || "Médico",
+          supervisorId,
+          supervisorNombre,
+          loteInfo,
+        };
+      });
+  }, [spaces, supervisores, rosterBySupervisor]);
+
+  // Count per franja (all horarios, even if 0)
   const countPerFranja = useMemo(() => {
     const map = {};
-    HORARIOS.forEach((h) => { map[h] = 0; });
+    const allShifts = [...(horarios || HORARIOS)];
+    allShifts.forEach((h) => { map[h] = 0; });
     activeAssignments.forEach((a) => {
-      if (map[a.horario] !== undefined) map[a.horario]++;
-      else map[a.horario] = (map[a.horario] || 0) + 1;
+      const matchKey = Object.keys(map).find((k) => isSameHorario(k, a.horario));
+      if (matchKey) {
+        map[matchKey]++;
+      } else {
+        map[a.horario] = 1;
+      }
     });
     return map;
-  }, [activeAssignments]);
+  }, [activeAssignments, horarios]);
+
+  // Count per supervisor
+  const countPerSupervisor = useMemo(() => {
+    const map = {};
+    (supervisores || SUPERVISORES_OFICIALES).forEach((sup) => {
+      map[sup.id] = 0;
+    });
+    activeAssignments.forEach((a) => {
+      if (a.supervisorId && map[a.supervisorId] !== undefined) {
+        map[a.supervisorId]++;
+      }
+    });
+    return map;
+  }, [activeAssignments, supervisores]);
 
   // Franjas that have at least 1 active doctor
   const franjasActivas = useMemo(() => {
-    return HORARIOS.filter((h) => (countPerFranja[h] || 0) > 0);
-  }, [countPerFranja]);
+    const list = [...(horarios || HORARIOS)];
+    activeAssignments.forEach((a) => {
+      if (a.horario && !list.some((h) => isSameHorario(h, a.horario))) {
+        list.push(a.horario);
+      }
+    });
+    return list.filter((h) => (countPerFranja[h] || 0) > 0);
+  }, [countPerFranja, horarios, activeAssignments]);
 
   const filteredAssignments = useMemo(() => {
     return activeAssignments.filter((a) => {
@@ -52,18 +101,32 @@ export default function LiveAttendanceReportModal({
         !query.trim() ||
         a.doctor.toLowerCase().includes(query.toLowerCase()) ||
         String(a.puesto).includes(query) ||
-        a.activoPc.toLowerCase().includes(query.toLowerCase());
-      const matchTurno = filterTurno === "TODOS" || a.horario === filterTurno;
-      return matchQuery && matchTurno;
+        a.activoPc.toLowerCase().includes(query.toLowerCase()) ||
+        a.supervisorNombre.toLowerCase().includes(query.toLowerCase());
+      const matchTurno = filterTurno === "TODOS" || isSameHorario(a.horario, filterTurno);
+      const matchSupervisor = filterSupervisor === "TODOS" || a.supervisorId === filterSupervisor;
+      return matchQuery && matchTurno && matchSupervisor;
     });
-  }, [activeAssignments, query, filterTurno]);
+  }, [activeAssignments, query, filterTurno, filterSupervisor]);
 
   // Export to CSV for Excel / Google Sheets
   function handleDownloadCSV() {
-    const headers = ["Puesto", "Médico", "Turno", "Hora Check-In", "Marca", "Activo PC", "Categoría"];
+    const headers = [
+      "Puesto",
+      "Médico",
+      "Supervisor a Cargo",
+      "Lote Supervisor",
+      "Turno",
+      "Hora Check-In",
+      "Marca",
+      "Activo PC",
+      "Categoría",
+    ];
     const rows = filteredAssignments.map((a) => [
       `#${a.puesto}`,
       `"${a.doctor}"`,
+      `"${a.supervisorNombre}"`,
+      `"${a.loteInfo}"`,
       `"${a.horario}"`,
       `"${a.horaIngreso}"`,
       `"${a.marca}"`,
@@ -94,15 +157,21 @@ export default function LiveAttendanceReportModal({
     let text = `🏥 *DOCTORSV — REPORTE DE ASISTENCIA & PUESTOS DE TELEMEDICINA*\n`;
     text += `📅 Fecha: ${dateStr}\n`;
     text += `⏰ Hora de emisión: ${new Date().toLocaleTimeString("es-SV")}\n`;
-    text += `📍 Sede: San Miguel (140 Puestos)\n`;
+    text += `📍 Sede: San Miguel (${spaces?.length || 170} Puestos)\n`;
     text += `--------------------------------------------------\n`;
     text += `👥 Total Médicos en Sesión: ${activeAssignments.length}\n`;
-    text += `🖥️ Puestos Libres Disponibles: ${140 - activeAssignments.length}\n`;
+    text += `🖥️ Puestos Libres Disponibles: ${(spaces?.length || 170) - activeAssignments.length}\n`;
+    text += `--------------------------------------------------\n`;
+    text += `📊 *CLASIFICACIÓN POR SUPERVISOR:*\n`;
+    (supervisores || SUPERVISORES_OFICIALES).forEach((sup) => {
+      const cnt = countPerSupervisor[sup.id] || 0;
+      text += `• ${sup.nombre} (Lote #${sup.bloqueInicio}-#${sup.bloqueFin}): ${cnt} médicos\n`;
+    });
     text += `--------------------------------------------------\n`;
     text += `*DETALLE DE MÉDICOS Y PUESTOS:*\n`;
 
     filteredAssignments.forEach((a, i) => {
-      text += `${i + 1}. *Puesto #${a.puesto}* · ${a.doctor} (${a.horario}) [Check-in: ${a.horaIngreso}]\n`;
+      text += `${i + 1}. *Puesto #${a.puesto}* · ${a.doctor} | Sup: *${a.supervisorNombre}* (${a.horario}) [Check-in: ${a.horaIngreso}]\n`;
     });
 
     navigator.clipboard.writeText(text);
@@ -237,6 +306,50 @@ export default function LiveAttendanceReportModal({
                 </button>
               )}
             </div>
+
+            {/* Filtro por Supervisor a Cargo */}
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
+              <Shield size={13} className="text-indigo-600" />
+              <select
+                value={filterSupervisor}
+                onChange={(e) => setFilterSupervisor(e.target.value)}
+                className="bg-transparent text-[12px] font-semibold text-slate-700 outline-none cursor-pointer max-w-[200px]"
+              >
+                <option value="TODOS">Todos los supervisores ({activeAssignments.length})</option>
+                {(supervisores || SUPERVISORES_OFICIALES).map((sup) => {
+                  const cnt = countPerSupervisor[sup.id] || 0;
+                  return (
+                    <option key={sup.id} value={sup.id}>
+                      {sup.nombre} ({cnt} méd. · Lote #{sup.bloqueInicio}-#{sup.bloqueFin})
+                    </option>
+                  );
+                })}
+              </select>
+              {filterSupervisor !== "TODOS" && (
+                <button
+                  onClick={() => setFilterSupervisor("TODOS")}
+                  className="ml-1 text-slate-400 hover:text-rose-500 font-black text-[13px] leading-none"
+                  title="Limpiar filtro de supervisor"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {/* Limpiar todos los filtros si alguno está activo */}
+            {(query || filterTurno !== "TODOS" || filterSupervisor !== "TODOS") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setFilterTurno("TODOS");
+                  setFilterSupervisor("TODOS");
+                }}
+                className="text-[11px] font-bold text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg border border-rose-200 transition"
+              >
+                Limpiar
+              </button>
+            )}
           </div>
 
           {/* Botones de Exportación */}
@@ -264,42 +377,83 @@ export default function LiveAttendanceReportModal({
           </div>
         </div>
 
-        {/* Pills de Acceso Rápido por Franja Activa */}
-        {franjasActivas.length > 0 && (
-          <div className="px-4 sm:px-6 pb-3 flex flex-wrap gap-2 shrink-0">
+        {/* Pills de Acceso Rápido: Supervisores y Franjas Activas */}
+        <div className="px-4 sm:px-6 pb-3 flex flex-col gap-2 shrink-0">
+          {/* Fila Supervisores */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+              <Shield size={12} className="text-indigo-600" /> Supervisores:
+            </span>
             <button
-              onClick={() => setFilterTurno("TODOS")}
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-1 text-[11px] font-bold border transition-all ${
-                filterTurno === "TODOS"
-                  ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs"
-                  : "bg-slate-50 text-slate-600 border-slate-200 hover:border-[#0095FF] hover:text-[#0048B5]"
+              onClick={() => setFilterSupervisor("TODOS")}
+              className={`flex items-center gap-1 rounded-xl px-2.5 py-1 text-[11px] font-bold border transition-all ${
+                filterSupervisor === "TODOS"
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-400 hover:text-indigo-700"
               }`}
             >
-              Todos · {activeAssignments.length}
+              Todos ({activeAssignments.length})
             </button>
-            {franjasActivas.map((h) => {
-              const cnt = countPerFranja[h] || 0;
-              const isActive = filterTurno === h;
-              // Short label e.g. "07:00" from "07:00 AM – 12:00 PM"
-              const shortLabel = h.split("–")[0].trim();
+            {(supervisores || SUPERVISORES_OFICIALES).map((sup) => {
+              const cnt = countPerSupervisor[sup.id] || 0;
+              const isActive = filterSupervisor === sup.id;
               return (
                 <button
-                  key={h}
-                  onClick={() => setFilterTurno(isActive ? "TODOS" : h)}
-                  title={h}
-                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1 text-[11px] font-bold border transition-all ${
+                  key={sup.id}
+                  onClick={() => setFilterSupervisor(isActive ? "TODOS" : sup.id)}
+                  title={`${sup.nombre} — Lote Puestos #${sup.bloqueInicio} al #${sup.bloqueFin}`}
+                  className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-[11px] font-bold border transition-all ${
                     isActive
-                      ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs"
-                      : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:border-emerald-400"
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                      : "bg-indigo-50/70 text-indigo-900 border-indigo-200/80 hover:border-indigo-400 hover:bg-indigo-100/70"
                   }`}
                 >
-                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-cyan-300" : "bg-emerald-500"}`} />
-                  {shortLabel} · {cnt}
+                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-amber-300" : "bg-indigo-500"}`} />
+                  {sup.nombre.split(" ")[0]} ({cnt})
                 </button>
               );
             })}
           </div>
-        )}
+
+          {/* Fila Franjas Activas */}
+          {franjasActivas.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+                <Clock size={12} className="text-[#0048B5]" /> Franjas:
+              </span>
+              <button
+                onClick={() => setFilterTurno("TODOS")}
+                className={`flex items-center gap-1 rounded-xl px-2.5 py-1 text-[11px] font-bold border transition-all ${
+                  filterTurno === "TODOS"
+                    ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:border-[#0095FF] hover:text-[#0048B5]"
+                }`}
+              >
+                Todas ({activeAssignments.length})
+              </button>
+              {franjasActivas.map((h) => {
+                const cnt = countPerFranja[h] || 0;
+                const isActive = filterTurno === h;
+                const shortLabel = h.split("–")[0].trim();
+                return (
+                  <button
+                    key={h}
+                    onClick={() => setFilterTurno(isActive ? "TODOS" : h)}
+                    title={h}
+                    className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-[11px] font-bold border transition-all ${
+                      isActive
+                        ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs"
+                        : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:border-emerald-400"
+                    }`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-cyan-300" : "bg-emerald-500"}`} />
+                    {shortLabel} · {cnt}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Tabla de Médicos Conectados en Tiempo Real */}
         <div className="p-4 sm:p-6 pt-2 overflow-y-auto flex-1">
@@ -309,6 +463,7 @@ export default function LiveAttendanceReportModal({
                 <tr className="bg-slate-50/90 text-slate-500 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
                   <th className="px-4 py-3">Puesto</th>
                   <th className="px-4 py-3">Médico en Turno</th>
+                  <th className="px-4 py-3">Supervisor a Cargo</th>
                   <th className="px-4 py-3">Franja / Turno</th>
                   <th className="px-4 py-3">Hora Check-In</th>
                   <th className="px-4 py-3">Dispositivo PC</th>
@@ -329,6 +484,19 @@ export default function LiveAttendanceReportModal({
                           <User size={12} />
                         </span>
                         <span>{a.doctor}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-indigo-900 text-[12px] flex items-center gap-1">
+                          <Shield size={12} className="text-indigo-600 shrink-0" />
+                          {a.supervisorNombre}
+                        </span>
+                        {a.loteInfo && (
+                          <span className="text-[10.5px] text-indigo-600 font-mono-data">
+                            Lote oficial {a.loteInfo}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-600 font-medium">
@@ -354,7 +522,7 @@ export default function LiveAttendanceReportModal({
 
                 {filteredAssignments.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-400 italic">
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-400 italic">
                       No hay médicos registrados en este momento con los filtros seleccionados.
                     </td>
                   </tr>

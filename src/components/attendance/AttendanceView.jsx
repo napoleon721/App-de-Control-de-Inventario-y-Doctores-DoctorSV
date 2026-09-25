@@ -1,28 +1,34 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
-  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX
+  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import SupervisorRosterModal from "./SupervisorRosterModal";
-import { isSameDoctor, isSameHorario } from "../../utils/safeHelpers";
+import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
 export default function AttendanceView({
   spaces,
   onAssignDoctor,
+  onAssignBatch = null,
   onUnassignDoctor,
   onOpenCheckIn,
   onOpenLiveReport,
   initialSupId = null,
   onReleaseByHorario,
+  onReleaseLote = null,
   rosterBySupervisor: propRosters = null,
   onSaveRoster = null,
   horarios = HORARIOS,
   supervisores = SUPERVISORES_OFICIALES,
   onOpenSupervisorConfig = null,
   currentUser = null,
+  attendanceRecords: propAttendanceRecords = null,
+  onSetAttendance: propOnSetAttendance = null,
+  onUpdateSupervisorFranja = null,
+  onUpdateSupervisorOfficialShift = null,
 }) {
   const isMaster = currentUser?.role === "MASTER";
 
@@ -38,11 +44,33 @@ export default function AttendanceView({
     }
   }, [initialSupId, supervisores]);
 
-  const [autoSelected] = useState(!!initialSupId && supervisores.some((s) => s.id === initialSupId));
+  const currentSupervisor = useMemo(() => {
+    return supervisores.find((s) => s.id === selectedSupId) || supervisores[0] || SUPERVISORES_OFICIALES[0];
+  }, [selectedSupId, supervisores]);
+
+  const [autoSelected] = useState(currentUser?.role === "DOCTOR" && !!initialSupId && supervisores.some((s) => s.id === initialSupId));
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("TODOS");
-  const [filterHorario, setFilterHorario] = useState("TODOS");
+  const [filterHorario, setFilterHorario] = useState(
+    () => currentSupervisor?.activeFranja || "TODOS"
+  );
   const [rosterModalOpen, setRosterModalOpen] = useState(false);
+
+  // Sincronizar filterHorario cuando cambia el supervisor o cuando se actualiza su franja activa
+  useEffect(() => {
+    if (currentSupervisor?.activeFranja) {
+      setFilterHorario(currentSupervisor.activeFranja);
+    } else {
+      setFilterHorario("TODOS");
+    }
+  }, [currentSupervisor?.id, currentSupervisor?.activeFranja]);
+
+  function handleFilterHorarioChange(newFranja) {
+    setFilterHorario(newFranja);
+    if (onUpdateSupervisorFranja && currentSupervisor) {
+      onUpdateSupervisorFranja(currentSupervisor.id, newFranja !== "TODOS" ? newFranja : null);
+    }
+  }
 
   // Nóminas configuradas por supervisor (usar prop si viene de App, o fallback a localStorage)
   const [localRosters, setLocalRosters] = useState(() => {
@@ -58,57 +86,6 @@ export default function AttendanceView({
     ? propRosters
     : localRosters;
 
-  const currentSupervisor = useMemo(() => {
-    return supervisores.find((s) => s.id === selectedSupId) || supervisores[0] || SUPERVISORES_OFICIALES[0];
-  }, [selectedSupId, supervisores]);
-
-  // Lista de nombres de médicos asignados al supervisor actual
-  const currentRosterNames = useMemo(() => {
-    if (activeRosters[currentSupervisor.id] && Array.isArray(activeRosters[currentSupervisor.id]) && activeRosters[currentSupervisor.id].length > 0) {
-      return activeRosters[currentSupervisor.id];
-    }
-    // Si no se ha personalizado, pre-cargar según afinidad de grupo oficial de la hoja
-    let defaultList = [];
-    if (currentSupervisor.id === "sup-1" || currentSupervisor.id === "sup-3") {
-      defaultList = DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 1").map((d) => d.nombre);
-    } else if (currentSupervisor.id === "sup-2" || currentSupervisor.id === "sup-4") {
-      defaultList = DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 2").map((d) => d.nombre);
-    }
-    // Completar hasta la capacidad del lote (ej. 40)
-    const needed = currentSupervisor.totalPuestos || 40;
-    if (defaultList.length < needed) {
-      const remainder = DOCTORES_EXCEL.filter((d) => !defaultList.includes(d.nombre))
-        .slice(0, needed - defaultList.length)
-        .map((d) => d.nombre);
-      defaultList = [...defaultList, ...remainder];
-    }
-    return defaultList.slice(0, needed);
-  }, [activeRosters, currentSupervisor]);
-
-  function handleSaveSupervisorRoster(newNames) {
-    setLocalRosters((prev) => {
-      const next = { ...prev, [currentSupervisor.id]: newNames };
-      try {
-        localStorage.setItem("DOCTORSV_SUPERVISOR_ROSTERS_V2", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-    if (onSaveRoster) {
-      onSaveRoster(currentSupervisor.id, newNames);
-    }
-  }
-
-  // Attendance state by doctor name: { [doctorName]: "PRESENTE" | "AUSENTE" | "JUSTIFICADO" }
-  const [attendanceRecords, setAttendanceRecords] = useState(() => {
-    const map = {};
-    (spaces || []).forEach((s) => {
-      if (s.doctor) {
-        map[s.doctor] = "PRESENTE";
-      }
-    });
-    return map;
-  });
-
   // Espacios del lote del supervisor en el mapa (comparación numérica segura)
   const supervisorSpaces = useMemo(() => {
     return (spaces || []).filter(
@@ -116,11 +93,88 @@ export default function AttendanceView({
     );
   }, [spaces, currentSupervisor]);
 
-  // Mapas de búsqueda O(1) para eliminar los bucles lentos de 20,000+ iteraciones que causaban congelamientos
+  // Lista de nombres de médicos asignados al supervisor actual
+  const currentRosterNames = useMemo(() => {
+    // 1. Revisar si hay un roster guardado específicamente para este supervisor en esta franja
+    const franjaKey = filterHorario && filterHorario !== "TODOS" ? `${currentSupervisor.id}__${filterHorario}` : null;
+    if (franjaKey && activeRosters[franjaKey] && Array.isArray(activeRosters[franjaKey]) && activeRosters[franjaKey].length > 0) {
+      return activeRosters[franjaKey];
+    }
+    // 2. Si el supervisor tiene un roster general guardado, usarlo tal cual
+    if (activeRosters[currentSupervisor.id] && Array.isArray(activeRosters[currentSupervisor.id]) && activeRosters[currentSupervisor.id].length > 0) {
+      return activeRosters[currentSupervisor.id];
+    }
+    // 3. Médicos físicamente sentados en este lote
+    const docsInMyLote = supervisorSpaces.filter((s) => s.doctor).map((s) => s.doctor);
+    if (docsInMyLote.length > 0) {
+      return docsInMyLote;
+    }
+    // 4. Pre-carga oficial solo si coincide con el turno oficial de dicho supervisor
+    if (currentSupervisor.id === "sup-1" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "06:00 AM - 02:00 PM"))) {
+      return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 1").slice(0, currentSupervisor.totalPuestos || 40).map((d) => d.nombre);
+    } else if (currentSupervisor.id === "sup-2" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "02:00 PM - 10:00 PM"))) {
+      return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 2").slice(0, currentSupervisor.totalPuestos || 34).map((d) => d.nombre);
+    }
+    return [];
+  }, [activeRosters, currentSupervisor, filterHorario, supervisorSpaces]);
+
+  function handleSaveSupervisorRoster(newNames, franja = null, transferredDocs = []) {
+    const franjaTarget = franja || (filterHorario !== "TODOS" ? filterHorario : null);
+    setLocalRosters((prev) => {
+      const next = { ...prev, [currentSupervisor.id]: newNames };
+      if (franjaTarget) {
+        next[`${currentSupervisor.id}__${franjaTarget}`] = newNames;
+      }
+      try {
+        localStorage.setItem("DOCTORSV_SUPERVISOR_ROSTERS_V2", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    if (onSaveRoster) {
+      onSaveRoster(currentSupervisor.id, newNames, franjaTarget, transferredDocs);
+    }
+  }
+
+  // Estados de Asistencia (conectados en tiempo real con Firestore y localStorage)
+  const [localAttendance, setLocalAttendance] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_ATTENDANCE_V1");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const effectiveAttendance = propAttendanceRecords || localAttendance;
+  function handleSetAttendance(docName, status) {
+    if (propOnSetAttendance) {
+      propOnSetAttendance(docName, status);
+    } else {
+      setLocalAttendance((prev) => {
+        const next = { ...prev, [docName]: status };
+        try {
+          localStorage.setItem("DOCTORSV_ATTENDANCE_V1", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+  }
+
+  // Conteo de puestos ocupados en el lote (excluye estaciones reservadas de supervisores 135-139)
+  const ocupadosEnMiLote = useMemo(() => {
+    const isSupStation = (sid) => [135, 136, 137, 138, 139].includes(Number(sid));
+    return supervisorSpaces.filter((s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSupStation(s.id)).length;
+  }, [supervisorSpaces]);
+
+  // Mapas de búsqueda O(1) de alta velocidad (sin bucles anidados lentos)
   const doctorsMap = useMemo(() => {
     const map = new Map();
     DOCTORES_EXCEL.forEach((d) => {
-      if (d.nombre) map.set(d.nombre.toLowerCase().trim(), d);
+      if (d.nombre) {
+        map.set(d.nombre.toLowerCase().trim(), d);
+        const norm = normalizeDocName(d.nombre);
+        if (norm) map.set(norm, d);
+      }
     });
     return map;
   }, []);
@@ -130,22 +184,65 @@ export default function AttendanceView({
     (spaces || []).forEach((s) => {
       if (s.doctor) {
         map.set(String(s.doctor).toLowerCase().trim(), s);
+        const norm = normalizeDocName(s.doctor);
+        if (norm) map.set(norm, s);
       }
     });
     return map;
   }, [spaces]);
 
-  // Lista consolidada de médicos para el lote del supervisor
+  const attendanceMap = useMemo(() => {
+    const map = new Map();
+    if (!effectiveAttendance) return map;
+    for (const [key, status] of Object.entries(effectiveAttendance)) {
+      if (!key) continue;
+      map.set(key, status);
+      map.set(String(key).toLowerCase().trim(), status);
+      const norm = normalizeDocName(key);
+      if (norm) map.set(norm, status);
+    }
+    return map;
+  }, [effectiveAttendance]);
+
+  // Lista consolidada de médicos para el lote del supervisor (Cálculo instantáneo en <1ms)
   const batchDoctors = useMemo(() => {
     const list = [];
     const addedNames = new Set();
 
+    function getStatusForDoctor(docName) {
+      if (!docName) return null;
+      const clean = String(docName).toLowerCase().trim();
+      const direct = attendanceMap.get(clean) || attendanceMap.get(docName);
+      if (direct) return direct;
+      const norm = normalizeDocName(docName);
+      return attendanceMap.get(norm) || null;
+    }
+
+    function getSpaceForDoctor(docName) {
+      if (!docName) return null;
+      const clean = String(docName).toLowerCase().trim();
+      const direct = spacesByDoctor.get(clean) || spacesByDoctor.get(docName);
+      if (direct) return direct;
+      const norm = normalizeDocName(docName);
+      return spacesByDoctor.get(norm) || null;
+    }
+
+    function getDocObj(docName) {
+      if (!docName) return null;
+      const clean = String(docName).toLowerCase().trim();
+      const direct = doctorsMap.get(clean) || doctorsMap.get(docName);
+      if (direct) return direct;
+      const norm = normalizeDocName(docName);
+      return doctorsMap.get(norm) || null;
+    }
+
     // 1. Médicos configurados en la nómina del turno
     currentRosterNames.forEach((name) => {
       const cleanName = String(name || "").toLowerCase().trim();
+      const normName = normalizeDocName(name);
       if (!cleanName) return;
 
-      const docObj = doctorsMap.get(cleanName) || {
+      const docObj = getDocObj(name) || {
         id: "EXT",
         nombre: name,
         tipo: "Planilla",
@@ -153,13 +250,35 @@ export default function AttendanceView({
         jvpm: "",
       };
 
-      // Buscar si algún puesto tiene a este médico asignado (coincidencia rápida o inteligente con isSameDoctor)
-      const spaceAssigned = spacesByDoctor.get(cleanName) ||
-        (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, name));
+      // Buscar si algún puesto tiene a este médico asignado O(1)
+      const spaceAssigned = getSpaceForDoctor(name) || (docObj.nombre ? getSpaceForDoctor(docObj.nombre) : null);
 
-      const status = spaceAssigned
-        ? "PRESENTE"
-        : (attendanceRecords[name] || "PENDIENTE");
+      // Estado explícito marcado por el supervisor O(1)
+      const explicitStatus = getStatusForDoctor(name) || (docObj.nombre ? getStatusForDoctor(docObj.nombre) : null);
+
+      let status = "PENDIENTE";
+      let assignedSpaceId = spaceAssigned ? Number(spaceAssigned.id) : null;
+      const isSpaceInThisLote = assignedSpaceId &&
+        assignedSpaceId >= Number(currentSupervisor.bloqueInicio) &&
+        assignedSpaceId <= Number(currentSupervisor.bloqueFin);
+
+      if (explicitStatus === "AUSENTE") {
+        status = "AUSENTE";
+        assignedSpaceId = null;
+      } else if (explicitStatus === "FINALIZADO") {
+        status = "FINALIZADO";
+        assignedSpaceId = null;
+      } else if (explicitStatus === "JUSTIFICADO") {
+        status = "JUSTIFICADO";
+        assignedSpaceId = null;
+      } else if (explicitStatus === "PRESENTE") {
+        status = "PRESENTE";
+      } else if (spaceAssigned) {
+        status = "PRESENTE";
+      }
+
+      const doctorShift = spaceAssigned?.horario ||
+        (filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario));
 
       list.push({
         id: docObj.id,
@@ -167,36 +286,115 @@ export default function AttendanceView({
         correo: docObj.correo || "",
         jvpm: docObj.jvpm || "",
         tipo: docObj.tipo || "Planilla",
-        horario: currentSupervisor.horario,
+        horario: doctorShift,
         status,
-        espacio: spaceAssigned ? Number(spaceAssigned.id) : null,
+        espacio: assignedSpaceId,
+        enMiLote: isSpaceInThisLote,
       });
       addedNames.add(cleanName);
+      if (normName) addedNames.add(normName);
+      if (docObj.nombre) {
+        addedNames.add(String(docObj.nombre).toLowerCase().trim());
+        const normObj = normalizeDocName(docObj.nombre);
+        if (normObj) addedNames.add(normObj);
+      }
     });
 
-    // 2. Incluir también cualquier médico que se haya sentado físicamente en este lote (aunque no estuviera pre-agendado)
+    // 2. Incluir cualquier médico sentado físicamente en este lote O(1)
     (supervisorSpaces || []).forEach((s) => {
       if (s.doctor) {
-        const alreadyInList = list.some((item) => isSameDoctor(item.nombre, s.doctor));
-        if (!alreadyInList) {
-          const docObj = DOCTORES_EXCEL.find((d) => isSameDoctor(d.nombre, s.doctor));
+        const cleanDocName = String(s.doctor).toLowerCase().trim();
+        const normDocName = normalizeDocName(s.doctor);
+        if (!addedNames.has(cleanDocName) && !addedNames.has(normDocName)) {
+          const docObj = getDocObj(s.doctor);
+          const explicitStatus = getStatusForDoctor(s.doctor);
+
+          let status = "PRESENTE";
+          let assignedSpaceId = Number(s.id);
+          if (explicitStatus === "AUSENTE") {
+            status = "AUSENTE";
+            assignedSpaceId = null;
+          } else if (explicitStatus === "FINALIZADO") {
+            status = "FINALIZADO";
+            assignedSpaceId = null;
+          } else if (explicitStatus === "JUSTIFICADO") {
+            status = "JUSTIFICADO";
+            assignedSpaceId = null;
+          }
+
           list.push({
             id: docObj?.id || "EXT",
             nombre: s.doctor,
             correo: docObj?.correo || "",
             jvpm: docObj?.jvpm || "",
             tipo: docObj?.tipo || "Planilla",
-            horario: s.horario || currentSupervisor.horario,
-            status: "PRESENTE",
-            espacio: Number(s.id),
-            externoAlLote: true,
+            horario: s.horario || (filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario),
+            status,
+            espacio: assignedSpaceId,
+            enMiLote: true,
+            externoAlLote: false,
           });
+          addedNames.add(cleanDocName);
+          if (normDocName) addedNames.add(normDocName);
+          if (docObj?.nombre) {
+            addedNames.add(String(docObj.nombre).toLowerCase().trim());
+            const normObj = normalizeDocName(docObj.nombre);
+            if (normObj) addedNames.add(normObj);
+          }
         }
       }
     });
 
+    // 3. Incluir médicos con registro de asistencia que están FÍSICAMENTE en este lote del supervisor
+    Object.keys(effectiveAttendance || {}).forEach((name) => {
+      const cleanName = String(name || "").toLowerCase().trim();
+      const normName = normalizeDocName(name);
+      if (!cleanName || addedNames.has(cleanName) || addedNames.has(normName)) return;
+
+      const recordStatus = effectiveAttendance[name];
+      if (!recordStatus) return;
+
+      const spaceAssigned = getSpaceForDoctor(name);
+
+      // Solo incluir si el médico tiene un cubículo asignado EN ESTE lote
+      if (!spaceAssigned) return;
+      const isSpaceInThisLote = Number(spaceAssigned.id) >= Number(currentSupervisor.bloqueInicio) &&
+                                Number(spaceAssigned.id) <= Number(currentSupervisor.bloqueFin);
+      if (!isSpaceInThisLote) return;
+
+      const docObj = getDocObj(name);
+
+      let status = recordStatus;
+      let assignedSpaceId = Number(spaceAssigned.id);
+      if (recordStatus === "AUSENTE" || recordStatus === "FINALIZADO" || recordStatus === "JUSTIFICADO") {
+        assignedSpaceId = null;
+      } else if (spaceAssigned) {
+        status = "PRESENTE";
+      }
+
+      list.push({
+        id: docObj?.id || "EXT",
+        nombre: docObj?.nombre || name,
+        correo: docObj?.correo || "",
+        jvpm: docObj?.jvpm || "",
+        tipo: docObj?.tipo || "Planilla",
+        horario: spaceAssigned.horario || (filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario),
+        status,
+        espacio: assignedSpaceId,
+        enMiLote: true,
+        externoAlLote: false,
+      });
+      addedNames.add(cleanName);
+      if (normName) addedNames.add(normName);
+      if (docObj?.nombre) {
+        addedNames.add(String(docObj.nombre).toLowerCase().trim());
+        const normObj = normalizeDocName(docObj.nombre);
+        if (normObj) addedNames.add(normObj);
+      }
+    });
+
     return list;
-  }, [currentRosterNames, doctorsMap, spacesByDoctor, spaces, attendanceRecords, currentSupervisor, supervisorSpaces]);
+  }, [currentRosterNames, doctorsMap, spacesByDoctor, attendanceMap, currentSupervisor, supervisorSpaces, filterHorario]);
 
   // Médicos filtrados
   const filteredBatch = useMemo(() => {
@@ -208,9 +406,14 @@ export default function AttendanceView({
         (d.espacio && String(d.espacio).includes(searchQuery));
 
       let matchesStatus = true;
-      if (filterStatus === "TODOS") matchesStatus = true;
-      else if (filterStatus === "SIN_PUESTO") matchesStatus = d.espacio === null;
-      else matchesStatus = d.status === filterStatus;
+      if (filterStatus === "TODOS") {
+        matchesStatus = true;
+      } else if (filterStatus === "SIN_PUESTO") {
+        // Médicos pendientes o presentes que todavía no tienen cubículo asignado en este lote (NUNCA ausentes)
+        matchesStatus = (d.status === "PENDIENTE" && (!d.espacio || !d.enMiLote)) || (d.status === "PRESENTE" && (!d.espacio || !d.enMiLote));
+      } else {
+        matchesStatus = d.status === filterStatus;
+      }
 
       const matchesHorario =
         filterHorario === "TODOS" ||
@@ -219,41 +422,108 @@ export default function AttendanceView({
     });
   }, [batchDoctors, searchQuery, filterStatus, filterHorario]);
 
-  // Metrics
+  // Búsqueda inteligente de médicos en otras nóminas o en el padrón para alertar al supervisor
+  const externalSearchResults = useMemo(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) return [];
+    const q = searchQuery.toLowerCase().trim();
+    const batchNames = new Set(batchDoctors.map((d) => d.nombre.toLowerCase().trim()));
+
+    return DOCTORES_EXCEL.filter((d) => {
+      if (batchNames.has(d.nombre.toLowerCase().trim())) return false;
+      return (
+        d.nombre.toLowerCase().includes(q) ||
+        (d.correo && d.correo.toLowerCase().includes(q)) ||
+        (d.jvpm && d.jvpm.toLowerCase().includes(q)) ||
+        String(d.id).includes(q)
+      );
+    })
+      .slice(0, 4)
+      .map((d) => {
+        const supInfo = getDoctorSupervisorInfo({
+          docName: d.nombre,
+          rosters: activeRosters,
+          supervisores,
+          spaces,
+          filterHorario: filterHorario !== "TODOS" ? filterHorario : null,
+        });
+        return { ...d, supInfo };
+      });
+  }, [searchQuery, batchDoctors, activeRosters, supervisores, spaces, filterHorario]);
+
+  // Metrics reales y consistentes
   const totalProgramados = batchDoctors.length;
   const totalPresentes = batchDoctors.filter((d) => d.status === "PRESENTE").length;
-  const totalConPuesto = batchDoctors.filter((d) => d.espacio !== null).length;
-  const totalSinPuesto = batchDoctors.filter((d) => d.espacio === null).length;
+  const totalFinalizados = batchDoctors.filter((d) => d.status === "FINALIZADO").length;
+  const totalConPuesto = batchDoctors.filter((d) => d.espacio !== null && d.status === "PRESENTE" && d.enMiLote).length;
+  const totalSinPuesto = batchDoctors.filter(
+    (d) => (d.status === "PENDIENTE" && (!d.espacio || !d.enMiLote)) || (d.status === "PRESENTE" && (!d.espacio || !d.enMiLote))
+  ).length;
   const totalAusentes = batchDoctors.filter((d) => d.status === "AUSENTE").length;
   const totalJustificados = batchDoctors.filter((d) => d.status === "JUSTIFICADO").length;
 
-  const asistenciaPct = totalProgramados > 0 ? Math.round((totalPresentes / totalProgramados) * 100) : 0;
+  const totalAsistieron = totalPresentes + totalFinalizados;
+  const asistenciaPct = totalProgramados > 0 ? Math.round((totalAsistieron / totalProgramados) * 100) : 0;
   const inasistenciaPct = totalProgramados > 0 ? Math.round((totalAusentes / totalProgramados) * 100) : 0;
-  const puestosLibresLote = supervisorSpaces.filter((s) => s.estado === "DISPONIBLE" && !s.doctor).length;
+  const puestosLibresLote = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO").length;
 
-  function handleSetAttendance(docName, status) {
-    setAttendanceRecords((prev) => ({
-      ...prev,
-      [docName]: status,
-    }));
-  }
-
-  // Marcar con 1 clic a todos los médicos que no se sentaron como Ausentes
+  // Marcar con 1 clic a todos los médicos que no se sentaron como Ausentes (excluye a los ya ausentes)
   function handleMarkUnseatedAsAbsent() {
-    const unseated = batchDoctors.filter((d) => !d.espacio && d.status !== "JUSTIFICADO");
+    const unseated = batchDoctors.filter(
+      (d) => !d.espacio && d.status !== "AUSENTE" && d.status !== "JUSTIFICADO" && d.status !== "FINALIZADO"
+    );
     if (unseated.length === 0) {
-      alert("¡Excelente! Todos los médicos programados ya tienen puesto asignado o justificante.");
+      alert("¡Excelente! Todos los médicos programados ya tienen puesto asignado, justificante o completaron su jornada.");
       return;
     }
-    if (window.confirm(`¿Deseas marcar a los ${unseated.length} médicos que NO tienen puesto como AUSENTES en este turno?`)) {
-      setAttendanceRecords((prev) => {
-        const next = { ...prev };
-        unseated.forEach((d) => {
-          next[d.nombre] = "AUSENTE";
-        });
-        return next;
+    if (window.confirm(`¿Deseas marcar a los ${unseated.length} médico(s) que NO tienen puesto como AUSENTES en este turno?`)) {
+      unseated.forEach((d) => {
+        handleSetAttendance(d.nombre, "AUSENTE");
+        const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
+        if (seatedSpace && onUnassignDoctor) {
+          onUnassignDoctor(d.nombre, Number(seatedSpace.id));
+        }
       });
     }
+  }
+
+  // Estado para el modal de asignación manual de puesto
+  const [manualAssignDoc, setManualAssignDoc] = useState(null);
+  const [targetSpaceId, setTargetSpaceId] = useState("");
+  const [targetHorario, setTargetHorario] = useState("");
+
+  function openManualAssign(doc) {
+    setManualAssignDoc(doc);
+    const freeSpaces = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO");
+    setTargetSpaceId(freeSpaces.length > 0 ? String(freeSpaces[0].id) : "");
+    setTargetHorario(
+      filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario)
+    );
+  }
+
+  function handleConfirmManualAssign(e) {
+    if (e) e.preventDefault();
+    if (!manualAssignDoc || !targetSpaceId) {
+      alert("Por favor selecciona o escribe el número de puesto.");
+      return;
+    }
+    const spaceNum = Number(targetSpaceId);
+    if (isNaN(spaceNum) || spaceNum < 1 || spaceNum > 170) {
+      alert("El número de puesto debe estar entre 1 y 170.");
+      return;
+    }
+
+    const existingSpace = (spaces || []).find((s) => Number(s.id) === spaceNum);
+    if (existingSpace && existingSpace.doctor && !isSameDoctor(existingSpace.doctor, manualAssignDoc.nombre)) {
+      if (!window.confirm(`El puesto #${spaceNum} ya está ocupado por ${existingSpace.doctor}. ¿Deseas reasignarlo a ${manualAssignDoc.nombre}?`)) {
+        return;
+      }
+    }
+
+    const shiftToAssign = targetHorario || (currentSupervisor.activeFranja || currentSupervisor.horario);
+    onAssignDoctor(manualAssignDoc.nombre, spaceNum, shiftToAssign);
+    handleSetAttendance(manualAssignDoc.nombre, "PRESENTE");
+    setManualAssignDoc(null);
+    setTargetSpaceId("");
   }
 
   function handleQuickAssign(docName) {
@@ -284,16 +554,28 @@ export default function AttendanceView({
     }
 
     const countToAssign = Math.min(unseated.length, availableInBatch.length);
-    if (!window.confirm(`¿Deseas asignar automáticamente a ${countToAssign} médicos a los puestos libres de tu lote?`)) {
+    if (!window.confirm(`¿Deseas auto-asignar ${countToAssign} médico(s) a los puestos libres de tu lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin})?`)) {
       return;
     }
 
+    const assignments = [];
     for (let i = 0; i < countToAssign; i++) {
-      const doc = unseated[i];
-      const space = availableInBatch[i];
-      onAssignDoctor(doc.nombre, Number(space.id), currentSupervisor.horario);
-      handleSetAttendance(doc.nombre, "PRESENTE");
+      assignments.push({
+        doctor: unseated[i].nombre,
+        spaceId: Number(availableInBatch[i].id),
+      });
     }
+
+    if (onAssignBatch) {
+      onAssignBatch(assignments, currentSupervisor.horario);
+    } else {
+      for (let i = 0; i < assignments.length; i++) {
+        onAssignDoctor(assignments[i].doctor, assignments[i].spaceId, currentSupervisor.horario);
+        handleSetAttendance(assignments[i].doctor, "PRESENTE");
+      }
+    }
+
+    alert(`✅ ¡Auto-asignación completada!\n\nSe ubicaron ${countToAssign} médicos en sus cubículos asignados (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin}) y se marcaron como PRESENTES.`);
   }
 
   function handleCopyReport() {
@@ -346,7 +628,12 @@ export default function AttendanceView({
           )}
 
           <button
-            onClick={onOpenCheckIn}
+            onClick={() => {
+              const activeTarget = filterHorario !== "TODOS"
+                ? filterHorario
+                : (currentSupervisor?.activeFranja || currentSupervisor?.horario);
+              if (onOpenCheckIn) onOpenCheckIn(activeTarget);
+            }}
             className="flex items-center gap-2 rounded-2xl bg-white text-[#0048B5] px-5 py-2.5 text-[13px] font-extrabold shadow-md hover:bg-slate-50 transition-all hover:scale-105 active:scale-95"
           >
             <CheckCircle2 size={16} />
@@ -398,7 +685,7 @@ export default function AttendanceView({
             </label>
             <select
               value={filterHorario}
-              onChange={(e) => setFilterHorario(e.target.value)}
+              onChange={(e) => handleFilterHorarioChange(e.target.value)}
               className={`rounded-xl border px-3.5 py-2 text-[13px] font-bold outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs transition-all ${
                 filterHorario !== "TODOS"
                   ? "border-[#0048B5] bg-blue-50 text-[#0048B5]"
@@ -444,10 +731,10 @@ export default function AttendanceView({
                   type="button"
                   onClick={onOpenSupervisorConfig}
                   className="text-[10.5px] font-bold text-[#0048B5] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-lg border border-blue-200 transition-colors flex items-center gap-1"
-                  title="Cambiar rango de ubicación y puestos de este supervisor"
+                  title="Configurar puestos, ubicación y turno oficial de este supervisor"
                 >
                   <Settings2 size={11} />
-                  <span>Editar Rango</span>
+                  <span>Editar Lote & Turno</span>
                 </button>
               )}
             </div>
@@ -457,12 +744,44 @@ export default function AttendanceView({
           </div>
 
           <div className="border-l border-slate-200 pl-3">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-              Turno Oficial
-            </span>
-            <div className="flex items-center gap-1.5 font-mono-data text-[12px] font-semibold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl">
-              <Clock size={14} /> {currentSupervisor.horario}
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Turno Oficial
+              </span>
+              {isMaster && (
+                <span className="text-[9.5px] font-bold text-[#0048B5] bg-blue-50 border border-blue-200 rounded px-1.5 py-0.2">
+                  Editable Master
+                </span>
+              )}
             </div>
+            {isMaster ? (
+              <div className="relative">
+                <select
+                  value={currentSupervisor.horario || ""}
+                  onChange={(e) => {
+                    if (onUpdateSupervisorOfficialShift) {
+                      onUpdateSupervisorOfficialShift(currentSupervisor.id, e.target.value);
+                    }
+                  }}
+                  className="appearance-none font-mono-data text-[12px] font-bold text-[#0048B5] bg-blue-50/90 hover:bg-blue-100/90 border border-blue-300 rounded-xl pl-8 pr-7 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0048B5] transition-all shadow-sm"
+                  title="Cambiar turno oficial asignado a este supervisor (Doctor Master)"
+                >
+                  {horarios.map((h) => (
+                    <option key={h} value={h} className="text-slate-800 font-sans">
+                      {h}
+                    </option>
+                  ))}
+                </select>
+                <Clock size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#0048B5] pointer-events-none" />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#0048B5] text-[10px]">
+                  ▼
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 font-mono-data text-[12px] font-semibold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl">
+                <Clock size={14} /> {currentSupervisor.horario}
+              </div>
+            )}
           </div>
         </div>
 
@@ -473,7 +792,7 @@ export default function AttendanceView({
               <Filter size={12} />
               <span>Franja: {filterHorario}</span>
               <button
-                onClick={() => setFilterHorario("TODOS")}
+                onClick={() => handleFilterHorarioChange("TODOS")}
                 className="ml-1 text-slate-400 hover:text-rose-500 font-black text-[13px] leading-none"
                 title="Limpiar filtro de franja"
               >
@@ -482,40 +801,73 @@ export default function AttendanceView({
             </div>
           )}
 
-          {/* Botón Liberar Franja */}
-          {onReleaseByHorario && (() => {
-            const franjaTarget = filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario;
-            const ocupadosEnFranja = spaces.filter((s) => s.doctor && isSameHorario(s.horario, franjaTarget)).length;
-            return ocupadosEnFranja > 0 ? (
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Botón Maestro/Supervisor: Liberar Mi Lote */}
+            {onReleaseLote && ocupadosEnMiLote > 0 && (
               <button
-                onClick={() => {
-                  if (window.confirm(
-                    `¿Liberar los ${ocupadosEnFranja} puesto(s) asignados en la franja "${franjaTarget}"?\n\nEsto es útil si un médico olvidó cerrar sesión o al hacer relevo de turno.`
-                  )) {
-                    onReleaseByHorario(franjaTarget);
-                  }
-                }}
-                className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-2xs transition-all active:scale-95"
-                title={`Liberar todos los puestos de la franja ${franjaTarget}`}
+                type="button"
+                onClick={() => onReleaseLote(currentSupervisor.bloqueInicio, currentSupervisor.bloqueFin, currentSupervisor.nombre)}
+                className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                title={`Liberar todos los ${ocupadosEnMiLote} cubículos ocupados en el lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin})`}
               >
                 <RefreshCw size={13} />
-                <span>Liberar Franja ({ocupadosEnFranja})</span>
+                <span>Liberar Mi Lote ({ocupadosEnMiLote})</span>
               </button>
-            ) : null;
-          })()}
+            )}
 
-          {totalSinPuesto > 0 && puestosLibresLote > 0 && (
+            {/* Botón Liberar Franja */}
+            {onReleaseByHorario && (() => {
+              const franjaTarget = filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario;
+              const isSup = (s) => [135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores";
+              const ocupadosEnFranja = spaces.filter((s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup(s) && isSameHorario(s.horario, franjaTarget)).length;
+              return ocupadosEnFranja > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(
+                      `¿Liberar totalmente los ${ocupadosEnFranja} puesto(s) asignados en la franja "${franjaTarget}"?\n\nEsto dejará los cubículos libres y disponibles para los médicos entrantes.`
+                    )) {
+                      onReleaseByHorario(franjaTarget);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                  title={`Liberar totalmente todos los puestos de la franja ${franjaTarget}`}
+                >
+                  <RefreshCw size={13} />
+                  <span>Liberar Franja ({ocupadosEnFranja})</span>
+                </button>
+              ) : null;
+            })()}
+          </div>
+
+          {totalSinPuesto > 0 && puestosLibresLote > 0 ? (
             <button
               type="button"
               onClick={handleBatchAssignRoster}
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-white shadow-2xs transition-all active:scale-95 hover:brightness-110"
+              className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white shadow-xs transition-all active:scale-95 hover:brightness-110"
               style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
               title="Asigna automáticamente a los médicos faltantes a cubículos libres en tu bloque"
             >
               <Sparkles size={14} />
               <span>⚡ Auto-asignar Lote ({Math.min(totalSinPuesto, puestosLibresLote)})</span>
             </button>
-          )}
+          ) : totalSinPuesto === 0 && totalConPuesto > 0 ? (
+            <div
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs"
+              title="Todos los médicos de este lote ya tienen su cubículo asignado"
+            >
+              <CheckCircle2 size={14} className="text-emerald-600" />
+              <span>✓ Lote Asignado ({totalConPuesto})</span>
+            </div>
+          ) : totalSinPuesto > 0 && puestosLibresLote === 0 ? (
+            <div
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs"
+              title={`No hay puestos libres en el lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin})`}
+            >
+              <AlertCircle size={14} className="text-amber-600" />
+              <span>Lote Lleno ({totalSinPuesto} sin puesto)</span>
+            </div>
+          ) : null}
 
           <button
             onClick={() => setRosterModalOpen(true)}
@@ -608,6 +960,7 @@ export default function AttendanceView({
               >
                 <option value="TODOS">Todos los estados</option>
                 <option value="PRESENTE">Presentes ({totalPresentes})</option>
+                <option value="FINALIZADO">Jornada Finalizada ({totalFinalizados})</option>
                 <option value="SIN_PUESTO">⚠️ Faltantes / Sin Puesto ({totalSinPuesto})</option>
                 <option value="PENDIENTE">Pendientes</option>
                 <option value="AUSENTE">Ausentes ({totalAusentes})</option>
@@ -616,7 +969,7 @@ export default function AttendanceView({
             </div>
           }
         >
-          {/* Pestañas de Filtro Rápido (Todos vs Presentes vs Faltantes) */}
+          {/* Pestañas de Filtro Rápido */}
           <div className="flex items-center gap-1.5 mb-3.5 flex-wrap">
             <button
               type="button"
@@ -640,6 +993,19 @@ export default function AttendanceView({
             >
               Presentes ({totalPresentes})
             </button>
+            {totalFinalizados > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilterStatus("FINALIZADO")}
+                className={`px-3 py-1 rounded-xl text-[11.5px] font-bold transition-all ${
+                  filterStatus === "FINALIZADO"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100"
+                }`}
+              >
+                Finalizados ({totalFinalizados})
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setFilterStatus("SIN_PUESTO")}
@@ -666,6 +1032,68 @@ export default function AttendanceView({
               </button>
             )}
           </div>
+
+          {/* Tarjeta de Búsqueda inteligente: Si el supervisor busca un médico que está con otro supervisor o en el padrón */}
+          {externalSearchResults.length > 0 && (
+            <div className="mb-3.5 p-3 rounded-2xl bg-amber-50/90 border border-amber-200/90 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] font-bold text-amber-900 flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                  Médicos encontrados fuera de tu lote ({externalSearchResults.length}):
+                </span>
+                <span className="text-[10.5px] text-amber-700 font-medium">
+                  Resultados del padrón oficial
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {externalSearchResults.map((extDoc) => {
+                  const otherSupName = extDoc.supInfo?.supervisorNombre;
+                  const isOther = extDoc.supInfo?.supervisorId && extDoc.supInfo.supervisorId !== currentSupervisor.id;
+                  return (
+                    <div
+                      key={extDoc.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-amber-200 shadow-2xs text-[12px]"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="font-bold text-slate-800 truncate">{extDoc.nombre}</p>
+                        <p className="text-[10.5px] text-slate-500 truncate">
+                          {isOther ? (
+                            <span className="text-amber-800 font-semibold">
+                              ⚠️ Con: {otherSupName} {extDoc.supInfo.horario ? `(${extDoc.supInfo.horario})` : ""}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-semibold">✓ Disponible en padrón</span>
+                          )}
+                          {extDoc.supInfo?.spaceId && ` · Puesto #${extDoc.supInfo.spaceId}`}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const conf = isOther
+                            ? window.confirm(
+                                `${extDoc.nombre} está con ${otherSupName}.\n\n¿Deseas transferirlo(a) a tu nómina de este turno?`
+                              )
+                            : true;
+                          if (conf) {
+                            handleSaveSupervisorRoster(
+                              [...currentRosterNames, extDoc.nombre],
+                              filterHorario !== "TODOS" ? filterHorario : null,
+                              isOther ? [extDoc.nombre] : []
+                            );
+                            setSearchQuery("");
+                          }
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-50 text-[#0048B5] hover:bg-blue-100 border border-blue-200 transition shrink-0 cursor-pointer"
+                      >
+                        + Agregar a mi lote
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
             <table className="w-full text-left text-[12.5px]">
@@ -712,8 +1140,27 @@ export default function AttendanceView({
                       </td>
                       <td className="px-3.5 py-3">
                         {doc.espacio ? (
-                          <span className="inline-flex items-center gap-1 font-mono-data text-[12px] font-extrabold text-[#0048B5] bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                          <span
+                            className={`inline-flex items-center gap-1 font-mono-data text-[12px] font-extrabold px-2.5 py-1 rounded-lg border ${
+                              doc.enMiLote
+                                ? "text-[#0048B5] bg-blue-50 border-blue-200"
+                                : "text-amber-800 bg-amber-50 border-amber-300"
+                            }`}
+                          >
                             <Laptop size={12} /> Puesto #{doc.espacio}
+                            {!doc.enMiLote && (
+                              <span className="text-[9.5px] font-medium text-amber-700 ml-1">
+                                (Lote externo)
+                              </span>
+                            )}
+                          </span>
+                        ) : doc.status === "FINALIZADO" ? (
+                          <span className="inline-flex items-center gap-1 text-[11.5px] text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg font-bold border border-indigo-200">
+                            <CheckCircle2 size={12} className="text-indigo-600" /> Jornada Finalizada
+                          </span>
+                        ) : isAbsent ? (
+                          <span className="text-[11.5px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md font-semibold border border-rose-200">
+                            Inasistencia
                           </span>
                         ) : (
                           <span className="text-[11.5px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-semibold border border-amber-200">
@@ -736,7 +1183,9 @@ export default function AttendanceView({
                           <button
                             onClick={() => {
                               handleSetAttendance(doc.nombre, "AUSENTE");
-                              if (doc.espacio) onUnassignDoctor(doc.nombre, doc.espacio);
+                              if (onUnassignDoctor) {
+                                onUnassignDoctor(doc.nombre, doc.espacio);
+                              }
                             }}
                             className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
                               isAbsent
@@ -747,7 +1196,12 @@ export default function AttendanceView({
                             Ausente
                           </button>
                           <button
-                            onClick={() => handleSetAttendance(doc.nombre, "JUSTIFICADO")}
+                            onClick={() => {
+                              handleSetAttendance(doc.nombre, "JUSTIFICADO");
+                              if (onUnassignDoctor) {
+                                onUnassignDoctor(doc.nombre, doc.espacio);
+                              }
+                            }}
                             className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
                               isJustified
                                 ? "bg-amber-600 text-white shadow-xs"
@@ -755,6 +1209,22 @@ export default function AttendanceView({
                             }`}
                           >
                             Justif.
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleSetAttendance(doc.nombre, "FINALIZADO");
+                              if (onUnassignDoctor) {
+                                onUnassignDoctor(doc.nombre, doc.espacio);
+                              }
+                            }}
+                            className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                              doc.status === "FINALIZADO"
+                                ? "bg-indigo-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-indigo-700"
+                            }`}
+                            title="Marcar salida / jornada completada"
+                          >
+                            Salida
                           </button>
                         </div>
                       </td>
@@ -768,8 +1238,9 @@ export default function AttendanceView({
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleQuickAssign(doc.nombre)}
-                            className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-[#0048B5] hover:bg-[#003487] transition-all shadow-2xs"
+                            onClick={() => openManualAssign(doc)}
+                            className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-[#0048B5] hover:bg-[#003487] transition-all shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                            title="Elegir y asignar puesto manualmente"
                           >
                             <span>Asignar Puesto</span>
                             <ArrowRight size={12} />
@@ -779,6 +1250,30 @@ export default function AttendanceView({
                     </tr>
                   );
                 })}
+
+                {filteredBatch.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                      <Users size={32} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-[13px] font-bold text-slate-600">
+                        No hay médicos en tu lista con los filtros aplicados.
+                      </p>
+                      <p className="text-[11.5px] text-slate-400 mt-1">
+                        {filterHorario !== "TODOS"
+                          ? `Puedes configurar la nómina de médicos para la franja ${filterHorario}.`
+                          : "Haz clic en 'Configurar Nómina' para asignar médicos a este lote."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setRosterModalOpen(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-50 text-[#0048B5] border border-blue-200 font-bold text-[12px] hover:bg-blue-100 transition shadow-2xs cursor-pointer"
+                      >
+                        <Settings2 size={13} />
+                        <span>Configurar Nómina de Médicos</span>
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -799,16 +1294,40 @@ export default function AttendanceView({
             <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-[460px] overflow-y-auto pr-1">
               {supervisorSpaces.map((s) => {
                 const isOccupied = s.estado === "OCUPADO" || !!s.doctor;
+                const isFree = !isOccupied && s.estado !== "INHABILITADO";
+                const isTargetSelected = String(targetSpaceId) === String(s.id);
+
                 return (
                   <div
                     key={s.id}
+                    onClick={() => {
+                      if (isFree) {
+                        if (manualAssignDoc) {
+                          setTargetSpaceId(String(s.id));
+                        } else {
+                          const firstUnseated = batchDoctors.find(
+                            (d) => !d.espacio && d.status !== "AUSENTE" && d.status !== "FINALIZADO"
+                          );
+                          if (firstUnseated) {
+                            setManualAssignDoc(firstUnseated);
+                            setTargetSpaceId(String(s.id));
+                            setTargetHorario(
+                              filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario)
+                            );
+                          }
+                        }
+                      }
+                    }}
                     className={`p-2 rounded-xl border text-center transition-all flex flex-col justify-between h-20 ${
-                      isOccupied
+                      isTargetSelected
+                        ? "bg-blue-100 border-[#0048B5] text-[#0048B5] ring-2 ring-[#0048B5] scale-105 shadow-sm"
+                        : isOccupied
                         ? "bg-blue-50 border-blue-300 text-[#0048B5]"
                         : s.estado === "INHABILITADO"
                         ? "bg-slate-100 border-slate-300 text-slate-400"
-                        : "bg-emerald-50 border-emerald-300 text-emerald-800"
+                        : "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs"
                     }`}
+                    title={isFree ? `Puesto #${s.id} libre - Clic para asignar` : `Puesto #${s.id}`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-heading font-extrabold text-[12px]">#{s.id}</span>
@@ -836,11 +1355,180 @@ export default function AttendanceView({
         </SectionCard>
       </div>
 
+      {/* Modal para Asignar Puesto Manualmente con Selección Específica */}
+      {manualAssignDoc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          onClick={() => setManualAssignDoc(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ animation: "popIn .2s cubic-bezier(0.16, 1, 0.3, 1) both" }}
+            className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200"
+          >
+            {/* Header del Modal */}
+            <div
+              className="flex items-center justify-between px-6 py-4 text-white"
+              style={{ background: "linear-gradient(135deg, #002868 0%, #0048B5 60%, #0095FF 100%)" }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-md shadow-inner">
+                  <MapPin size={20} />
+                </span>
+                <div>
+                  <h3 className="font-heading text-base font-bold">Asignar Puesto a Médico</h3>
+                  <p className="text-[12px] text-cyan-100 font-semibold truncate max-w-xs">
+                    {manualAssignDoc.nombre}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManualAssignDoc(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/25 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleConfirmManualAssign} className="p-6 space-y-4">
+              {/* Sección 1: Puestos Libres en el Lote */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    1. Elige un cubículo libre de tu lote (#{currentSupervisor.bloqueInicio} - #{currentSupervisor.bloqueFin})
+                  </label>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    {supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO").length} libres
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-44 overflow-y-auto p-1 bg-slate-50/70 rounded-2xl border border-slate-200">
+                  {supervisorSpaces
+                    .filter((s) => !s.doctor && s.estado !== "INHABILITADO")
+                    .map((s) => {
+                      const isSelected = String(s.id) === String(targetSpaceId);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => setTargetSpaceId(String(s.id))}
+                          className={`p-2 rounded-xl border text-center transition-all flex flex-col justify-between items-center cursor-pointer ${
+                            isSelected
+                              ? "border-[#0048B5] bg-blue-50 text-[#0048B5] font-extrabold ring-2 ring-[#0048B5] shadow-xs scale-105"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50"
+                          }`}
+                        >
+                          <span className="font-heading text-[13px] font-bold">#{s.id}</span>
+                          <span className="text-[9px] font-mono-data opacity-70 font-semibold">{s.marca || "PC"}</span>
+                        </button>
+                      );
+                    })}
+                  {supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO").length === 0 && (
+                    <div className="col-span-full py-4 text-center text-[12px] text-amber-700">
+                      No hay cubículos libres en tu lote oficial. Puedes escribir un número de puesto abajo.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sección 2: O ingresar número manual */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    2. O escribe el número de puesto
+                  </label>
+                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF]/40">
+                    <MapPin size={15} className="text-[#0048B5]" />
+                    <input
+                      type="number"
+                      min="1"
+                      max="170"
+                      value={targetSpaceId}
+                      onChange={(e) => setTargetSpaceId(e.target.value)}
+                      placeholder="Ej. 40"
+                      required
+                      className="w-full bg-transparent text-[14px] font-extrabold font-mono-data text-slate-800 outline-none placeholder:text-slate-300"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    3. Franja / Turno
+                  </label>
+                  <select
+                    value={targetHorario}
+                    onChange={(e) => setTargetHorario(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 shadow-2xs cursor-pointer focus:ring-2 focus:ring-[#0095FF]/40"
+                  >
+                    {(horarios || HORARIOS).map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Preview del Puesto Seleccionado */}
+              {targetSpaceId && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-[12px] flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Laptop size={16} className="text-[#0048B5]" />
+                    <div>
+                      <span className="font-bold text-slate-800">
+                        Puesto #{targetSpaceId}
+                      </span>
+                      {(() => {
+                        const sp = (spaces || []).find((s) => Number(s.id) === Number(targetSpaceId));
+                        if (!sp) return <span className="ml-1 text-slate-500">(Fuera de rango)</span>;
+                        if (sp.doctor) return <span className="ml-1 text-amber-700 font-bold">(Ocupado por {sp.doctor})</span>;
+                        return <span className="ml-1 text-emerald-700 font-bold">({sp.marca || "Disponible"})</span>;
+                      })()}
+                    </div>
+                  </div>
+                  <span className="font-mono-data text-[11px] text-[#0048B5] font-bold bg-white px-2 py-0.5 rounded-lg border border-blue-200">
+                    Seleccionado
+                  </span>
+                </div>
+              )}
+
+              {/* Botones de Acción */}
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setManualAssignDoc(null)}
+                  className="rounded-xl px-4 py-2 text-[12.5px] font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!targetSpaceId}
+                  className="flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-[12.5px] font-extrabold text-white shadow-md transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+                >
+                  <Check size={15} />
+                  <span>Confirmar Puesto #{targetSpaceId || "..."}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Configurador de Nómina de Médicos Asignados al Supervisor */}
       {rosterModalOpen && (
         <SupervisorRosterModal
           supervisor={currentSupervisor}
+          activeFranja={filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario)}
           currentDoctorNames={currentRosterNames}
+          allRosters={activeRosters}
+          supervisores={supervisores}
+          spaces={spaces}
+          horarios={horarios}
           onSaveRoster={handleSaveSupervisorRoster}
           onClose={() => setRosterModalOpen(false)}
         />

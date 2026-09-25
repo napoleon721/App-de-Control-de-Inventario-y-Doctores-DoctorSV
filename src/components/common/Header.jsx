@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import {
   LayoutGrid, Warehouse, Stethoscope, FileClock, Bell,
   RefreshCw, Sheet as SheetIcon, LogIn, Sparkles, UserCheck, CheckCircle2,
-  Shield, LogOut, Laptop, User, FileSpreadsheet, Clock, Settings
+  Shield, LogOut, Laptop, User, FileSpreadsheet, Clock, Settings, X
 } from "lucide-react";
 import DoctorSVLogo from "./DoctorSVLogo";
 import { BRAND } from "../../constants/tokens";
@@ -17,6 +17,7 @@ export default function Header({
   onOpenCheckIn,
   currentUser,
   onLogout,
+  onReleaseMySpace,
   onOpenAuthPortal,
   onOpenShiftConfig,
   onOpenSupervisorConfig,
@@ -164,8 +165,8 @@ export default function Header({
             </button>
           )}
 
-          {/* Configuración de Google Sheets (Enlace Base de Datos) */}
-          {!isDoctorRole && onOpenGoogleSheetsConfig && (
+          {/* Configuración de Google Sheets (Enlace Base de Datos - Exclusivo Master) */}
+          {isMasterRole && onOpenGoogleSheetsConfig && (
             <button
               onClick={onOpenGoogleSheetsConfig}
               className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-400/80 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-3 py-1.5 text-[12px] font-bold transition shadow-2xs active:scale-95"
@@ -224,6 +225,24 @@ export default function Header({
                 </div>
               </div>
 
+              {/* Botón Quitar Puesto (Liberar sin cerrar sesión) */}
+              {currentUser.spaceId && onReleaseMySpace && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`¿Deseas quitarte del Puesto #${currentUser.spaceId}? El cubículo quedará DISPONIBLE para reasignarte a otro o para el siguiente turno.`)) {
+                      onReleaseMySpace();
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-[11.5px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-2xs active:scale-95 transition-all"
+                  title="Liberar tu puesto actual sin cerrar tu sesión"
+                >
+                  <X size={13} className="text-amber-700" />
+                  <span className="hidden sm:inline">Quitar Puesto #{currentUser.spaceId}</span>
+                  <span className="sm:hidden">Quitar #{currentUser.spaceId}</span>
+                </button>
+              )}
+
               {/* Botón Destacado: Finalizar Jornada / Desloguear */}
               <button
                 type="button"
@@ -240,8 +259,8 @@ export default function Header({
                 title="Finaliza tu jornada y libera el puesto para el siguiente turno"
               >
                 <LogOut size={13} />
-                <span className="hidden sm:inline">Finalizar Jornada (Liberar Puesto)</span>
-                <span className="sm:hidden">Finalizar</span>
+                <span className="hidden sm:inline">Finalizar Jornada</span>
+                <span className="sm:hidden">Salir</span>
               </button>
             </div>
           ) : isSupervisorRole ? (

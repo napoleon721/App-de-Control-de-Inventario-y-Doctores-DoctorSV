@@ -10,7 +10,7 @@ import {
   isSheetsConfigured
 } from "../../services/googleSheetsService";
 
-export default function GoogleSheetsConfigModal({ onClose, onSyncComplete }) {
+export default function GoogleSheetsConfigModal({ onClose, onSyncComplete, onConnected }) {
   const [url, setUrl] = useState(getSheetsApiUrl());
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
@@ -28,14 +28,16 @@ export default function GoogleSheetsConfigModal({ onClose, onSyncComplete }) {
     // Guardar temporalmente para probar
     setSheetsApiUrl(url);
 
-    const spaces = await fetchSpacesFromGoogleSheets();
+    const res = await fetchSpacesFromGoogleSheets();
     setTesting(false);
-    if (spaces && spaces.length > 0) {
+    const spacesList = (res && res.success && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
+    if (spacesList.length > 0) {
       setTestResult({
         success: true,
-        message: `¡Conexión exitosa! Se leyeron ${spaces.length} puestos en tiempo real desde tu Google Sheet.`,
+        message: `¡Conexión exitosa! Se leyeron ${spacesList.length} puestos en tiempo real desde tu Google Sheet.`,
       });
-      if (onSyncComplete) onSyncComplete(spaces);
+      const callback = onSyncComplete || onConnected;
+      if (callback) callback(spacesList);
     } else {
       setTestResult({
         success: false,

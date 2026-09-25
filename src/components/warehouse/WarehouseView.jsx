@@ -1,10 +1,24 @@
 import React, { useState } from "react";
 import {
   Warehouse, LayoutGrid, Plus, TrendingUp, TrendingDown, Minus, ShieldCheck,
-  Clock, FileText, ArrowRightLeft, Filter
+  Clock, FileText, ArrowRightLeft, Filter, Laptop, Mouse, Cable, Monitor, Wifi, Headphones, Package
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import MovementModal from "./MovementModal";
+
+const HARDWARE_ICONS = {
+  PC: Laptop,
+  MAUSE: Mouse,
+  MOUSE: Mouse,
+  HUB: Cable,
+  MONITOR: Monitor,
+  CABLES: Wifi,
+  HEADSET: Headphones,
+};
+
+function getHardwareIcon(key) {
+  return HARDWARE_ICONS[key] || Package;
+}
 
 export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement, historial = [] }) {
   const [movementModalOpen, setMovementModalOpen] = useState(false);
@@ -32,14 +46,14 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement,
               s.marca
           ).length
         : t.key === "MONITOR"
-        ? spaces.filter((s) => s.monitor).length
-        : t.key === "MOUSE"
+        ? spaces.filter((s) => s.monitor && (s.monitor.marca || s.monitor.activo || s.monitor === true)).length
+        : (t.key === "MOUSE" || t.key === "MAUSE")
         ? spaces.filter((s) => s.mouse).length
         : t.key === "HEADSET"
         ? spaces.filter((s) => s.headset).length
         : t.key === "HUB"
         ? spaces.filter((s) => s.hub).length
-        : Math.max(0, spaces.filter((s) => s.marca).length - 4);
+        : spaces.filter((s) => s.marca).length;
 
     const reparacion = spaces.filter((s) => s.estado === "REPARACION").length;
     return { ...t, enUso, reparacion, total: enUso + reparacion + t.actual };
@@ -65,7 +79,7 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement,
         <div className="flex flex-col divide-y divide-slate-100">
           {bodegaStock.map((b) => {
             const delta = b.actual - b.original;
-            const Icon = b.icon;
+            const Icon = b.icon || getHardwareIcon(b.key);
             const isLowStock = b.actual <= 1;
 
             return (
@@ -152,7 +166,7 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement,
             </thead>
             <tbody className="divide-y divide-slate-100">
               {totalesEquipo.map((t) => {
-                const Icon = t.icon;
+                const Icon = t.icon || getHardwareIcon(t.key);
                 return (
                   <tr key={t.key} className="hover:bg-slate-50/70 transition-colors">
                     <td className="flex items-center gap-2.5 px-3.5 py-3 font-semibold text-slate-800">
@@ -240,8 +254,10 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement,
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {warehouseMovements.map((mov, idx) => {
-                  const isFromBodega = mov.origen === "BODEGA";
-                  const isToBodega = mov.destino === "BODEGA";
+                  const isIngreso = mov.accion === "Ingreso" || String(mov.accion || "").toLowerCase().includes("ingreso");
+                  const isFromBodega = !isIngreso && String(mov.origen || "").trim().toUpperCase() === "BODEGA";
+                  const isToBodega = isIngreso || String(mov.destino || "").trim().toUpperCase() === "BODEGA";
+                  const qty = Number(mov.cantidad) || 1;
                   return (
                     <tr key={mov.id || idx} className="hover:bg-blue-50/20 transition-colors">
                       <td className="px-3.5 py-2.5 text-slate-500 font-mono-data text-[11px] whitespace-nowrap">
@@ -251,19 +267,24 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement,
                         </div>
                       </td>
                       <td className="px-3.5 py-2.5">
-                        <span className="inline-flex items-center rounded-lg bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] font-bold text-[#0048B5]">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] font-bold text-[#0048B5]">
                           {mov.equipo || "—"}
+                          {qty > 1 && (
+                            <span className="text-[10px] text-blue-600 font-bold font-mono-data">({qty} uds)</span>
+                          )}
                         </span>
                       </td>
                       <td className="px-3.5 py-2.5">
                         <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-bold border ${
-                          isFromBodega
+                          isIngreso
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            : isFromBodega
                             ? "bg-amber-50 text-amber-800 border-amber-200"
                             : isToBodega
                             ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                             : "bg-slate-50 text-slate-700 border-slate-200"
                         }`}>
-                          {isFromBodega ? "↑ Salida" : isToBodega ? "↓ Entrada" : mov.accion || "—"}
+                          {isIngreso ? "↓ Ingreso Stock" : isFromBodega ? "↑ Salida" : isToBodega ? "↓ Entrada" : mov.accion || "—"}
                         </span>
                       </td>
                       <td className="px-3.5 py-2.5 text-slate-600 font-medium">{mov.origen || "—"}</td>

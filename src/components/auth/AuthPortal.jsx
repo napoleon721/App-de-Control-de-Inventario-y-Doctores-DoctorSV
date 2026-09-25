@@ -7,6 +7,7 @@ import {
 import logoPng from "../../assets/doctorsv_logo.png";
 import { DOCTORES_EXCEL, HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import { loginWithGoogle } from "../../services/firebaseAuth";
+import { isSameHorario } from "../../utils/safeHelpers";
 
 export default function AuthPortal({
   onLoginMaster,
@@ -21,6 +22,7 @@ export default function AuthPortal({
 
   // Google Login State
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleAuthUser, setGoogleAuthUser] = useState(null);
 
   // Master State
   const [masterPin, setMasterPin] = useState("");
@@ -42,6 +44,23 @@ export default function AuthPortal({
   );
   const [doctorError, setDoctorError] = useState("");
   const [selectedSupervisor, setSelectedSupervisor] = useState(null);
+
+  // Ordenar supervisores priorizando los que coinciden con la franja seleccionada en el Paso 2
+  const sortedSupervisores = useMemo(() => {
+    const list = [...(supervisores || SUPERVISORES_OFICIALES)];
+    if (!selectedHorario) return list;
+    return list.sort((a, b) => {
+      const aMatch =
+        (a.activeFranja && isSameHorario(a.activeFranja, selectedHorario)) ||
+        (a.horario && isSameHorario(a.horario, selectedHorario));
+      const bMatch =
+        (b.activeFranja && isSameHorario(b.activeFranja, selectedHorario)) ||
+        (b.horario && isSameHorario(b.horario, selectedHorario));
+      if (aMatch && !bMatch) return -1;
+      if (!aMatch && bMatch) return 1;
+      return 0;
+    });
+  }, [supervisores, selectedHorario]);
 
   // Helper para identificar si el usuario logueado es uno de los supervisores
   function findSupervisorByEmailOrName(email = "", displayName = "") {
@@ -76,9 +95,7 @@ export default function AuthPortal({
     const norm = (email || "").toLowerCase().trim();
     const displayName = user?.displayName || "";
     let name = "Dr. Elmer Andrade (Master Admin)";
-    if (norm === "cccalixo1998@gmail.com") {
-      name = displayName ? `${displayName} (Master Temp)` : "Master Tester (cccalixo1998)";
-    } else if (displayName && !norm.startsWith("elmer.andrade")) {
+    if (displayName && !norm.startsWith("elmer.andrade")) {
       name = `${displayName} (Master Admin)`;
     }
 
@@ -93,7 +110,7 @@ export default function AuthPortal({
     };
   }
 
-  // Google Login Handler (Desde la pestaña Doctor o general)
+  // Google Login Handler (Desde la pestaña Doctor: autocompleta el nombre sin saltarse franja ni supervisor)
   async function handleGoogleDoctorLogin() {
     setIsGoogleLoading(true);
     setDoctorError("");
@@ -106,7 +123,7 @@ export default function AuthPortal({
         } else if (errStr.includes("popup-blocked")) {
           setDoctorError("Tu navegador bloqueó la ventana emergente de Google. Permite ventanas emergentes (popups) para este sitio.");
         } else if (errStr.includes("configuration-not-found") || errStr.includes("operation-not-allowed")) {
-          setDoctorError("Google Auth aún no está activado en tu Firebase Console. Solo debes dar clic en 'Comenzar' y activar Google en la consola de Firebase. Mientras tanto, puedes seleccionar tu nombre abajo.");
+          setDoctorError("Google Auth aún no está activado en tu Firebase Console. Selecciona tu nombre abajo.");
         } else {
           setDoctorError(`No se pudo conectar con Google (${errStr}). Selecciona tu nombre en el padrón para ingresar.`);
         }
@@ -117,35 +134,9 @@ export default function AuthPortal({
       const user = res.user;
       const email = user.email || "";
       const displayName = user.displayName || email.split("@")[0];
+      setGoogleAuthUser(user);
 
-      // 1. Detección automática de Doctor Master por correo oficial / autorizado
-      if (isMasterEmail(email)) {
-        onLoginMaster(getMasterPayload(user, email));
-        return;
-      }
-
-      // 2. Detección automática de Supervisor Oficial por correo institucional
-      const matchedSupervisor = findSupervisorByEmailOrName(email, displayName);
-      if (matchedSupervisor) {
-        onLoginSupervisor({
-          name: matchedSupervisor.nombre,
-          role: "SUPERVISOR",
-          supervisorId: matchedSupervisor.id,
-          puesto: matchedSupervisor.puesto,
-          spaceId: matchedSupervisor.puesto,
-          shift: matchedSupervisor.horario,
-          bloqueInicio: matchedSupervisor.bloqueInicio,
-          bloqueFin: matchedSupervisor.bloqueFin,
-          totalPuestos: matchedSupervisor.totalPuestos,
-          email: email,
-          photoURL: user.photoURL || null,
-          authProvider: "google",
-          loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-        });
-        return;
-      }
-
-      // 3. Verificación de dominio institucional si está configurado en .env
+      // Verificación de dominio institucional si está configurado en .env
       const allowedDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || "";
       if (allowedDomain && !email.toLowerCase().includes(allowedDomain.toLowerCase())) {
         setDoctorError(`La cuenta ${email} no coincide con el dominio institucional (${allowedDomain}).`);
@@ -153,7 +144,7 @@ export default function AuthPortal({
         return;
       }
 
-      // 4. Buscar si el doctor coincide con el padrón oficial por correo electrónico institucional
+      // Buscar si el correo o nombre coincide en el padrón oficial
       const normEmail = email.toLowerCase().trim();
       const match = DOCTORES_EXCEL.find(d => (d.correo && d.correo.toLowerCase().trim() === normEmail)) ||
                     DOCTORES_EXCEL.find(d =>
@@ -161,23 +152,30 @@ export default function AuthPortal({
                       d.nombre.toLowerCase().includes(displayName.toLowerCase())
                     );
 
-      const doctorData = {
-        name: match ? match.nombre : displayName,
-        email,
-        photoURL: user.photoURL || null,
-        shift: match?.horario && match.horario !== "Turno Rotativo" ? match.horario : selectedHorario,
-        jvpm: match?.jvpm || (match ? `JVPM-${match.id}` : "Institucional"),
-        grupo: match?.grupo || "Grupo General",
-        tipo: match?.tipo || "Planilla",
-        role: "DOCTOR",
-        spaceId: null,
-        supervisorId: selectedSupervisor?.id || null,
-        supervisorNombre: selectedSupervisor?.nombre || null,
-        loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-        authProvider: "google",
-      };
+      const isMaster = isMasterEmail(email);
 
-      onLoginDoctor(doctorData);
+      // Autocompletar el médico seleccionado en el Paso 1 para que el doctor solo elija franja y supervisor
+      if (match) {
+        setSelectedDoctorObj({
+          ...match,
+          correo: email,
+          isMasterAccount: isMaster,
+        });
+        if (match.horario && match.horario !== "Turno Rotativo") {
+          setSelectedHorario(match.horario);
+        }
+      } else {
+        const docName = displayName.startsWith("Dr") ? displayName : `Dr(a). ${displayName}`;
+        setSelectedDoctorObj({
+          nombre: docName,
+          id: isMaster ? "MASTER-DOC" : "GOOGLE",
+          correo: email,
+          horario: selectedHorario,
+          isMasterAccount: isMaster,
+        });
+      }
+
+      setDoctorError("");
     } catch (err) {
       console.error("Error en Google Sign-In:", err);
       setDoctorError("Error de autenticación con Google. Intenta nuevamente o usa el padrón rápido.");
@@ -300,10 +298,25 @@ export default function AuthPortal({
     setSelectedDoctorObj(doc);
     setManualDoctorName("");
     setSearchDoctor("");
-    if (doc.horario && doc.horario !== "Turno Rotativo") {
+    const supFranja = selectedSupervisor?.activeFranja || selectedSupervisor?.horario;
+    if (supFranja) {
+      setSelectedHorario(supFranja);
+    } else if (doc.horario && doc.horario !== "Turno Rotativo") {
       setSelectedHorario(doc.horario);
     }
     setDoctorError("");
+  }
+
+  function handleSelectSupervisor(sup) {
+    if (selectedSupervisor?.id === sup.id) {
+      setSelectedSupervisor(null);
+    } else {
+      setSelectedSupervisor(sup);
+      const targetFranja = sup.activeFranja || sup.horario;
+      if (targetFranja) {
+        setSelectedHorario(targetFranja);
+      }
+    }
   }
 
   function handleClearSelectedDoctor() {
@@ -327,7 +340,7 @@ export default function AuthPortal({
     e.preventDefault();
     const sup = supervisores.find((s) => s.id === selectedSupId) || supervisores[0] || SUPERVISORES_OFICIALES[0];
     const cleanPin = supervisorPin.trim().toLowerCase();
-    if (!cleanPin || ["2026", "sup2026", "supervisor", "admin", "1234", "doctorsv"].includes(cleanPin)) {
+    if (cleanPin && ["2026", "sup2026", "supervisor", "admin", "1234", "doctorsv"].includes(cleanPin)) {
       setSupervisorError("");
       if (onLoginSupervisor) {
         onLoginSupervisor({
@@ -346,7 +359,7 @@ export default function AuthPortal({
         });
       }
     } else {
-      setSupervisorError("PIN incorrecto. (Prueba con: 2026 o déjalo vacío para acceso directo)");
+      setSupervisorError("PIN incorrecto o vacío. Por favor ingresa el PIN de supervisor.");
     }
   }
 
@@ -354,7 +367,11 @@ export default function AuthPortal({
     e.preventDefault();
     const docName = (selectedDoctorObj ? selectedDoctorObj.nombre : manualDoctorName).trim();
     if (!docName) {
-      setDoctorError("Por favor selecciona tu nombre del padrón o escríbelo para ingresar.");
+      setDoctorError("Por favor selecciona tu nombre del padrón o autocompleta con Google para ingresar.");
+      return;
+    }
+    if (!selectedSupervisor) {
+      setDoctorError("Debes seleccionar supervisor para continuar.");
       return;
     }
     setDoctorError("");
@@ -364,11 +381,13 @@ export default function AuthPortal({
       jvpm: selectedDoctorObj?.jvpm || (selectedDoctorObj ? `JVPM-${selectedDoctorObj.id}` : "Institucional"),
       grupo: selectedDoctorObj?.grupo || "Grupo General",
       tipo: selectedDoctorObj?.tipo || "Planilla",
-      email: selectedDoctorObj?.correo || null,
+      email: selectedDoctorObj?.correo || googleAuthUser?.email || null,
+      photoURL: googleAuthUser?.photoURL || null,
       role: "DOCTOR",
       spaceId: null,
       supervisorId: selectedSupervisor?.id || null,
       supervisorNombre: selectedSupervisor?.nombre || null,
+      authProvider: googleAuthUser ? "google" : "padron",
       loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
     });
   }
@@ -493,45 +512,73 @@ export default function AuthPortal({
                 </div>
               )}
 
-              {/* Opción 1: Google Institucional */}
+              {/* Opción 1: Google Institucional (Autocompleta nombre sin saltar franja ni supervisor) */}
               <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={handleGoogleDoctorLogin}
-                  disabled={isGoogleLoading}
-                  className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 px-4 text-[13px] font-bold text-slate-700 bg-white hover:bg-slate-50 border-2 border-slate-200/90 hover:border-slate-300 shadow-sm active:scale-[0.99] transition-all disabled:opacity-60"
-                >
-                  {isGoogleLoading ? (
-                    <RefreshCw size={18} className="animate-spin text-[#0095FF]" />
-                  ) : (
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.1C3.26 21.36 7.33 24 12 24z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.1z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z"
-                      />
-                    </svg>
-                  )}
-                  <span>{isGoogleLoading ? "Conectando con Google..." : "Continuar con Google Institucional"}</span>
-                </button>
+                {googleAuthUser ? (
+                  <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50 border border-emerald-200 shadow-2xs">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 shrink-0">
+                        <Check size={14} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-bold text-emerald-900 truncate">
+                          Autenticado con Google: {googleAuthUser.email}
+                        </p>
+                        <p className="text-[10.5px] text-emerald-700 truncate">
+                          Tu nombre se autocompletó. Elige tu franja y supervisor abajo.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGoogleAuthUser(null);
+                        setSelectedDoctorObj(null);
+                      }}
+                      className="text-[11px] font-bold text-slate-500 hover:text-rose-600 bg-white px-2 py-1 rounded-lg border border-slate-200 transition-colors ml-2 shrink-0"
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleGoogleDoctorLogin}
+                    disabled={isGoogleLoading}
+                    className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 px-4 text-[13px] font-bold text-slate-700 bg-white hover:bg-slate-50 border-2 border-slate-200/90 hover:border-slate-300 shadow-sm active:scale-[0.99] transition-all disabled:opacity-60"
+                  >
+                    {isGoogleLoading ? (
+                      <RefreshCw size={18} className="animate-spin text-[#0095FF]" />
+                    ) : (
+                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.1C3.26 21.36 7.33 24 12 24z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.1z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z"
+                        />
+                      </svg>
+                    )}
+                    <span>{isGoogleLoading ? "Conectando con Google..." : "Autocompletar con Google Institucional"}</span>
+                  </button>
+                )}
 
                 <div className="relative flex items-center justify-center my-3">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-slate-200" />
                   </div>
                   <span className="relative bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    o selecciona del padrón oficial
+                    o busca en el padrón oficial
                   </span>
                 </div>
               </div>
@@ -551,33 +598,57 @@ export default function AuthPortal({
 
                 {/* Si ya seleccionó un doctor: Tarjeta elegante de confirmación */}
                 {selectedDoctorObj ? (
-                  <div className="flex items-center justify-between p-3 rounded-2xl border-2 border-emerald-500/80 bg-emerald-50/60 shadow-xs transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white font-heading font-extrabold text-[14px] shadow-2xs">
-                        {selectedDoctorObj.nombre.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="font-heading font-bold text-[13.5px] text-slate-900 leading-tight">
-                          {selectedDoctorObj.nombre}
-                        </p>
-                        <p className="text-[11px] text-emerald-800 font-medium mt-0.5">
-                          Padrón Oficial #{selectedDoctorObj.id} · {selectedDoctorObj.horario || "Turno Activo"}
-                          {selectedDoctorObj.jvpm ? ` · ${selectedDoctorObj.jvpm}` : ""}
-                        </p>
-                        {selectedDoctorObj.correo && (
-                          <p className="text-[10px] text-emerald-700 font-mono mt-0.5 flex items-center gap-1">
-                            <Mail size={11} /> {selectedDoctorObj.correo}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-3 rounded-2xl border-2 border-emerald-500/80 bg-emerald-50/60 shadow-xs transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white font-heading font-extrabold text-[14px] shadow-2xs">
+                          {selectedDoctorObj.nombre.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-heading font-bold text-[13.5px] text-slate-900 leading-tight">
+                            {selectedDoctorObj.nombre}
                           </p>
-                        )}
+                          <p className="text-[11px] text-emerald-800 font-medium mt-0.5">
+                            {selectedDoctorObj.id === "GOOGLE"
+                              ? "Identificado con Google Institucional"
+                              : selectedDoctorObj.id === "MASTER-DOC"
+                              ? "Médico Master de Turno"
+                              : `Padrón Oficial #${selectedDoctorObj.id}`} · {selectedDoctorObj.horario || "Turno Activo"}
+                            {selectedDoctorObj.jvpm ? ` · ${selectedDoctorObj.jvpm}` : ""}
+                          </p>
+                          {selectedDoctorObj.correo && (
+                            <p className="text-[10px] text-emerald-700 font-mono mt-0.5 flex items-center gap-1">
+                              <Mail size={11} /> {selectedDoctorObj.correo}
+                            </p>
+                          )}
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleClearSelectedDoctor}
+                        className="text-[11.5px] font-bold text-slate-500 hover:text-rose-600 bg-white hover:bg-rose-50 px-2.5 py-1 rounded-xl border border-slate-200 transition-colors shadow-2xs"
+                      >
+                        Cambiar
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleClearSelectedDoctor}
-                      className="text-[11.5px] font-bold text-slate-500 hover:text-rose-600 bg-white hover:bg-rose-50 px-2.5 py-1 rounded-xl border border-slate-200 transition-colors shadow-2xs"
-                    >
-                      Cambiar
-                    </button>
+
+                    {selectedDoctorObj.isMasterAccount && (
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-[11.5px] text-indigo-900">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <Shield size={14} className="text-indigo-600" />
+                          Cuenta Master autorizada
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onLoginMaster(getMasterPayload(googleAuthUser, selectedDoctorObj.correo));
+                          }}
+                          className="font-bold text-[#0048B5] hover:underline bg-white px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs"
+                        >
+                          Acceder como Master
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   /* Campo de búsqueda con autocompletado y opción manual */
@@ -666,8 +737,13 @@ export default function AuthPortal({
 
               {/* Paso 2: Turno / Horario */}
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  2. Horario / Franja de Atención
+                <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  <span>2. Horario / Franja de Atención</span>
+                  {selectedSupervisor && (selectedSupervisor.activeFranja || selectedSupervisor.horario) === selectedHorario && (
+                    <span className="text-[10px] font-bold text-[#0048B5] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
+                      Heredada del Supervisor
+                    </span>
+                  )}
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-0.5">
                   {(horarios || HORARIOS).map((h) => {
@@ -698,45 +774,69 @@ export default function AuthPortal({
               {/* Paso 3: Supervisor a cargo del turno */}
               <div>
                 <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <span>3. Supervisor a Cargo del Turno</span>
+                  <span>3. Supervisor a Cargo del Turno *</span>
                   {selectedSupervisor ? (
                     <span className="text-emerald-600 text-[10.5px] font-bold flex items-center gap-1">
                       <Check size={12} /> Seleccionado
                     </span>
                   ) : (
-                    <span className="text-amber-500 text-[10.5px] font-semibold">Recomendado</span>
+                    <span className="text-amber-600 text-[10.5px] font-bold">Obligatorio</span>
                   )}
                 </label>
 
-                <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto pr-0.5">
-                  {SUPERVISORES_OFICIALES.map((sup) => {
+                <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                  {(sortedSupervisores || SUPERVISORES_OFICIALES).map((sup) => {
                     const isSelected = selectedSupervisor?.id === sup.id;
+                    const isMatchingShift = Boolean(
+                      selectedHorario && (
+                        (sup.activeFranja && isSameHorario(sup.activeFranja, selectedHorario)) ||
+                        (sup.horario && isSameHorario(sup.horario, selectedHorario))
+                      )
+                    );
+
                     return (
                       <button
                         key={sup.id}
                         type="button"
-                        onClick={() => setSelectedSupervisor(isSelected ? null : sup)}
+                        onClick={() => handleSelectSupervisor(sup)}
                         className={`flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
                           isSelected
                             ? "border-[#0048B5] bg-blue-50/90 ring-1 ring-[#0048B5]"
+                            : isMatchingShift
+                            ? "border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50/80"
                             : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/80"
                         }`}
                       >
                         <span
                           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-extrabold ${
-                            isSelected ? "bg-[#0048B5] text-white" : "bg-slate-200 text-slate-600"
+                            isSelected
+                              ? "bg-[#0048B5] text-white"
+                              : isMatchingShift
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-200 text-slate-600"
                           }`}
                         >
                           {sup.nombre.slice(0, 2).toUpperCase()}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[11.5px] font-bold leading-tight truncate ${
-                            isSelected ? "text-[#0048B5]" : "text-slate-800"
-                          }`}>
-                            {sup.nombre}
-                          </p>
-                          <p className="text-[10.5px] text-slate-400 font-medium truncate mt-0.5">
-                            {sup.rol} · {sup.horario}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className={`text-[11.5px] font-bold leading-tight truncate ${
+                              isSelected ? "text-[#0048B5]" : "text-slate-800"
+                            }`}>
+                              {sup.nombre}
+                            </p>
+                            {isMatchingShift && (
+                              <span className="inline-flex items-center gap-0.5 rounded bg-emerald-100 text-emerald-800 text-[9.5px] font-extrabold px-1.5 py-0.2">
+                                <Check size={10} /> Turno Coincidente
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10.5px] text-slate-500 font-medium truncate mt-0.5">
+                            Lote Puestos #{sup.bloqueInicio}-#{sup.bloqueFin} · {sup.activeFranja ? (
+                              <span className="font-bold text-[#0048B5]">Franja: {sup.activeFranja}</span>
+                            ) : (
+                              sup.horario
+                            )}
                           </p>
                         </div>
                         {isSelected && (
@@ -748,9 +848,9 @@ export default function AuthPortal({
                 </div>
 
                 {!selectedSupervisor && (
-                  <p className="mt-1.5 text-[10.5px] text-amber-600 font-medium flex items-center gap-1">
-                    <AlertCircle size={11} />
-                    Si no hay supervisor presente, puedes continuar sin seleccionar.
+                  <p className="mt-1.5 text-[11px] text-amber-700 font-semibold flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 p-2 rounded-xl">
+                    <AlertCircle size={13} className="text-amber-600 shrink-0" />
+                    Debes seleccionar supervisor para continuar.
                   </p>
                 )}
               </div>

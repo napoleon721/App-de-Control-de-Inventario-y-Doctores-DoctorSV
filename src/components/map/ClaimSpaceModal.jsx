@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   Laptop, CheckCircle2, User, Clock, Shield, AlertTriangle, Droplets,
   Wrench, XCircle, LogOut, Check, X, ArrowRight
@@ -13,22 +13,46 @@ export default function ClaimSpaceModal({
   onConfirmClaim,
   onReleaseMySpace,
 }) {
+  const mountTimeRef = useRef(Date.now());
+  const backdropMouseDownRef = useRef(false);
+
   if (!space) return null;
 
   const isMySpace = Boolean(
     currentUser?.name &&
     space.doctor &&
     isSameDoctor(space.doctor, currentUser.name)
-  ) || (currentUser?.spaceId !== undefined && currentUser?.spaceId !== null && Number(currentUser.spaceId) === Number(space.id));
+  ) || (
+    currentUser?.spaceId !== undefined &&
+    currentUser?.spaceId !== null &&
+    Number(currentUser.spaceId) === Number(space.id) &&
+    (!space.doctor || (currentUser?.name && isSameDoctor(space.doctor, currentUser.name)))
+  );
 
-  const isSupervisorSpace = [135, 136, 137, 138, 1].includes(space.id) || space.categoria === "Supervisores";
-  const isAvailable = (!space.doctor || space.estado === "DISPONIBLE") && space.estado !== "INHABILITADO" && !isSupervisorSpace && !isMySpace;
+  const isSupervisorSpace = ([135, 136, 137, 138, 139].includes(Number(space.id)) || space.categoria === "Supervisores") && space.estado !== "DISPONIBLE";
+  const isAvailable = !space.doctor && space.estado === "DISPONIBLE" && !isSupervisorSpace && !isMySpace;
   const isOccupiedByOther = Boolean(space.doctor && !isMySpace);
+
+  const handleBackdropMouseDown = (e) => {
+    if (e.target === e.currentTarget) {
+      backdropMouseDownRef.current = true;
+    }
+  };
+
+  const handleBackdropClick = (e) => {
+    // Evitar que el mismo tap/click que abrió el modal lo cierre al instante
+    if (Date.now() - mountTimeRef.current < 450) return;
+    if (e.target === e.currentTarget && backdropMouseDownRef.current) {
+      onClose();
+    }
+    backdropMouseDownRef.current = false;
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -97,7 +121,7 @@ export default function ClaimSpaceModal({
                 className="w-full flex items-center justify-center gap-2 rounded-2xl py-3 text-[13px] font-bold text-white shadow-md bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all"
               >
                 <LogOut size={16} />
-                <span>Finalizar Jornada (Liberar Puesto #{space.id})</span>
+                <span>Quitar mi Puesto (Liberar Puesto #{space.id})</span>
               </button>
             </div>
           ) : isAvailable ? (
@@ -120,20 +144,24 @@ export default function ClaimSpaceModal({
               {/* Detalle de equipamiento */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 text-[12px] space-y-2">
                 <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-slate-400 font-bold uppercase text-[10.5px]">Médico Asignado</span>
-                  <span className="font-bold text-slate-800">{currentUser?.name || "Dr(a). Médico"}</span>
+                  <span className="text-slate-400 font-bold uppercase text-[10.5px]">Tu Usuario (Médico)</span>
+                  <span className="font-bold text-[#0048B5]">{currentUser?.name || "Dr(a). Médico"}</span>
                 </div>
                 <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-slate-400 font-bold uppercase text-[10.5px]">Turno</span>
+                  <span className="text-slate-400 font-bold uppercase text-[10.5px]">Tu Turno</span>
                   <span className="font-semibold text-slate-700">{currentUser?.shift || "Turno Actual"}</span>
                 </div>
                 <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-slate-400 font-bold uppercase text-[10.5px]">Equipo</span>
-                  <span className="font-semibold text-slate-700">{space.marca} · Activo: {space.activoPc || `PC-${space.id}`}</span>
+                  <span className="text-slate-400 font-bold uppercase text-[10.5px]">Estado del Puesto</span>
+                  <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded text-[11px]">DISPONIBLE (Libre)</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="text-slate-400 font-bold uppercase text-[10.5px]">Equipo PC</span>
+                  <span className="font-semibold text-slate-700">{space.marca || "PC"} · {space.modelo || "Estación"} ({space.activoPc || `PC-${space.id}`})</span>
                 </div>
               </div>
 
-              {currentUser?.spaceId && currentUser.spaceId !== space.id && (
+              {currentUser?.spaceId && Number(currentUser.spaceId) !== Number(space.id) && (
                 <p className="text-[11.5px] text-amber-700 bg-amber-50 border border-amber-200 p-2.5 rounded-xl">
                   ⚠️ <em>Nota:</em> Ya tienes asignado el <strong>Puesto #{currentUser.spaceId}</strong>. Al confirmar, tu puesto anterior quedará liberado automáticamente.
                 </p>

@@ -12,7 +12,7 @@ export default function HistoryView({ historial, spaces, onRegisterMovement }) {
   const filteredHistory = useMemo(() => {
     return historial.filter((m) => {
       const matchesSearch =
-        m.equipo.toLowerCase().includes(searchHistory.toLowerCase()) ||
+        (m.equipo && m.equipo.toLowerCase().includes(searchHistory.toLowerCase())) ||
         String(m.espacio || "").includes(searchHistory) ||
         (m.obs && m.obs.toLowerCase().includes(searchHistory.toLowerCase())) ||
         (m.falla && m.falla.toLowerCase().includes(searchHistory.toLowerCase())) ||
@@ -122,6 +122,11 @@ export default function HistoryView({ historial, spaces, onRegisterMovement }) {
                 </td>
                 <td className="px-3.5 py-3 font-bold text-slate-800 whitespace-nowrap">
                   {m.equipo}
+                  {m.cantidad && Number(m.cantidad) > 1 && (
+                    <span className="ml-1.5 text-[10.5px] font-semibold text-blue-600 font-mono-data">
+                      ({m.cantidad} uds)
+                    </span>
+                  )}
                 </td>
                 <td className="px-3.5 py-3 font-mono-data font-bold text-[#0048B5]">
                   {m.espacio ? `#${m.espacio}` : "—"}
@@ -129,7 +134,9 @@ export default function HistoryView({ historial, spaces, onRegisterMovement }) {
                 <td className="px-3.5 py-3">
                   <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${
-                      m.accion === "Reemplazo"
+                      m.accion === "Ingreso"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        : m.accion === "Reemplazo"
                         ? "bg-rose-50 text-rose-700 border-rose-200"
                         : m.accion === "Traslado"
                         ? "bg-blue-50 text-[#0048B5] border-blue-200"

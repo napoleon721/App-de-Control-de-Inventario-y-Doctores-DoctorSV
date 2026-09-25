@@ -58,7 +58,7 @@ export default function SpaceTile({ s, index, onClick }) {
       {/* Hover ring effect */}
       <span
         className="pointer-events-none absolute inset-0 rounded-xl opacity-0 ring-2 ring-offset-1 transition-opacity duration-150 group-hover:opacity-100"
-        style={{ ringColor: e.color }}
+        style={{ "--tw-ring-color": e.color }}
       />
     </button>
   );

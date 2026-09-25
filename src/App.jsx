@@ -22,7 +22,7 @@ const GoogleSheetsConfigModal = lazy(() => import("./components/config/GoogleShe
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces,
-  SUPERVISORES_OFICIALES, DOCTORES_EXCEL
+  SUPERVISORES_OFICIALES, DOCTORES_EXCEL, ensureAllSpaces
 } from "./constants/tokens";
 
 import {
@@ -38,6 +38,8 @@ import {
   saveCloudHorarios,
   subscribeToCloudSupervisores,
   saveCloudSupervisores,
+  subscribeToCloudAttendance,
+  saveCloudAttendance,
 } from "./services/firestoreSync";
 import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
@@ -55,7 +57,7 @@ export default function App() {
   const [spaces, setSpaces] = useState(() => {
     try {
       const saved = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
-      return saved ? JSON.parse(saved) : buildInitialSpaces();
+      return saved ? ensureAllSpaces(JSON.parse(saved)) : buildInitialSpaces();
     } catch {
       return buildInitialSpaces();
     }
@@ -114,7 +116,32 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
+  const [checkInDefaultHorario, setCheckInDefaultHorario] = useState(null);
   const [authPortalOpen, setAuthPortalOpen] = useState(false);
+
+  function handleOpenCheckIn(targetHorario) {
+    if (typeof targetHorario === "string") {
+      setCheckInDefaultHorario(targetHorario);
+    } else if (currentUser?.role === "SUPERVISOR") {
+      const currentSup = supervisores.find((s) => s.id === currentUser.supervisorId);
+      setCheckInDefaultHorario(currentSup?.activeFranja || currentUser?.shift || null);
+    } else {
+      setCheckInDefaultHorario(null);
+    }
+    setCheckInModalOpen(true);
+  }
+
+  function handleUpdateSupervisorFranja(supId, activeFranja) {
+    setSupervisores((prev) =>
+      prev.map((s) => (s.id === supId ? { ...s, activeFranja } : s))
+    );
+  }
+
+  function handleUpdateSupervisorOfficialShift(supId, horario) {
+    setSupervisores((prev) =>
+      prev.map((s) => (s.id === supId ? { ...s, horario } : s))
+    );
+  }
 
   // 3. Horarios y Turnos configurables dinámicamente por el Doctor Master
   const [horarios, setHorarios] = useState(() => {
@@ -150,6 +177,16 @@ export default function App() {
   const isRemoteRostersRef = React.useRef(false);
   const isRemoteHorariosRef = React.useRef(false);
   const isRemoteSupervisoresRef = React.useRef(false);
+  const isRemoteAttendanceRef = React.useRef(false);
+  const recentlyReleasedRef = React.useRef(new Map()); // Map de spaceId -> timestamp de liberación
+
+  const isInitialMountHorarios = React.useRef(true);
+  const isInitialMountSupervisores = React.useRef(true);
+  const isInitialMountSpaces = React.useRef(true);
+  const isInitialMountBodega = React.useRef(true);
+  const isInitialMountHistorial = React.useRef(true);
+  const isInitialMountRosters = React.useRef(true);
+  const isInitialMountAttendance = React.useRef(true);
 
   // 4. Nóminas de médicos asignadas a cada supervisor (sincronizadas en tiempo real con Firestore)
   const [rosters, setRosters] = useState(() => {
@@ -161,9 +198,22 @@ export default function App() {
     }
   });
 
-  // Reconexión automática de sesión de Firebase Auth tras recargar página
+  // 5. Estados de Asistencia en Tiempo Real (sincronizados con Firestore y vinculados a Finalizar Jornada)
+  const [attendanceRecords, setAttendanceRecords] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_ATTENDANCE_V1");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Reconexión automática de sesión de Firebase Auth tras recargar página (solo si había sesión activa guardada)
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges((firebaseUser) => {
+      const hasSavedSession = sessionStorage.getItem("DOCTORSV_ACTIVE_USER_SESSION") || localStorage.getItem("DOCTORSV_ACTIVE_USER_V2");
+      if (!hasSavedSession) return;
+
       if (firebaseUser && !currentUser) {
         const email = safeLower(firebaseUser.email);
         const envMaster = safeLower(import.meta.env.VITE_MASTER_EMAIL || "");
@@ -176,9 +226,7 @@ export default function App() {
 
         if (isMaster) {
           let name = "Dr. Elmer Andrade (Master Admin)";
-          if (email.includes("cccalixo")) {
-            name = firebaseUser.displayName ? `${firebaseUser.displayName} (Master Temp)` : "Master Tester (cccalixo)";
-          } else if (firebaseUser.displayName && !email.startsWith("elmer.andrade")) {
+          if (firebaseUser.displayName && !email.startsWith("elmer.andrade")) {
             name = `${firebaseUser.displayName} (Master Admin)`;
           }
           setCurrentUser({
@@ -257,22 +305,41 @@ export default function App() {
               const cloudMatch = res.data.find((item) => Number(item.id) === Number(s.id));
               if (!cloudMatch) return s;
 
-              // Si Google Sheets trae un médico no vacío y difiere del actual, actualizar.
-              // NUNCA borrar a un médico ya asignado localmente si Sheets retorna vacío o null (evita desfases y pérdida de datos).
               const cloudDoc = cloudMatch.doctor ? String(cloudMatch.doctor).trim() : null;
               const localDoc = s.doctor ? String(s.doctor).trim() : null;
 
+              // Si el puesto fue liberado recientemente en esta sesión (3 minutos), ignorar ecos desactualizados de Sheets
+              const releaseTimestamp = recentlyReleasedRef.current.get(Number(s.id));
+              const isRecentlyReleased = releaseTimestamp && Date.now() - releaseTimestamp < 180000;
+
               let finalDoctor = localDoc;
-              if (cloudDoc && cloudDoc !== localDoc) {
+              if (isRecentlyReleased) {
+                finalDoctor = null;
+              } else if (cloudDoc && localDoc && cloudDoc !== localDoc) {
+                // Solo si el médico ya estaba asignado y Sheets trae una corrección explícita
                 finalDoctor = cloudDoc;
+              } else if (!cloudDoc && !localDoc) {
+                finalDoctor = null;
               }
 
               // Si el puesto tiene un médico asignado, su estado DEBE ser OCUPADO
               let finalEstado = s.estado;
               if (finalDoctor) {
                 finalEstado = "OCUPADO";
+              } else if (isRecentlyReleased) {
+                finalEstado = "DISPONIBLE";
               } else if (cloudMatch.estado && !localDoc) {
                 finalEstado = cloudMatch.estado;
+              }
+
+              // Normalizar marca y modelo si el estado es DISPONIBLE
+              let finalMarca = cloudMatch.marca || s.marca;
+              if (finalEstado === "DISPONIBLE" && (!finalMarca || finalMarca === "NO PC")) {
+                finalMarca = "DELL";
+              }
+              let finalModelo = cloudMatch.modelo || s.modelo;
+              if (finalEstado === "DISPONIBLE" && !finalModelo) {
+                finalModelo = "OptiPlex 3080";
               }
 
               const doctorChanged = finalDoctor !== (s.doctor || null);
@@ -280,8 +347,8 @@ export default function App() {
               const horarioChanged = cloudMatch.horario && (cloudMatch.horario !== s.horario);
               const obsChanged = cloudMatch.observaciones !== undefined && (cloudMatch.observaciones !== (s.observaciones || ""));
               const hardwareChanged =
-                (cloudMatch.marca && cloudMatch.marca !== s.marca) ||
-                (cloudMatch.modelo && cloudMatch.modelo !== s.modelo) ||
+                (finalMarca !== s.marca) ||
+                (finalModelo !== s.modelo) ||
                 (cloudMatch.activoPc && cloudMatch.activoPc !== s.activoPc);
 
               if (doctorChanged || estadoChanged || horarioChanged || obsChanged || hardwareChanged) {
@@ -292,9 +359,10 @@ export default function App() {
                   doctor: finalDoctor,
                   horario: cloudMatch.horario || s.horario || null,
                   observaciones: cloudMatch.observaciones !== undefined ? cloudMatch.observaciones : s.observaciones,
-                  marca: cloudMatch.marca || s.marca,
-                  modelo: cloudMatch.modelo || s.modelo,
+                  marca: finalMarca,
+                  modelo: finalModelo,
                   activoPc: cloudMatch.activoPc || s.activoPc,
+                  categoria: Number(s.id) === 1 ? null : s.categoria,
                   ultimoMovimiento: cloudMatch.ultimoMovimiento || s.ultimoMovimiento,
                 };
               }
@@ -345,6 +413,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isInitialMountHorarios.current) {
+      isInitialMountHorarios.current = false;
+      return;
+    }
+    if (isRemoteHorariosRef.current) {
+      isRemoteHorariosRef.current = false;
+      return;
+    }
     try {
       localStorage.setItem("DOCTORSV_CONFIG_HORARIOS_V1", JSON.stringify(horarios));
       if (typeof BroadcastChannel !== "undefined") {
@@ -352,17 +428,23 @@ export default function App() {
         bc.postMessage({ type: "HORARIOS_UPDATED", payload: horarios, sender: myClientId.current });
         bc.close();
       }
-      if (isRemoteHorariosRef.current) {
-        isRemoteHorariosRef.current = false;
-        return;
+      if (Array.isArray(horarios) && horarios.length > 0) {
+        saveCloudHorarios(horarios, myClientId.current);
       }
-      saveCloudHorarios(horarios, myClientId.current);
     } catch (e) {
       console.error("Error saving horarios config:", e);
     }
   }, [horarios]);
 
   useEffect(() => {
+    if (isInitialMountSupervisores.current) {
+      isInitialMountSupervisores.current = false;
+      return;
+    }
+    if (isRemoteSupervisoresRef.current) {
+      isRemoteSupervisoresRef.current = false;
+      return;
+    }
     try {
       localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(supervisores));
       if (typeof BroadcastChannel !== "undefined") {
@@ -370,11 +452,9 @@ export default function App() {
         bc.postMessage({ type: "SUPERVISORES_UPDATED", payload: supervisores, sender: myClientId.current });
         bc.close();
       }
-      if (isRemoteSupervisoresRef.current) {
-        isRemoteSupervisoresRef.current = false;
-        return;
+      if (Array.isArray(supervisores) && supervisores.length > 0) {
+        saveCloudSupervisores(supervisores, myClientId.current);
       }
-      saveCloudSupervisores(supervisores, myClientId.current);
     } catch (e) {
       console.error("Error saving supervisores config:", e);
     }
@@ -382,6 +462,14 @@ export default function App() {
 
   // Sincronizar en LocalStorage, notificar a otras pestañas y persistir en Cloud Firestore (sin bucle)
   useEffect(() => {
+    if (isInitialMountSpaces.current) {
+      isInitialMountSpaces.current = false;
+      return;
+    }
+    if (isRemoteSpacesRef.current) {
+      isRemoteSpacesRef.current = false;
+      return; // Romper bucle: no re-enviar a Firestore ni a BroadcastChannel lo que vino de Firestore
+    }
     try {
       localStorage.setItem("DOCTORSV_EXCEL_REAL_SPACES_V1", JSON.stringify(spaces));
       if (typeof BroadcastChannel !== "undefined") {
@@ -389,17 +477,23 @@ export default function App() {
         bc.postMessage({ type: "SPACES_UPDATED", payload: spaces, sender: myClientId.current });
         bc.close();
       }
-      if (isRemoteSpacesRef.current) {
-        isRemoteSpacesRef.current = false;
-        return; // Romper bucle: no re-enviar a Firestore lo que vino de Firestore
+      if (Array.isArray(spaces) && spaces.length > 0) {
+        saveCloudSpaces(spaces, myClientId.current);
       }
-      saveCloudSpaces(spaces, myClientId.current);
     } catch (e) {
       console.error("Error saving spaces:", e);
     }
   }, [spaces]);
 
   useEffect(() => {
+    if (isInitialMountBodega.current) {
+      isInitialMountBodega.current = false;
+      return;
+    }
+    if (isRemoteBodegaRef.current) {
+      isRemoteBodegaRef.current = false;
+      return;
+    }
     try {
       const simplified = bodegaStock.map(({ key, original, actual }) => ({ key, original, actual }));
       localStorage.setItem("DOCTORSV_EXCEL_REAL_BODEGA_V1", JSON.stringify(simplified));
@@ -408,17 +502,23 @@ export default function App() {
         bc.postMessage({ type: "BODEGA_UPDATED", payload: bodegaStock, sender: myClientId.current });
         bc.close();
       }
-      if (isRemoteBodegaRef.current) {
-        isRemoteBodegaRef.current = false;
-        return;
+      if (Array.isArray(simplified) && simplified.length > 0) {
+        saveCloudBodega(simplified, myClientId.current);
       }
-      saveCloudBodega(simplified, myClientId.current);
     } catch (e) {
       console.error("Error saving bodega:", e);
     }
   }, [bodegaStock]);
 
   useEffect(() => {
+    if (isInitialMountHistorial.current) {
+      isInitialMountHistorial.current = false;
+      return;
+    }
+    if (isRemoteHistorialRef.current) {
+      isRemoteHistorialRef.current = false;
+      return;
+    }
     try {
       localStorage.setItem("DOCTORSV_EXCEL_REAL_HISTORIAL_V1", JSON.stringify(historial));
       if (typeof BroadcastChannel !== "undefined") {
@@ -426,17 +526,23 @@ export default function App() {
         bc.postMessage({ type: "HISTORIAL_UPDATED", payload: historial, sender: myClientId.current });
         bc.close();
       }
-      if (isRemoteHistorialRef.current) {
-        isRemoteHistorialRef.current = false;
-        return;
+      if (Array.isArray(historial) && historial.length > 0) {
+        saveCloudHistorial(historial, myClientId.current);
       }
-      saveCloudHistorial(historial, myClientId.current);
     } catch (e) {
       console.error("Error saving historial:", e);
     }
   }, [historial]);
 
   useEffect(() => {
+    if (isInitialMountRosters.current) {
+      isInitialMountRosters.current = false;
+      return;
+    }
+    if (isRemoteRostersRef.current) {
+      isRemoteRostersRef.current = false;
+      return;
+    }
     try {
       localStorage.setItem("DOCTORSV_SUPERVISOR_ROSTERS_V2", JSON.stringify(rosters));
       if (typeof BroadcastChannel !== "undefined") {
@@ -444,11 +550,9 @@ export default function App() {
         bc.postMessage({ type: "ROSTERS_UPDATED", payload: rosters, sender: myClientId.current });
         bc.close();
       }
-      if (isRemoteRostersRef.current) {
-        isRemoteRostersRef.current = false;
-        return;
+      if (rosters && typeof rosters === "object" && Object.keys(rosters).length > 0) {
+        saveCloudRosters(rosters, myClientId.current);
       }
-      saveCloudRosters(rosters, myClientId.current);
     } catch (e) {
       console.error("Error saving rosters:", e);
     }
@@ -458,49 +562,77 @@ export default function App() {
   useEffect(() => {
     const unsubSpaces = subscribeToCloudSpaces((cloudSpaces) => {
       if (cloudSpaces && Array.isArray(cloudSpaces) && cloudSpaces.length > 0) {
-        isRemoteSpacesRef.current = true;
-        setSpaces(cloudSpaces);
+        setSpaces((prev) => {
+          const fullList = ensureAllSpaces(cloudSpaces);
+          if (JSON.stringify(prev) === JSON.stringify(fullList)) return prev;
+          isRemoteSpacesRef.current = true;
+          return fullList;
+        });
         setLastSyncTime(new Date());
       }
     }, null, myClientId.current);
 
     const unsubBodega = subscribeToCloudBodega((cloudBodega) => {
       if (cloudBodega && Array.isArray(cloudBodega) && cloudBodega.length > 0) {
-        isRemoteBodegaRef.current = true;
-        setBodegaStock((prev) =>
-          prev.map((b) => {
+        setBodegaStock((prev) => {
+          const updated = prev.map((b) => {
             const match = cloudBodega.find((p) => p.key === b.key);
             return match ? { ...b, actual: match.actual } : b;
-          })
-        );
+          });
+          if (JSON.stringify(prev) === JSON.stringify(updated)) return prev;
+          isRemoteBodegaRef.current = true;
+          return updated;
+        });
       }
     }, null, myClientId.current);
 
     const unsubHistorial = subscribeToCloudHistorial((cloudHistorial) => {
       if (cloudHistorial && Array.isArray(cloudHistorial) && cloudHistorial.length > 0) {
-        isRemoteHistorialRef.current = true;
-        setHistorial(cloudHistorial);
+        setHistorial((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudHistorial)) return prev;
+          isRemoteHistorialRef.current = true;
+          return cloudHistorial;
+        });
       }
     }, null, myClientId.current);
 
     const unsubRosters = subscribeToCloudRosters((cloudRosters) => {
-      if (cloudRosters && typeof cloudRosters === "object") {
-        isRemoteRostersRef.current = true;
-        setRosters(cloudRosters);
+      if (cloudRosters && typeof cloudRosters === "object" && Object.keys(cloudRosters).length > 0) {
+        setRosters((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudRosters)) return prev;
+          isRemoteRostersRef.current = true;
+          return cloudRosters;
+        });
       }
     }, null, myClientId.current);
 
     const unsubHorarios = subscribeToCloudHorarios((cloudHorarios) => {
       if (cloudHorarios && Array.isArray(cloudHorarios) && cloudHorarios.length > 0) {
-        isRemoteHorariosRef.current = true;
-        setHorarios(cloudHorarios);
+        setHorarios((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudHorarios)) return prev;
+          isRemoteHorariosRef.current = true;
+          return cloudHorarios;
+        });
       }
     }, null, myClientId.current);
 
     const unsubSupervisores = subscribeToCloudSupervisores((cloudSupervisores) => {
       if (cloudSupervisores && Array.isArray(cloudSupervisores) && cloudSupervisores.length > 0) {
-        isRemoteSupervisoresRef.current = true;
-        setSupervisores(cloudSupervisores);
+        setSupervisores((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudSupervisores)) return prev;
+          isRemoteSupervisoresRef.current = true;
+          return cloudSupervisores;
+        });
+      }
+    }, null, myClientId.current);
+
+    const unsubAttendance = subscribeToCloudAttendance((cloudAttendance) => {
+      if (cloudAttendance && typeof cloudAttendance === "object" && Object.keys(cloudAttendance).length > 0) {
+        setAttendanceRecords((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudAttendance)) return prev;
+          isRemoteAttendanceRef.current = true;
+          return cloudAttendance;
+        });
       }
     }, null, myClientId.current);
 
@@ -511,8 +643,34 @@ export default function App() {
       if (unsubRosters) unsubRosters();
       if (unsubHorarios) unsubHorarios();
       if (unsubSupervisores) unsubSupervisores();
+      if (unsubAttendance) unsubAttendance();
     };
   }, []);
+
+  // Sincronizar attendanceRecords en localStorage y Firestore
+  useEffect(() => {
+    if (isInitialMountAttendance.current) {
+      isInitialMountAttendance.current = false;
+      return;
+    }
+    if (isRemoteAttendanceRef.current) {
+      isRemoteAttendanceRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem("DOCTORSV_ATTENDANCE_V1", JSON.stringify(attendanceRecords));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "ATTENDANCE_UPDATED", payload: attendanceRecords, sender: myClientId.current });
+        bc.close();
+      }
+      if (attendanceRecords && typeof attendanceRecords === "object") {
+        saveCloudAttendance(attendanceRecords, myClientId.current);
+      }
+    } catch (e) {
+      console.error("Error saving attendance:", e);
+    }
+  }, [attendanceRecords]);
 
   useEffect(() => {
     try {
@@ -535,7 +693,7 @@ export default function App() {
     }
   }, [customStaff]);
 
-  // Sincronización cruzada bidireccional en tiempo real entre pestañas (Doctor en pestaña A, Master en pestaña B)
+  // Sincronización cruzada bidireccional en tiempo real entre pestañas sin bucles
   useEffect(() => {
     let bc = null;
     try {
@@ -546,94 +704,54 @@ export default function App() {
           if (sender === myClientId.current) return;
 
           if (type === "SPACES_UPDATED" && payload) {
-            isRemoteSpacesRef.current = true;
-            setSpaces(payload);
+            setSpaces((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteSpacesRef.current = true;
+              return payload;
+            });
             setLastSyncTime(new Date());
           } else if (type === "HISTORIAL_UPDATED" && payload) {
-            isRemoteHistorialRef.current = true;
-            setHistorial(payload);
+            setHistorial((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteHistorialRef.current = true;
+              return payload;
+            });
           } else if (type === "BODEGA_UPDATED" && payload) {
-            isRemoteBodegaRef.current = true;
-            setBodegaStock(payload);
+            setBodegaStock((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteBodegaRef.current = true;
+              return payload;
+            });
           } else if (type === "ROSTERS_UPDATED" && payload) {
-            isRemoteRostersRef.current = true;
-            setRosters(payload);
+            setRosters((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteRostersRef.current = true;
+              return payload;
+            });
           } else if (type === "HORARIOS_UPDATED" && payload) {
-            isRemoteHorariosRef.current = true;
-            setHorarios(payload);
+            setHorarios((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteHorariosRef.current = true;
+              return payload;
+            });
           } else if (type === "SUPERVISORES_UPDATED" && payload) {
-            isRemoteSupervisoresRef.current = true;
-            setSupervisores(payload);
-          } else if (type === "FORCE_SYNC") {
-            try {
-              const saved = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
-              if (saved) {
-                isRemoteSpacesRef.current = true;
-                setSpaces(JSON.parse(saved));
-              }
-              setLastSyncTime(new Date());
-            } catch {}
+            setSupervisores((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteSupervisoresRef.current = true;
+              return payload;
+            });
+          } else if (type === "ATTENDANCE_UPDATED" && payload) {
+            setAttendanceRecords((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteAttendanceRef.current = true;
+              return payload;
+            });
           }
         };
       }
     } catch {}
 
-    function handleStorageSync(e) {
-      if (e.key === "DOCTORSV_SUPERVISORES_CONFIG_V1" && e.newValue) {
-        try {
-          const updated = JSON.parse(e.newValue);
-          isRemoteSupervisoresRef.current = true;
-          setSupervisores(updated);
-        } catch {}
-      }
-      if (e.key === "DOCTORSV_CONFIG_HORARIOS_V1" && e.newValue) {
-        try {
-          const updated = JSON.parse(e.newValue);
-          isRemoteHorariosRef.current = true;
-          setHorarios(updated);
-        } catch {}
-      }
-      if (e.key === "DOCTORSV_EXCEL_REAL_SPACES_V1" && e.newValue) {
-        try {
-          const updated = JSON.parse(e.newValue);
-          isRemoteSpacesRef.current = true;
-          setSpaces(updated);
-          setLastSyncTime(new Date());
-        } catch {}
-      }
-      if (e.key === "DOCTORSV_EXCEL_REAL_HISTORIAL_V1" && e.newValue) {
-        try {
-          isRemoteHistorialRef.current = true;
-          setHistorial(JSON.parse(e.newValue));
-        } catch {}
-      }
-      if (e.key === "DOCTORSV_EXCEL_REAL_BODEGA_V1" && e.newValue) {
-        try {
-          const updatedBodega = JSON.parse(e.newValue);
-          isRemoteBodegaRef.current = true;
-          setBodegaStock((prev) =>
-            prev.map((b) => {
-              const match = updatedBodega.find((p) => p.key === b.key);
-              return match ? { ...b, actual: match.actual } : b;
-            })
-          );
-        } catch {}
-      }
-      if (e.key === "DOCTORSV_SYNC_PING") {
-        try {
-          const savedSpaces = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
-          if (savedSpaces) {
-            isRemoteSpacesRef.current = true;
-            setSpaces(JSON.parse(savedSpaces));
-          }
-          setLastSyncTime(new Date());
-        } catch {}
-      }
-    }
-
-    window.addEventListener("storage", handleStorageSync);
     return () => {
-      window.removeEventListener("storage", handleStorageSync);
       if (bc) bc.close();
     };
   }, []);
@@ -721,11 +839,56 @@ export default function App() {
   }, [spaces]);
 
   function handleSaveSpace(updatedSpace) {
-    setSpaces((prev) =>
-      prev.map((s) => (s.id === updatedSpace.id ? updatedSpace : s))
-    );
+    const cleanId = Number(updatedSpace.id);
+    recentlyReleasedRef.current.set(cleanId, Date.now());
+
+    const normalized = {
+      ...updatedSpace,
+      categoria: cleanId === 1 ? null : updatedSpace.categoria,
+      marca: (updatedSpace.estado === "DISPONIBLE" && (!updatedSpace.marca || updatedSpace.marca === "NO PC")) ? "DELL" : (updatedSpace.marca || "DELL"),
+      modelo: (updatedSpace.estado === "DISPONIBLE" && !updatedSpace.modelo) ? "OptiPlex 3080" : (updatedSpace.modelo || "OptiPlex 3080"),
+    };
+
+    let previousSpaceId = null;
+    const nextSpaces = spaces.map((s) => {
+      if (normalized.doctor && Number(s.id) !== cleanId && s.doctor && isSameDoctor(s.doctor, normalized.doctor)) {
+        previousSpaceId = Number(s.id);
+        recentlyReleasedRef.current.set(previousSpaceId, Date.now());
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+        };
+      }
+      if (Number(s.id) === cleanId) return normalized;
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    if (normalized.doctor) {
+      setAttendanceRecords((prev) => ({
+        ...prev,
+        [String(normalized.doctor).trim()]: "PRESENTE",
+      }));
+    }
+
     if (isGoogleSheetsConfigured()) {
-      updateSpaceInGoogleSheets(updatedSpace);
+      updateSpaceInGoogleSheets(normalized);
+      if (previousSpaceId !== null) {
+        updateSpaceInGoogleSheets({
+          id: previousSpaceId,
+          doctor: "",
+          horario: "",
+          estado: "DISPONIBLE",
+          marca: "DELL",
+        });
+      }
     }
   }
 
@@ -736,25 +899,45 @@ export default function App() {
     const assignedHorario = horario || "07:00 AM – 12:00 PM";
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
-    setSpaces((prev) =>
-      prev.map((s) => {
-        // Liberar puesto anterior si el médico estaba asignado en otro cubículo
-        if (s.doctor && safeLower(s.doctor) === safeLower(cleanDoc) && Number(s.id) !== cleanSpaceId) {
-          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO", ultimoMovimiento: nowTime };
-        }
-        // Asignar al nuevo puesto
-        if (Number(s.id) === cleanSpaceId) {
-          return {
-            ...s,
-            doctor: cleanDoc,
-            horario: assignedHorario,
-            estado: "OCUPADO",
-            ultimoMovimiento: nowTime,
-          };
-        }
-        return s;
-      })
-    );
+    let previousSpaceId = null;
+    const nextSpaces = spaces.map((s) => {
+      // Liberar puesto anterior si el médico estaba asignado en otro cubículo
+      if (s.doctor && (safeLower(s.doctor) === safeLower(cleanDoc) || isSameDoctor(s.doctor, cleanDoc)) && Number(s.id) !== cleanSpaceId) {
+        previousSpaceId = Number(s.id);
+        recentlyReleasedRef.current.set(previousSpaceId, Date.now());
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: Number(s.id) === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      // Asignar al nuevo puesto
+      if (Number(s.id) === cleanSpaceId) {
+        return {
+          ...s,
+          doctor: cleanDoc,
+          horario: assignedHorario,
+          estado: "OCUPADO",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    setAttendanceRecords((prev) => ({
+      ...prev,
+      [cleanDoc]: "PRESENTE",
+    }));
 
     if (isGoogleSheetsConfigured()) {
       updateSpaceInGoogleSheets({
@@ -762,7 +945,17 @@ export default function App() {
         doctor: cleanDoc,
         horario: assignedHorario,
         estado: "OCUPADO",
+        marca: "DELL",
       });
+      if (previousSpaceId !== null) {
+        updateSpaceInGoogleSheets({
+          id: previousSpaceId,
+          doctor: "",
+          horario: "",
+          estado: "DISPONIBLE",
+          marca: "DELL",
+        });
+      }
     }
   }
 
@@ -771,41 +964,160 @@ export default function App() {
     const cleanSpaceId = spaceId !== undefined && spaceId !== null ? Number(spaceId) : null;
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
-    setSpaces((prev) =>
-      prev.map((s) => {
-        const matchesSpace = cleanSpaceId !== null && Number(s.id) === cleanSpaceId;
-        const matchesDoc = cleanDoc && s.doctor && safeLower(s.doctor) === cleanDoc;
+    let unassignedSpaceId = cleanSpaceId;
+    let hasChanges = false;
 
-        if (matchesSpace || matchesDoc) {
-          return {
-            ...s,
-            doctor: null,
-            horario: null,
-            estado: s.marca ? "DISPONIBLE" : "VACIO",
-            ultimoMovimiento: nowTime,
-          };
-        }
-        return s;
-      })
-    );
+    if (cleanSpaceId) {
+      recentlyReleasedRef.current.set(cleanSpaceId, Date.now());
+    }
 
-    if (isGoogleSheetsConfigured() && cleanSpaceId !== null) {
+    const nextSpaces = spaces.map((s) => {
+      const matchesSpace = cleanSpaceId !== null && Number(s.id) === cleanSpaceId;
+      const matchesDoc = cleanDoc && s.doctor && (safeLower(s.doctor) === cleanDoc || isSameDoctor(s.doctor, doctorName));
+
+      if (matchesSpace || matchesDoc) {
+        hasChanges = true;
+        if (!unassignedSpaceId) unassignedSpaceId = Number(s.id);
+        recentlyReleasedRef.current.set(Number(s.id), Date.now());
+        const isSpecial = s.estado === "INHABILITADO" || s.estado === "REPARACION";
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: Number(s.id) === 1 ? null : s.categoria,
+          estado: isSpecial ? s.estado : "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      return s;
+    });
+
+    if (!hasChanges) return;
+
+    setSpaces(nextSpaces);
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    if (isGoogleSheetsConfigured() && unassignedSpaceId !== null) {
       updateSpaceInGoogleSheets({
-        id: cleanSpaceId,
+        id: unassignedSpaceId,
         doctor: "",
         horario: "",
         estado: "DISPONIBLE",
+        marca: "DELL",
+      });
+    }
+  }
+
+  // Asignación atómica en lote para supervisores
+  function handleAssignBatch(assignments, horario) {
+    if (!Array.isArray(assignments) || assignments.length === 0) return;
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+    const assignedHorario = horario || "07:00 AM – 12:00 PM";
+
+    const assignBySpaceId = new Map();
+    const docNamesAssigned = new Set();
+    assignments.forEach((a) => {
+      if (a.spaceId && a.doctor) {
+        assignBySpaceId.set(Number(a.spaceId), String(a.doctor).trim());
+        docNamesAssigned.add(safeLower(a.doctor).trim());
+      }
+    });
+
+    const freedOldSpaces = [];
+    const nextSpaces = spaces.map((s) => {
+      const sid = Number(s.id);
+      if (assignBySpaceId.has(sid)) {
+        const docName = assignBySpaceId.get(sid);
+        return {
+          ...s,
+          doctor: docName,
+          horario: assignedHorario,
+          estado: "OCUPADO",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      if (s.doctor && docNamesAssigned.has(safeLower(s.doctor).trim()) && !assignBySpaceId.has(sid)) {
+        freedOldSpaces.push(sid);
+        recentlyReleasedRef.current.set(sid, Date.now());
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: sid === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    setAttendanceRecords((prev) => {
+      const next = { ...prev };
+      assignments.forEach((a) => {
+        if (a.doctor) {
+          next[a.doctor] = "PRESENTE";
+        }
+      });
+      return next;
+    });
+
+    if (isGoogleSheetsConfigured() && updateSpacesBatchInGoogleSheets) {
+      const updates = [
+        ...assignments.map((a) => ({
+          spaceId: Number(a.spaceId),
+          doctor: a.doctor,
+          horario: assignedHorario,
+          estado: "OCUPADO",
+        })),
+        ...freedOldSpaces.map((sid) => ({
+          spaceId: sid,
+          doctor: "",
+          horario: "",
+          estado: "DISPONIBLE",
+          marca: "DELL",
+        })),
+      ];
+      updateSpacesBatchInGoogleSheets(updates).catch((err) => {
+        console.warn("Error sync batch a Google Sheets:", err);
       });
     }
   }
 
   // Guardar nómina personalizada de un supervisor y sincronizarla en la nube
-  function handleSaveSupervisorRoster(supId, newNames) {
+  function handleSaveSupervisorRoster(supId, newNames, franja = null, transferredDocs = []) {
     if (!supId) return;
-    setRosters((prev) => ({
-      ...prev,
-      [supId]: newNames,
-    }));
+    setRosters((prev) => {
+      const next = {
+        ...prev,
+        [supId]: newNames,
+      };
+      if (franja && franja !== "TODOS") {
+        next[`${supId}__${franja}`] = newNames;
+      }
+      // Si algún médico fue transferido desde otro supervisor en esta misma franja, removerlo del otro
+      if (Array.isArray(transferredDocs) && transferredDocs.length > 0) {
+        Object.keys(next).forEach((otherKey) => {
+          if (otherKey !== supId && (!franja || otherKey.includes(franja))) {
+            if (Array.isArray(next[otherKey])) {
+              next[otherKey] = next[otherKey].filter(
+                (name) => !transferredDocs.some((td) => isSameDoctor(td, name))
+              );
+            }
+          }
+        });
+      }
+      return next;
+    });
   }
 
   // Flujo exclusivo de Doctor: Asignación interactiva al hacer clic en un puesto del mapa
@@ -816,26 +1128,49 @@ export default function App() {
     const cleanSpaceId = Number(space.id);
     const timeNow = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
-    setSpaces((prev) =>
-      prev.map((s) => {
-        // Liberar puesto anterior si tenía uno asignado
-        if (s.doctor && isSameDoctor(s.doctor, docName) && Number(s.id) !== cleanSpaceId) {
-          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO", ultimoMovimiento: timeNow };
-        }
-        if (Number(s.id) === cleanSpaceId) {
-          return {
-            ...s,
-            doctor: docName,
-            horario: shift,
-            estado: "OCUPADO",
-            ultimoMovimiento: timeNow,
-          };
-        }
-        return s;
-      })
-    );
+    let previousSpaceId = null;
+    const nextSpaces = spaces.map((s) => {
+      // Liberar puesto anterior si tenía uno asignado
+      if (s.doctor && isSameDoctor(s.doctor, docName) && Number(s.id) !== cleanSpaceId) {
+        previousSpaceId = Number(s.id);
+        recentlyReleasedRef.current.set(previousSpaceId, Date.now());
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: Number(s.id) === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: timeNow,
+        };
+      }
+      if (Number(s.id) === cleanSpaceId) {
+        return {
+          ...s,
+          doctor: docName,
+          horario: shift,
+          supervisorId: currentUser.supervisorId || null,
+          supervisorNombre: currentUser.supervisorNombre || null,
+          estado: "OCUPADO",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: timeNow,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
 
     setCurrentUser((prev) => (prev ? { ...prev, spaceId: cleanSpaceId } : null));
+
+    // Actualizar registro de asistencia a PRESENTE
+    setAttendanceRecords((prev) => ({
+      ...prev,
+      [docName]: "PRESENTE",
+    }));
 
     // Auditoría
     const newLog = {
@@ -857,7 +1192,17 @@ export default function App() {
         doctor: docName,
         horario: shift,
         estado: "OCUPADO",
+        marca: "DELL",
       });
+      if (previousSpaceId !== null) {
+        updateSpaceInGoogleSheets({
+          id: previousSpaceId,
+          doctor: "",
+          horario: "",
+          estado: "DISPONIBLE",
+          marca: "DELL",
+        });
+      }
       logMovementToGoogleSheets(newLog);
     }
   }
@@ -865,22 +1210,41 @@ export default function App() {
   // Liberar el puesto de trabajo del doctor (dejándolo DISPONIBLE para el siguiente turno)
   function handleReleaseMySpace() {
     if (!currentUser) return;
-    const currentSpaceId = currentUser.spaceId;
     const docName = currentUser.name;
+    const activeSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, docName));
+    const currentSpaceId = currentUser.spaceId ? Number(currentUser.spaceId) : (activeSpace ? Number(activeSpace.id) : null);
 
-    setSpaces((prev) =>
-      prev.map((s) => {
-        if (s.id === currentSpaceId || (s.doctor && s.doctor.toLowerCase() === docName.toLowerCase())) {
-          return {
-            ...s,
-            doctor: null,
-            horario: null,
-            estado: s.marca ? "DISPONIBLE" : "VACIO",
-          };
-        }
-        return s;
-      })
-    );
+    if (currentSpaceId) {
+      recentlyReleasedRef.current.set(currentSpaceId, Date.now());
+    }
+
+    // Actualizar estado de asistencia a FINALIZADO (Jornada completada / Salida)
+    setAttendanceRecords((prev) => ({
+      ...prev,
+      [docName]: "FINALIZADO",
+    }));
+
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
+    const nextSpaces = spaces.map((s) => {
+      if ((currentSpaceId && Number(s.id) === currentSpaceId) || (s.doctor && isSameDoctor(s.doctor, docName))) {
+        recentlyReleasedRef.current.set(Number(s.id), Date.now());
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: Number(s.id) === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
 
     if (currentSpaceId) {
       const newLog = {
@@ -902,6 +1266,7 @@ export default function App() {
           doctor: "",
           horario: "",
           estado: "DISPONIBLE",
+          marca: "DELL",
         });
         logMovementToGoogleSheets(newLog);
       }
@@ -919,6 +1284,7 @@ export default function App() {
     localStorage.removeItem("DOCTORSV_ACTIVE_USER_V2");
     logoutFromFirebase();
     setCurrentUser(null);
+    setTab("mapa");
     setAuthPortalOpen(true);
   }
 
@@ -932,23 +1298,44 @@ export default function App() {
 
   function handleConfirmCheckIn({ doctor, spaceId, horario, timestamp }) {
     const cleanSpaceId = Number(spaceId);
-    setSpaces((prev) =>
-      prev.map((s) => {
-        if (s.doctor && isSameDoctor(s.doctor, doctor) && Number(s.id) !== cleanSpaceId) {
-          return { ...s, doctor: null, horario: null, estado: s.marca ? "DISPONIBLE" : "VACIO" };
-        }
-        if (Number(s.id) === cleanSpaceId) {
-          return {
-            ...s,
-            doctor,
-            horario,
-            estado: "OCUPADO",
-            ultimoMovimiento: timestamp,
-          };
-        }
-        return s;
-      })
-    );
+    let previousSpaceId = null;
+
+    const nextSpaces = spaces.map((s) => {
+      if (s.doctor && isSameDoctor(s.doctor, doctor) && Number(s.id) !== cleanSpaceId) {
+        previousSpaceId = Number(s.id);
+        recentlyReleasedRef.current.set(previousSpaceId, Date.now());
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: Number(s.id) === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: timestamp,
+        };
+      }
+      if (Number(s.id) === cleanSpaceId) {
+        return {
+          ...s,
+          doctor,
+          horario,
+          estado: "OCUPADO",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          ultimoMovimiento: timestamp,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    setAttendanceRecords((prev) => ({
+      ...prev,
+      [String(doctor).trim()]: "PRESENTE",
+    }));
 
     const newEntry = {
       id: `checkin-${Date.now()}`,
@@ -970,27 +1357,70 @@ export default function App() {
         doctor,
         horario,
         estado: "OCUPADO",
+        marca: "DELL",
       });
+      if (previousSpaceId !== null) {
+        updateSpaceInGoogleSheets({
+          id: previousSpaceId,
+          doctor: "",
+          horario: "",
+          estado: "DISPONIBLE",
+          marca: "DELL",
+        });
+      }
       logMovementToGoogleSheets(newEntry);
     }
   }
 
   function handleReleaseShift() {
-    const spacesToRelease = spaces.filter((s) => s.doctor);
+    const isSup = (s) => ([135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores") && s.estado !== "DISPONIBLE";
+    const isOccupied = (s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup(s);
+    const spacesToRelease = spaces.filter(isOccupied);
 
-    setSpaces((prev) =>
-      prev.map((s) => {
+    if (spacesToRelease.length === 0) return;
+
+    // Registrar en caché de liberaciones recientes para blindar contra ecos de Google Sheets
+    spacesToRelease.forEach((s) => {
+      recentlyReleasedRef.current.set(Number(s.id), Date.now());
+    });
+
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
+    const nextSpaces = spaces.map((s) => {
+      if (isOccupied(s)) {
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: Number(s.id) === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+
+    // Si el usuario actual tenía un cubículo asignado, desvincularlo
+    setCurrentUser((prev) => (prev?.spaceId ? { ...prev, spaceId: null } : prev));
+
+    // Marcar asistencia de los médicos liberados como FINALIZADO
+    setAttendanceRecords((prev) => {
+      const next = { ...prev };
+      spacesToRelease.forEach((s) => {
         if (s.doctor) {
-          return {
-            ...s,
-            doctor: null,
-            horario: null,
-            estado: s.marca ? "DISPONIBLE" : "VACIO",
-          };
+          next[s.doctor] = "FINALIZADO";
         }
-        return s;
-      })
-    );
+      });
+      return next;
+    });
+
+    // Guardar inmediatamente en Firestore
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
 
     const newEntry = {
       id: `relevo-${Date.now()}`,
@@ -1001,7 +1431,7 @@ export default function App() {
       origen: "Turno Saliente",
       destino: "DISPONIBLE",
       falla: "N/A",
-      obs: `Relevo general de turno ejecutado: ${spacesToRelease.length} puestos con médico han sido liberados`,
+      obs: `Relevo general de turno ejecutado: ${spacesToRelease.length} puestos liberados totalmente`,
     };
 
     setHistorial((prev) => [newEntry, ...prev]);
@@ -1010,33 +1440,68 @@ export default function App() {
       logMovementToGoogleSheets(newEntry);
       const batchPayload = spacesToRelease.map((s) => ({
         id: s.id,
+        spaceId: s.id,
         doctor: "",
         horario: "",
-        estado: s.marca ? "DISPONIBLE" : "VACIO",
-        observaciones: s.observaciones || "",
+        estado: "DISPONIBLE",
+        marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+        observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
       }));
       updateSpacesBatchInGoogleSheets(batchPayload);
     }
   }
 
   function handleReleaseByHorario(horario) {
-    const spacesToRelease = spaces.filter((s) => s.doctor && isSameHorario(s.horario, horario));
+    if (!horario) return;
+    const isSup = (s) => ([135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores") && s.estado !== "DISPONIBLE";
+    const isOccupiedInShift = (s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup(s) && isSameHorario(s.horario, horario);
+    const spacesToRelease = spaces.filter(isOccupiedInShift);
 
     if (spacesToRelease.length === 0) return;
 
-    setSpaces((prev) =>
-      prev.map((s) => {
-        if (s.doctor && isSameHorario(s.horario, horario)) {
-          return {
-            ...s,
-            doctor: null,
-            horario: null,
-            estado: s.marca ? "DISPONIBLE" : "VACIO",
-          };
+    spacesToRelease.forEach((s) => {
+      recentlyReleasedRef.current.set(Number(s.id), Date.now());
+    });
+
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
+    const nextSpaces = spaces.map((s) => {
+      if (isOccupiedInShift(s)) {
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: Number(s.id) === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+
+    setCurrentUser((prev) => {
+      if (prev?.spaceId && spacesToRelease.some((r) => Number(r.id) === Number(prev.spaceId))) {
+        return { ...prev, spaceId: null };
+      }
+      return prev;
+    });
+
+    setAttendanceRecords((prev) => {
+      const next = { ...prev };
+      spacesToRelease.forEach((s) => {
+        if (s.doctor) {
+          next[s.doctor] = "FINALIZADO";
         }
-        return s;
-      })
-    );
+      });
+      return next;
+    });
+
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
 
     const newEntry = {
       id: `relevo-h-${Date.now()}`,
@@ -1047,7 +1512,7 @@ export default function App() {
       origen: `Franja ${horario}`,
       destino: "DISPONIBLE",
       falla: "N/A",
-      obs: `Relevo de franja ejecutado: ${spacesToRelease.length} puestos de la franja "${horario}" liberados para el turno entrante`,
+      obs: `Relevo de franja ejecutado: ${spacesToRelease.length} puestos de la franja "${horario}" liberados totalmente`,
     };
 
     setHistorial((prev) => [newEntry, ...prev]);
@@ -1056,46 +1521,228 @@ export default function App() {
       logMovementToGoogleSheets(newEntry);
       const batchPayload = spacesToRelease.map((s) => ({
         id: s.id,
+        spaceId: s.id,
         doctor: "",
         horario: "",
-        estado: s.marca ? "DISPONIBLE" : "VACIO",
-        observaciones: s.observaciones || "",
+        estado: "DISPONIBLE",
+        marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+        observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
+      }));
+      updateSpacesBatchInGoogleSheets(batchPayload);
+    }
+  }
+
+  // Liberación atómica de todos los puestos ocupados en el lote a cargo de un supervisor
+  function handleReleaseLote(bloqueInicio, bloqueFin, supName) {
+    const bIni = Number(bloqueInicio);
+    const bFin = Number(bloqueFin);
+    if (isNaN(bIni) || isNaN(bFin)) return;
+
+    const isSupStation = (sid) => [135, 136, 137, 138, 139].includes(sid);
+    const spacesToRelease = spaces.filter((s) => {
+      const sid = Number(s.id);
+      return sid >= bIni && sid <= bFin && (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSupStation(sid);
+    });
+
+    if (spacesToRelease.length === 0) {
+      alert(`No hay cubículos ocupados en el lote #${bIni} al #${bFin}.`);
+      return;
+    }
+
+    if (!window.confirm(`¿Liberar los ${spacesToRelease.length} puesto(s) ocupados en tu lote (#${bIni} al #${bFin})?\n\nLos cubículos quedarán 100% DISPONIBLES de inmediato para los nuevos médicos.`)) {
+      return;
+    }
+
+    spacesToRelease.forEach((s) => {
+      recentlyReleasedRef.current.set(Number(s.id), Date.now());
+    });
+
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
+    const nextSpaces = spaces.map((s) => {
+      const sid = Number(s.id);
+      if (sid >= bIni && sid <= bFin && (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSupStation(sid)) {
+        return {
+          ...s,
+          doctor: null,
+          horario: null,
+          categoria: sid === 1 ? null : s.categoria,
+          estado: "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
+          ultimoMovimiento: nowTime,
+        };
+      }
+      return s;
+    });
+
+    setSpaces(nextSpaces);
+
+    setCurrentUser((prev) => {
+      if (prev?.spaceId && spacesToRelease.some((r) => Number(r.id) === Number(prev.spaceId))) {
+        return { ...prev, spaceId: null };
+      }
+      return prev;
+    });
+
+    setAttendanceRecords((prev) => {
+      const next = { ...prev };
+      spacesToRelease.forEach((s) => {
+        if (s.doctor) {
+          next[s.doctor] = "FINALIZADO";
+        }
+      });
+      return next;
+    });
+
+    saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    const newEntry = {
+      id: `relevo-lote-${Date.now()}`,
+      fecha: new Date().toLocaleDateString("es-SV"),
+      equipo: "LOTE",
+      espacio: `${bIni}-${bFin}`,
+      accion: "Liberación de Lote",
+      origen: `Lote #${bIni}-${bFin}`,
+      destino: "DISPONIBLE",
+      falla: "N/A",
+      obs: `Supervisor ${supName || "Oficial"} liberó ${spacesToRelease.length} puestos del lote #${bIni} al #${bFin}`,
+    };
+
+    setHistorial((prev) => [newEntry, ...prev]);
+
+    if (isGoogleSheetsConfigured()) {
+      logMovementToGoogleSheets(newEntry);
+      const batchPayload = spacesToRelease.map((s) => ({
+        id: s.id,
+        spaceId: s.id,
+        doctor: "",
+        horario: "",
+        estado: "DISPONIBLE",
+        marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+        observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
       }));
       updateSpacesBatchInGoogleSheets(batchPayload);
     }
   }
 
   function handleRegisterMovement(movementData) {
-    const { tipo, cantidad, origen, destino, motivo, accion, spaceId, falla, obs } = movementData;
+    const { tipo, equipo, cantidad, origen, destino, motivo, accion, spaceId, espacio, falla, obs } = movementData || {};
+    const targetType = tipo || equipo || "PC";
+    const qty = Number(cantidad) || 1;
+    const isIngreso = accion === "Ingreso" || (accion && accion.toLowerCase().includes("ingreso"));
+    const targetSpace = isIngreso ? null : (spaceId ? Number(spaceId) : (espacio ? Number(espacio) : null));
 
-    setBodegaStock((prev) =>
-      prev.map((item) => {
-        if (item.key === tipo) {
+    setBodegaStock((prev) => {
+      let found = false;
+      const updated = prev.map((item) => {
+        const match =
+          item.key === targetType ||
+          (item.key === "MAUSE" && (targetType === "MOUSE" || targetType === "MAUSE")) ||
+          (item.key === "MOUSE" && (targetType === "MAUSE" || targetType === "MOUSE"));
+
+        if (match) {
+          found = true;
+          const isOrigenBodega = String(origen || "").trim().toUpperCase().includes("BODEGA");
+          const isDestinoBodega = String(destino || "").trim().toUpperCase().includes("BODEGA");
+
           let delta = 0;
-          if (origen === "BODEGA") delta -= Number(cantidad);
-          if (destino === "BODEGA") delta += Number(cantidad);
+          if (isIngreso) {
+            delta = qty;
+          } else if (accion === "Retiro" || (!isOrigenBodega && isDestinoBodega)) {
+            delta = qty;
+          } else if (isOrigenBodega && !isDestinoBodega) {
+            delta = -qty;
+          } else {
+            if (isOrigenBodega) delta -= qty;
+            if (isDestinoBodega) delta += qty;
+          }
+
           return {
             ...item,
-            actual: Math.max(0, item.actual + delta),
+            actual: Math.max(0, (item.actual || 0) + delta),
           };
         }
         return item;
-      })
-    );
+      });
+
+      if (!found && isIngreso) {
+        return [
+          ...updated,
+          {
+            key: targetType,
+            label: targetType,
+            original: 0,
+            actual: qty,
+          },
+        ];
+      }
+      return updated;
+    });
 
     const newLog = {
       id: `mov-${Date.now()}`,
       fecha: new Date().toLocaleDateString("es-SV"),
-      equipo: tipo,
-      espacio: spaceId ? Number(spaceId) : null,
-      accion: accion || "Movimiento",
-      origen: origen || "BODEGA",
-      destino: destino || "Puesto",
-      falla: falla || motivo || "N/A",
-      obs: obs || `Operación de ${cantidad} unidad(es) de ${tipo}`,
+      equipo: targetType,
+      cantidad: qty,
+      espacio: targetSpace,
+      accion: isIngreso ? "Ingreso" : (accion || "Movimiento"),
+      origen: isIngreso ? (origen || "PROVEEDOR") : (origen || "BODEGA"),
+      destino: isIngreso ? "BODEGA" : (destino || "Puesto"),
+      falla: falla || motivo || (isIngreso ? "Ingreso de stock nuevo" : "N/A"),
+      obs: obs || (isIngreso ? `Ingreso de ${qty} unidad(es) de ${targetType} a Bodega` : `Operación de ${qty} unidad(es) de ${targetType}`),
     };
 
     setHistorial((prev) => [newLog, ...prev]);
+
+    // Actualizar estado del cubículo físico cuando la operación afecta a un puesto específico
+    if (targetSpace && !isIngreso) {
+      let updatedSpaceObj = null;
+      const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+      const nextSpaces = spaces.map((s) => {
+        if (Number(s.id) === targetSpace) {
+          if (accion === "Retiro") {
+            const isPC = targetType === "PC" || targetType === "EQUIPO COMPLETO";
+            updatedSpaceObj = {
+              ...s,
+              estado: isPC ? "VACIO" : "INCOMPLETO",
+              marca: isPC ? "NO PC" : s.marca,
+              modelo: isPC ? null : s.modelo,
+              doctor: null,
+              horario: null,
+              ultimoMovimiento: nowTime,
+            };
+            return updatedSpaceObj;
+          } else if (accion === "Mantenimiento") {
+            updatedSpaceObj = {
+              ...s,
+              estado: "REPARACION",
+              doctor: null,
+              horario: null,
+              ultimoMovimiento: nowTime,
+            };
+            return updatedSpaceObj;
+          } else if (accion === "Reemplazo" || accion === "Reintegro" || accion === "Cambio") {
+            updatedSpaceObj = {
+              ...s,
+              estado: s.doctor ? "OCUPADO" : "DISPONIBLE",
+              marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+              modelo: s.modelo || "OptiPlex 3080",
+              ultimoMovimiento: nowTime,
+            };
+            return updatedSpaceObj;
+          }
+        }
+        return s;
+      });
+      setSpaces(nextSpaces);
+      saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+      if (isGoogleSheetsConfigured() && updatedSpaceObj) {
+        updateSpaceInGoogleSheets(updatedSpaceObj);
+      }
+    }
 
     if (isGoogleSheetsConfigured()) {
       logMovementToGoogleSheets(newLog);
@@ -1104,25 +1751,81 @@ export default function App() {
 
   async function handleSync() {
     setIsSyncing(true);
+    let fetchedFromSheets = false;
     try {
       if (isGoogleSheetsConfigured()) {
         try {
           const res = await fetchSpacesFromGoogleSheets();
           if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-            setSpaces((prev) =>
-              prev.map((s) => {
+            fetchedFromSheets = true;
+            let updatedList = [];
+            setSpaces((prev) => {
+              updatedList = prev.map((s) => {
                 const match = res.data.find((item) => Number(item.id) === Number(s.id));
-                return match ? { ...s, ...match } : s;
-              })
-            );
+                if (!match) return s;
+
+                const releaseTimestamp = recentlyReleasedRef.current.get(Number(s.id));
+                const isRecentlyReleased = releaseTimestamp && Date.now() - releaseTimestamp < 180000;
+
+                if (isRecentlyReleased) {
+                  return {
+                    ...s,
+                    ...match,
+                    doctor: null,
+                    horario: null,
+                    categoria: Number(s.id) === 1 ? null : (match.categoria || s.categoria),
+                    estado: "DISPONIBLE",
+                    marca: (match.marca && match.marca !== "NO PC") ? match.marca : (s.marca && s.marca !== "NO PC" ? s.marca : "DELL"),
+                    modelo: match.modelo || s.modelo || "OptiPlex 3080",
+                  };
+                }
+
+                const finalDoctor = match.doctor ? String(match.doctor).trim() : null;
+                let finalEstado = s.estado;
+                if (finalDoctor) {
+                  finalEstado = "OCUPADO";
+                } else if (match.estado) {
+                  finalEstado = match.estado;
+                }
+
+                let finalMarca = match.marca || s.marca;
+                if (finalEstado === "DISPONIBLE" && (!finalMarca || finalMarca === "NO PC")) {
+                  finalMarca = "DELL";
+                }
+                let finalModelo = match.modelo || s.modelo;
+                if (finalEstado === "DISPONIBLE" && !finalModelo) {
+                  finalModelo = "OptiPlex 3080";
+                }
+
+                return {
+                  ...s,
+                  ...match,
+                  estado: finalEstado,
+                  doctor: finalDoctor,
+                  marca: finalMarca,
+                  modelo: finalModelo,
+                  categoria: Number(s.id) === 1 ? null : (match.categoria || s.categoria),
+                };
+              });
+              return updatedList;
+            });
+
+            if (updatedList.length > 0) {
+              saveCloudSpaces(updatedList, myClientId.current, true);
+              try {
+                localStorage.setItem("DOCTORSV_EXCEL_REAL_SPACES_V1", JSON.stringify(updatedList));
+              } catch {}
+            }
           }
         } catch (err) {
           console.warn("Sync from Google Sheets:", err);
         }
       }
 
-      const savedSpaces = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
-      if (savedSpaces) setSpaces(JSON.parse(savedSpaces));
+      if (!fetchedFromSheets) {
+        const savedSpaces = localStorage.getItem("DOCTORSV_EXCEL_REAL_SPACES_V1");
+        if (savedSpaces) setSpaces(JSON.parse(savedSpaces));
+      }
 
       const savedHistorial = localStorage.getItem("DOCTORSV_EXCEL_REAL_HISTORIAL_V1");
       if (savedHistorial) setHistorial(JSON.parse(savedHistorial));
@@ -1176,9 +1879,10 @@ export default function App() {
         onSync={handleSync}
         isSyncing={isSyncing}
         lastSyncTime={lastSyncTime}
-        onOpenCheckIn={() => setCheckInModalOpen(true)}
+        onOpenCheckIn={handleOpenCheckIn}
         currentUser={currentUser}
         onLogout={handleLogout}
+        onReleaseMySpace={handleReleaseMySpace}
         onOpenAuthPortal={() => setAuthPortalOpen(true)}
         onOpenShiftConfig={() => setShiftConfigOpen(true)}
         onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
@@ -1217,9 +1921,12 @@ export default function App() {
             onSelectSpace={handleSpaceClick}
             onReleaseShift={handleReleaseShift}
             onReleaseByHorario={handleReleaseByHorario}
+            onReleaseLote={handleReleaseLote}
             currentUser={currentUser}
             onReleaseMySpace={handleReleaseMySpace}
             horarios={horarios}
+            supervisores={supervisores}
+            rosterBySupervisor={rosters}
           />
         )}
 
@@ -1235,17 +1942,28 @@ export default function App() {
             <AttendanceView
               spaces={spaces}
               onAssignDoctor={handleAssignDoctor}
+              onAssignBatch={handleAssignBatch}
               onUnassignDoctor={handleUnassignDoctor}
-              onOpenCheckIn={() => setCheckInModalOpen(true)}
+              onOpenCheckIn={handleOpenCheckIn}
               onOpenLiveReport={() => setLiveReportOpen(true)}
               initialSupId={currentUser?.supervisorId || null}
               onReleaseByHorario={handleReleaseByHorario}
+              onReleaseLote={handleReleaseLote}
               rosterBySupervisor={rosters}
               onSaveRoster={handleSaveSupervisorRoster}
               horarios={horarios}
               supervisores={supervisores}
+              onUpdateSupervisorFranja={handleUpdateSupervisorFranja}
+              onUpdateSupervisorOfficialShift={handleUpdateSupervisorOfficialShift}
               onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
               currentUser={currentUser}
+              attendanceRecords={attendanceRecords}
+              onSetAttendance={(docName, status) => {
+                setAttendanceRecords((prev) => ({
+                  ...prev,
+                  [docName]: status,
+                }));
+              }}
             />
           )}
 
@@ -1267,6 +1985,7 @@ export default function App() {
               onAddStaff={(member) => setCustomStaff((prev) => [...prev, member])}
               onRemoveStaff={(id) => setCustomStaff((prev) => prev.filter((m) => m.id !== id))}
               supervisores={supervisores}
+              horarios={horarios}
             />
           )}
 
@@ -1307,6 +2026,11 @@ export default function App() {
           historial={historial}
           onClose={() => setSelectedSpace(null)}
           onSave={handleSaveSpace}
+          supervisores={supervisores}
+          horarios={horarios}
+          onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
+          onUpdateSupervisorOfficialShift={handleUpdateSupervisorOfficialShift}
+          isMaster={currentUser?.role === "MASTER"}
         />
       )}
 
@@ -1315,6 +2039,7 @@ export default function App() {
         <ClaimSpaceModal
           space={claimModalSpace}
           currentUser={currentUser}
+          supervisores={supervisores}
           onClose={() => setClaimModalSpace(null)}
           onConfirmClaim={handleClaimSpace}
           onReleaseMySpace={() => {
@@ -1339,6 +2064,25 @@ export default function App() {
           }}
           onLoginDoctor={(doctorData) => {
             setCurrentUser(doctorData);
+            if (doctorData?.supervisorId && doctorData?.name) {
+              setRosters((prev) => {
+                const supId = doctorData.supervisorId;
+                const shiftKey = doctorData.shift ? `${supId}__${doctorData.shift}` : null;
+                const prevList = prev[supId] || [];
+                const nextList = prevList.some((n) => isSameDoctor(n, doctorData.name))
+                  ? prevList
+                  : [...prevList, doctorData.name];
+
+                const next = { ...prev, [supId]: nextList };
+                if (shiftKey) {
+                  const prevShiftList = prev[shiftKey] || [];
+                  next[shiftKey] = prevShiftList.some((n) => isSameDoctor(n, doctorData.name))
+                    ? prevShiftList
+                    : [...prevShiftList, doctorData.name];
+                }
+                return next;
+              });
+            }
             setAuthPortalOpen(false);
             setTab("mapa");
           }}
@@ -1359,9 +2103,13 @@ export default function App() {
         {checkInModalOpen && (
           <QuickCheckInModal
             spaces={spaces}
-            onClose={() => setCheckInModalOpen(false)}
+            onClose={() => {
+              setCheckInModalOpen(false);
+              setCheckInDefaultHorario(null);
+            }}
             onConfirmCheckIn={handleConfirmCheckIn}
             horarios={horarios}
+            defaultHorario={checkInDefaultHorario}
           />
         )}
 
@@ -1387,6 +2135,9 @@ export default function App() {
             spaces={spaces}
             historial={historial}
             onClose={() => setLiveReportOpen(false)}
+            horarios={horarios}
+            supervisores={supervisores}
+            rosterBySupervisor={rosters}
           />
         )}
 

@@ -1,18 +1,30 @@
 import React, { useState, useMemo, useCallback } from "react";
 import {
   X, Search, Check, Users, Settings2, Sparkles, Filter, Mail,
-  CheckSquare, Square, AlertCircle, RefreshCw, UserCheck
+  CheckSquare, Square, AlertCircle, RefreshCw, UserCheck, Clock,
+  MapPin, AlertTriangle, ArrowRightLeft
 } from "lucide-react";
-import { DOCTORES_EXCEL } from "../../constants/tokens";
+import { DOCTORES_EXCEL, HORARIOS } from "../../constants/tokens";
+import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
-// Componente memoizado para cada tarjeta de médico: solo re-renderiza cuando su propio estado 'isChecked' cambia
-const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({ doc, isChecked, onToggle }) {
+// Componente memoizado para cada tarjeta de médico: solo re-renderiza cuando su propio estado cambia
+const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({
+  doc,
+  isChecked,
+  onToggle,
+  supInfo,
+  currentSupervisorId,
+}) {
+  const isOtherSupervisor = supInfo?.supervisorId && supInfo.supervisorId !== currentSupervisorId;
+
   return (
     <div
-      onClick={() => onToggle(doc.nombre)}
+      onClick={() => onToggle(doc.nombre, supInfo)}
       className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
         isChecked
           ? "bg-blue-50/80 border-[#0095FF] ring-1 ring-[#0095FF]/30 shadow-xs"
+          : isOtherSupervisor
+          ? "bg-amber-50/40 border-amber-200/80 hover:bg-amber-50/70"
           : "bg-white border-slate-200 hover:bg-slate-50/90 hover:border-slate-300"
       }`}
     >
@@ -35,6 +47,7 @@ const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({ doc, isCheck
           }`}>
             {doc.nombre}
           </p>
+
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {doc.correo && (
               <span className="text-[10px] font-mono text-slate-500 truncate flex items-center gap-0.5">
@@ -52,6 +65,26 @@ const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({ doc, isCheck
                 {doc.grupo}
               </span>
             )}
+            {/* Badge de pertenencia de Supervisor */}
+            {isOtherSupervisor ? (
+              <span className="text-[9.5px] bg-amber-100/80 text-amber-900 border border-amber-300/60 px-1.5 py-0.2 rounded-md font-bold flex items-center gap-0.5">
+                <AlertTriangle size={9} className="text-amber-600 shrink-0" />
+                Con: {supInfo.supervisorNombre?.split(" ")[0]} {supInfo.supervisorNombre?.split(" ")[1] || ""}
+              </span>
+            ) : isChecked ? (
+              <span className="text-[9.5px] bg-emerald-100/90 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded-md font-bold flex items-center gap-0.5">
+                <Check size={9} className="text-emerald-700 shrink-0" />
+                En tu nómina
+              </span>
+            ) : null}
+
+            {/* Puesto físico si está sentado */}
+            {supInfo?.spaceId && (
+              <span className="text-[9.5px] bg-sky-50 text-sky-800 border border-sky-200 px-1 py-0.2 rounded font-semibold flex items-center gap-0.5">
+                <MapPin size={9} className="text-sky-600 shrink-0" />
+                Puesto #{supInfo.spaceId}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -65,7 +98,12 @@ const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({ doc, isCheck
 
 export default function SupervisorRosterModal({
   supervisor,
+  activeFranja = null,
   currentDoctorNames = [],
+  allRosters = {},
+  supervisores = [],
+  spaces = [],
+  horarios = HORARIOS,
   onSaveRoster,
   onClose,
 }) {
@@ -74,15 +112,15 @@ export default function SupervisorRosterModal({
     if (currentDoctorNames && currentDoctorNames.length > 0) {
       return new Set(currentDoctorNames);
     }
-    // Default: first N doctors matching capacity
-    const count = supervisor?.totalPuestos ||
-      (supervisor?.bloqueFin && supervisor?.bloqueInicio ? (Number(supervisor.bloqueFin) - Number(supervisor.bloqueInicio) + 1) : 40);
-    return new Set(DOCTORES_EXCEL.slice(0, count).map((d) => d.nombre));
+    // Default: vacio si no hay doctores para evitar mezclar con otros supervisores
+    return new Set();
   });
 
+  const [transferredNames, setTransferredNames] = useState(new Set());
   const [search, setSearch] = useState("");
   const [selectedGroup, setSelectedGroup] = useState("TODOS");
-  const [onlySelected, setOnlySelected] = useState(false);
+  const [selectedFranja, setSelectedFranja] = useState(() => activeFranja || "TODOS");
+  const [filterAsignacion, setFilterAsignacion] = useState("TODOS"); // "TODOS", "MI_NOMINA", "DISPONIBLES", "OTROS_SUPERVISORES"
 
   const capacity = supervisor?.totalPuestos ||
     (supervisor?.bloqueFin && supervisor?.bloqueInicio ? (Number(supervisor.bloqueFin) - Number(supervisor.bloqueInicio) + 1) : 40);
@@ -99,35 +137,110 @@ export default function SupervisorRosterModal({
 
   const [isSaving, setIsSaving] = useState(false);
 
-  // Filtered doctors list
+  // Mapa memoizado de información de supervisor para cada médico
+  const doctorSupInfoMap = useMemo(() => {
+    const map = new Map();
+    DOCTORES_EXCEL.forEach((d) => {
+      const info = getDoctorSupervisorInfo({
+        docName: d.nombre,
+        rosters: allRosters,
+        supervisores,
+        spaces,
+        filterHorario: selectedFranja !== "TODOS" ? selectedFranja : activeFranja,
+      });
+      map.set(d.nombre.toLowerCase().trim(), info);
+    });
+    return map;
+  }, [allRosters, supervisores, spaces, selectedFranja, activeFranja]);
+
+  // Médicos filtrados por búsqueda, grupo, franja y asignación
   const filteredDoctors = useMemo(() => {
     const q = search.toLowerCase().trim();
+
     return DOCTORES_EXCEL.filter((d) => {
+      const isChecked = selectedNames.has(d.nombre);
+      const supInfo = doctorSupInfoMap.get(d.nombre.toLowerCase().trim());
+      const isOtherSup = supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id;
+
+      // Filtro por Grupo
       if (selectedGroup !== "TODOS" && d.grupo !== selectedGroup) return false;
-      if (onlySelected && !selectedNames.has(d.nombre)) return false;
+
+      // Filtro por Asignación
+      if (filterAsignacion === "MI_NOMINA" && !isChecked) return false;
+      if (filterAsignacion === "DISPONIBLES" && (isOtherSup || (supInfo && !isChecked))) return false;
+      if (filterAsignacion === "OTROS_SUPERVISORES" && !isOtherSup) return false;
+
+      // Filtro por Franja Horaria
+      if (selectedFranja !== "TODOS") {
+        const matchesShift =
+          isChecked ||
+          (supInfo?.horario && isSameHorario(supInfo.horario, selectedFranja)) ||
+          (d.horario && (d.horario === "Turno Rotativo" || isSameHorario(d.horario, selectedFranja)));
+        if (!matchesShift) return false;
+      }
+
+      // Filtro por búsqueda
       if (!q) return true;
 
-      return (
+      const matchesText =
         (d.nombre && d.nombre.toLowerCase().includes(q)) ||
         (d.correo && d.correo.toLowerCase().includes(q)) ||
         (d.jvpm && d.jvpm.toLowerCase().includes(q)) ||
-        String(d.id).includes(q)
-      );
-    });
-  }, [search, selectedGroup, onlySelected, onlySelected ? selectedNames : null]);
+        String(d.id).includes(q) ||
+        (supInfo?.supervisorNombre && supInfo.supervisorNombre.toLowerCase().includes(q));
 
-  // Toggle single doctor con useCallback para mantener identidad estable
-  const handleToggleDoctor = useCallback((docName) => {
+      return matchesText;
+    });
+  }, [search, selectedGroup, selectedFranja, filterAsignacion, selectedNames, doctorSupInfoMap, supervisor?.id]);
+
+  // Toggle single doctor con confirmación amigable si pertenece a otro supervisor
+  const handleToggleDoctor = useCallback((docName, supInfo) => {
     setSelectedNames((prev) => {
       const next = new Set(prev);
       if (next.has(docName)) {
         next.delete(docName);
       } else {
+        // Si el médico ya está asignado a otro supervisor en esta franja, pedir confirmación
+        if (supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id) {
+          const supName = supInfo.supervisorNombre || "otro supervisor";
+          const confirmTransfer = window.confirm(
+            `El/la Dr(a). ${docName} está actualmente registrado(a) con ${supName}.\n\n¿Deseas transferirlo(a) a tu nómina de este turno?`
+          );
+          if (!confirmTransfer) {
+            return prev;
+          }
+          setTransferredNames((tPrev) => new Set(tPrev).add(docName));
+        }
         next.add(docName);
       }
       return next;
     });
-  }, []);
+  }, [supervisor?.id]);
+
+  // Carga rápida: Cargar médicos disponibles de mi franja activa
+  function handleSelectFranjaDoctors() {
+    const franjaTarget = activeFranja || selectedFranja;
+    setSelectedNames((prev) => {
+      const next = new Set(prev);
+      DOCTORES_EXCEL.forEach((d) => {
+        const supInfo = doctorSupInfoMap.get(d.nombre.toLowerCase().trim());
+        const isOtherSup = supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id;
+        // Solo agregar médicos no tomados por otro supervisor
+        if (!isOtherSup) {
+          if (
+            franjaTarget === "TODOS" ||
+            d.horario === "Turno Rotativo" ||
+            (supInfo?.horario && isSameHorario(supInfo.horario, franjaTarget))
+          ) {
+            if (next.size < capacity) {
+              next.add(d.nombre);
+            }
+          }
+        }
+      });
+      return next;
+    });
+  }
 
   // Quick action: Select group
   function handleSelectGroup(groupName) {
@@ -135,18 +248,13 @@ export default function SupervisorRosterModal({
       const next = new Set(prev);
       DOCTORES_EXCEL.forEach((d) => {
         if (d.grupo === groupName) {
-          next.add(d.nombre);
+          const supInfo = doctorSupInfoMap.get(d.nombre.toLowerCase().trim());
+          const isOtherSup = supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id;
+          if (!isOtherSup && next.size < capacity) {
+            next.add(d.nombre);
+          }
         }
       });
-      return next;
-    });
-  }
-
-  // Quick action: Select first N doctors
-  function handleSelectFirstN(n) {
-    setSelectedNames((prev) => {
-      const next = new Set(prev);
-      DOCTORES_EXCEL.slice(0, n).forEach((d) => next.add(d.nombre));
       return next;
     });
   }
@@ -155,6 +263,7 @@ export default function SupervisorRosterModal({
   function handleClearAll() {
     if (window.confirm("¿Deseas deseleccionar todos los médicos de la lista?")) {
       setSelectedNames(new Set());
+      setTransferredNames(new Set());
     }
   }
 
@@ -162,7 +271,10 @@ export default function SupervisorRosterModal({
     setIsSaving(true);
     try {
       const namesList = Array.from(selectedNames);
-      onSaveRoster(namesList);
+      const franjaTarget = activeFranja || selectedFranja;
+      if (onSaveRoster) {
+        onSaveRoster(namesList, franjaTarget, Array.from(transferredNames));
+      }
       onClose();
     } catch (e) {
       console.error("Error al guardar nómina:", e);
@@ -187,9 +299,16 @@ export default function SupervisorRosterModal({
                 <h2 className="font-heading text-lg sm:text-xl font-extrabold tracking-tight text-white leading-tight">
                   Configurador de Nómina de Médicos
                 </h2>
-                <p className="text-[12px] text-cyan-100 font-medium mt-0.5">
-                  {supervisor?.nombre} · Estación #{supervisor?.puesto} (Lote: Puestos #{supervisor?.bloqueInicio} al #{supervisor?.bloqueFin})
-                </p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <p className="text-[12px] text-cyan-100 font-medium">
+                    {supervisor?.nombre} · Estación #{supervisor?.puesto} (Lote: Puestos #{supervisor?.bloqueInicio} al #{supervisor?.bloqueFin})
+                  </p>
+                  {activeFranja && (
+                    <span className="text-[10.5px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full border border-white/30 flex items-center gap-1">
+                      <Clock size={11} /> Franja: {activeFranja}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -204,7 +323,7 @@ export default function SupervisorRosterModal({
         </div>
 
         {/* ================= BARRA DE ESTADO & CAPACIDAD ================= */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 shrink-0">
+        <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-[11.5px] font-bold uppercase tracking-wider text-slate-500">
@@ -253,26 +372,30 @@ export default function SupervisorRosterModal({
 
           {/* Botones de Carga Rápida */}
           <div className="flex items-center gap-1.5 flex-wrap">
+            {activeFranja && (
+              <button
+                type="button"
+                onClick={handleSelectFranjaDoctors}
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-50 border border-blue-200 text-[#0048B5] hover:bg-blue-100 transition shadow-2xs flex items-center gap-1"
+                title={`Cargar médicos disponibles para la franja ${activeFranja}`}
+              >
+                <Sparkles size={12} />
+                <span>+ Médicos de mi franja</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleSelectGroup("Grupo 1")}
               className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-[#0048B5] transition shadow-2xs"
             >
-              + Cargar Grupo 1
+              + Grupo 1
             </button>
             <button
               type="button"
               onClick={() => handleSelectGroup("Grupo 2")}
               className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-[#0048B5] transition shadow-2xs"
             >
-              + Cargar Grupo 2
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectFirstN(capacity)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-[#0048B5] transition shadow-2xs"
-            >
-              Primeros {capacity}
+              + Grupo 2
             </button>
             {countSelected > 0 && (
               <button
@@ -286,93 +409,168 @@ export default function SupervisorRosterModal({
           </div>
         </div>
 
-        {/* ================= CONTROLES DE BÚSQUEDA Y FILTRADO ================= */}
-        <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="relative w-full sm:w-80">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre, correo o JVPM..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-8 py-2 text-[12.5px] font-medium outline-none focus:bg-white focus:ring-2 focus:ring-[#0095FF] transition"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 border border-slate-200">
-              {availableGroups.map((grp) => (
+        {/* ================= CONTROLES DE BÚSQUEDA Y FILTRADO AVANZADO ================= */}
+        <div className="p-3.5 border-b border-slate-100 bg-white flex flex-col gap-2.5 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
+            {/* Campo de búsqueda */}
+            <div className="relative w-full sm:w-72">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por médico, correo, supervisor..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-8 py-1.5 text-[12px] font-medium outline-none focus:bg-white focus:ring-2 focus:ring-[#0095FF] transition"
+              />
+              {search && (
                 <button
-                  key={grp}
                   type="button"
-                  onClick={() => setSelectedGroup(grp)}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                    selectedGroup === grp
-                      ? "bg-white text-[#0048B5] shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
                 >
-                  {grp}
+                  ✕
                 </button>
-              ))}
+              )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setOnlySelected(!onlySelected)}
-              className={`px-3 py-1.5 text-[11.5px] font-bold rounded-xl border transition-all shrink-0 flex items-center gap-1.5 ${
-                onlySelected
-                  ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs"
-                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              <UserCheck size={13} />
-              <span>Ver elegidos ({countSelected})</span>
-            </button>
+            {/* Selector de Franja Horaria */}
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                <Clock size={12} /> Franja:
+              </span>
+              <select
+                value={selectedFranja}
+                onChange={(e) => setSelectedFranja(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11.5px] font-bold text-slate-700 outline-none cursor-pointer"
+              >
+                <option value="TODOS">Todas las franjas</option>
+                {(horarios || HORARIOS).map((h) => (
+                  <option key={h} value={h}>
+                    {h} {activeFranja && isSameHorario(h, activeFranja) ? "(Mi turno activo)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Filtros de Asignación y Grupo */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
+                Ver:
+              </span>
+              <button
+                type="button"
+                onClick={() => setFilterAsignacion("TODOS")}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                  filterAsignacion === "TODOS"
+                    ? "bg-[#0048B5] text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Todos ({DOCTORES_EXCEL.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterAsignacion("MI_NOMINA")}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                  filterAsignacion === "MI_NOMINA"
+                    ? "bg-[#0048B5] text-white shadow-2xs"
+                    : "bg-blue-50 text-[#0048B5] hover:bg-blue-100"
+                }`}
+              >
+                En mi nómina ({countSelected})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterAsignacion("DISPONIBLES")}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                  filterAsignacion === "DISPONIBLES"
+                    ? "bg-emerald-600 text-white shadow-2xs"
+                    : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                }`}
+              >
+                Disponibles
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterAsignacion("OTROS_SUPERVISORES")}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                  filterAsignacion === "OTROS_SUPERVISORES"
+                    ? "bg-amber-600 text-white shadow-2xs"
+                    : "bg-amber-50 text-amber-800 hover:bg-amber-100"
+                }`}
+              >
+                Con otros supervisores
+              </button>
+            </div>
+
+            {/* Selector de Grupo */}
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                Grupo:
+              </span>
+              <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 border border-slate-200">
+                {availableGroups.map((grp) => (
+                  <button
+                    key={grp}
+                    type="button"
+                    onClick={() => setSelectedGroup(grp)}
+                    className={`px-2 py-0.5 text-[10.5px] font-bold rounded-md transition-all ${
+                      selectedGroup === grp
+                        ? "bg-white text-[#0048B5] shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {grp}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* ================= LISTA DE MÉDICOS SELECCIONABLES ================= */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 divide-y divide-slate-100">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            {filteredDoctors.map((doc) => (
-              <DoctorCheckboxCard
-                key={doc.id}
-                doc={doc}
-                isChecked={selectedNames.has(doc.nombre)}
-                onToggle={handleToggleDoctor}
-              />
-            ))}
+            {filteredDoctors.map((doc) => {
+              const isChecked = selectedNames.has(doc.nombre);
+              const supInfo = doctorSupInfoMap.get(doc.nombre.toLowerCase().trim());
+              return (
+                <DoctorCheckboxCard
+                  key={doc.id}
+                  doc={doc}
+                  isChecked={isChecked}
+                  onToggle={handleToggleDoctor}
+                  supInfo={supInfo}
+                  currentSupervisorId={supervisor?.id}
+                />
+              );
+            })}
           </div>
 
           {filteredDoctors.length === 0 && (
             <div className="py-12 text-center text-slate-400">
               <Users size={32} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-[13px] font-medium">No se encontraron médicos con ese criterio.</p>
-              {onlySelected && (
-                <button
-                  type="button"
-                  onClick={() => setOnlySelected(false)}
-                  className="mt-2 text-[12px] font-bold text-[#0048B5] hover:underline"
-                >
-                  Ver todos los médicos disponibles
-                </button>
-              )}
+              <p className="text-[13px] font-medium">No se encontraron médicos con los filtros aplicados.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setSelectedGroup("TODOS");
+                  setSelectedFranja("TODOS");
+                  setFilterAsignacion("TODOS");
+                }}
+                className="mt-2 text-[12px] font-bold text-[#0048B5] hover:underline"
+              >
+                Restablecer todos los filtros
+              </button>
             </div>
           )}
         </div>
 
         {/* ================= FOOTER ================= */}
-        <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3 shrink-0">
+        <div className="bg-slate-50 border-t border-slate-200 px-6 py-3.5 flex items-center justify-between gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -385,7 +583,7 @@ export default function SupervisorRosterModal({
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-bold text-white shadow-md hover:brightness-110 active:scale-[0.99] transition-all disabled:opacity-60"
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-bold text-white shadow-md hover:brightness-110 active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
             style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
           >
             {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}

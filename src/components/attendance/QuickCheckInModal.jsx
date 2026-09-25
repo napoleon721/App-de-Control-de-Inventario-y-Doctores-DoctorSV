@@ -9,12 +9,13 @@ export default function QuickCheckInModal({
   onClose,
   onConfirmCheckIn,
   horarios = HORARIOS,
+  defaultHorario = null,
 }) {
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [searchDoctor, setSearchDoctor] = useState("");
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
   const [selectedHorario, setSelectedHorario] = useState(
-    (horarios && horarios[0]) || "07:00 AM – 12:00 PM"
+    defaultHorario || (horarios && horarios[0]) || "07:00 AM – 12:00 PM"
   );
   const [successData, setSuccessData] = useState(null);
 
@@ -30,13 +31,13 @@ export default function QuickCheckInModal({
   // Selected space details
   const targetSpace = useMemo(() => {
     if (!selectedSpaceId) return null;
-    return spaces.find((s) => s.id === Number(selectedSpaceId));
+    return (spaces || []).find((s) => Number(s.id) === Number(selectedSpaceId));
   }, [spaces, selectedSpaceId]);
 
   function handleDoctorSelect(doc) {
     setSelectedDoctor(doc.nombre);
     setSearchDoctor(doc.nombre);
-    if (doc.horario && doc.horario !== "Turno Rotativo") {
+    if (!defaultHorario && doc.horario && doc.horario !== "Turno Rotativo") {
       setSelectedHorario(doc.horario);
     }
   }
@@ -53,8 +54,8 @@ export default function QuickCheckInModal({
     }
 
     const spaceNum = Number(selectedSpaceId);
-    if (spaceNum < 1 || spaceNum > 140) {
-      alert("El número de puesto debe estar entre 1 y 140.");
+    if (isNaN(spaceNum) || spaceNum < 1 || spaceNum > 170) {
+      alert("El número de puesto debe ser un número válido entre 1 y 170.");
       return;
     }
 
@@ -212,7 +213,7 @@ export default function QuickCheckInModal({
                   <input
                     type="number"
                     min="1"
-                    max="140"
+                    max="170"
                     value={selectedSpaceId}
                     onChange={(e) => setSelectedSpaceId(e.target.value)}
                     placeholder="Ej. 42"
@@ -223,13 +224,18 @@ export default function QuickCheckInModal({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  3. Turno de Atención
+                <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  <span>3. Turno de Atención</span>
+                  {defaultHorario && (
+                    <span className="text-[10px] text-[#0048B5] font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
+                      Franja del Supervisor
+                    </span>
+                  )}
                 </label>
                 <select
                   value={selectedHorario}
                   onChange={(e) => setSelectedHorario(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs cursor-pointer"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs cursor-pointer focus:ring-2 focus:ring-[#0095FF]/40"
                 >
                   {(horarios || HORARIOS).map((h) => (
                     <option key={h} value={h}>

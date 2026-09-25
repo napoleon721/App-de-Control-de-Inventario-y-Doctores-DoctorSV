@@ -107,7 +107,7 @@ export const SUPERVISORES_OFICIALES = [
   { id: "sup-2", nombre: "SALVADOR RENDEROS BONILLA", correo: "salvador.renderos@doctorsv.gob.sv", puesto: 136, rol: "Supervisor Médico (Turno Tarde)", bloqueInicio: 71, bloqueFin: 104, totalPuestos: 34, horario: "02:00 PM – 10:00 PM" },
   { id: "sup-3", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", correo: "alfredo.martinez@doctorsv.gob.sv", puesto: 137, rol: "Supervisor Médico (Turno Intermedio)", bloqueInicio: 1, bloqueFin: 36, totalPuestos: 36, horario: "08:00 AM – 12:00 MD" },
   { id: "sup-4", nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ", correo: "roxana.canales@doctorsv.gob.sv", puesto: 138, rol: "Supervisora Médica", bloqueInicio: 105, bloqueFin: 140, totalPuestos: 36, horario: "07:00 AM – 12:00 PM" },
-  { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO", correo: "edward.zelaya@doctorsv.gob.sv", puesto: 1, rol: "Supervisor de Control & Acceso", bloqueInicio: 1, bloqueFin: 40, totalPuestos: 40, horario: "02:00 PM – 10:00 PM" },
+  { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO", correo: "edward.zelaya@doctorsv.gob.sv", puesto: 139, rol: "Supervisor de Control & Acceso", bloqueInicio: 1, bloqueFin: 40, totalPuestos: 40, horario: "02:00 PM – 10:00 PM" },
 ];
 
 // Datos reales extraídos directamente de los archivos Excel oficiales
@@ -123,6 +123,7 @@ export const BODEGA_TIPOS = [
   { key: "HUB", label: "Hub USB-C", icon: Cable, original: 0, actual: 0 },
   { key: "MONITOR", label: "Monitores", icon: Monitor, original: 0, actual: 0 },
   { key: "CABLES", label: "Cables Ethernet", icon: Wifi, original: 1, actual: 1 },
+  { key: "HEADSET", label: "Auriculares / Headsets", icon: Headphones, original: 0, actual: 0 },
 ];
 
 export const HISTORIAL_MOCK = excelData.movements && excelData.movements.length > 0
@@ -133,8 +134,9 @@ export const HISTORIAL_MOCK = excelData.movements && excelData.movements.length 
 
 // Generador de espacios a partir del inventario real de Excel con los puestos exactos de supervisión
 export function buildInitialSpaces() {
-  if (excelData.inventory && excelData.inventory.length === 140) {
-    return excelData.inventory.map((inv) => {
+  let list = [];
+  if (excelData.inventory && excelData.inventory.length >= 140) {
+    list = excelData.inventory.slice(0, 140).map((inv) => {
       let doctor = inv.doctor || null;
       let categoria = inv.categoria || null;
       let observaciones = inv.observaciones || "";
@@ -156,7 +158,7 @@ export function buildInitialSpaces() {
         doctor = "ROXANA GUADALUPE CANALES RODRIGUEZ (Supervisora)";
         categoria = "Supervisores";
         observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 44)";
-      } else if (inv.id === 1) {
+      } else if (inv.id === 139) {
         doctor = "EDWARD JOSUE ZELAYA PRUDENCIO (Supervisor de Control)";
         categoria = "Supervisores";
         observaciones = "ESTACIÓN DE CONTROL DE ACCESO Y SUPERVISIÓN (Puesto Reservado)";
@@ -172,13 +174,35 @@ export function buildInitialSpaces() {
         monitor: inv.monitor || (inv.marca ? { activo: `MON-${2000 + inv.id}`, marca: inv.marca } : null),
       };
     });
+  } else {
+    for (let i = 1; i <= 140; i++) {
+      list.push({
+        id: i,
+        estado: "DISPONIBLE",
+        marca: "DELL",
+        modelo: "OptiPlex 3080",
+        activoPc: `PC-${1000 + i}`,
+        monitor: { marca: "DELL", activo: `MON-${2000 + i}` },
+        mouse: true,
+        headset: true,
+        hub: true,
+        observaciones: "",
+        ultimoMovimiento: "29/08/2026",
+        doctor: null,
+        horario: null,
+      });
+    }
   }
 
-  // Fallback
-  const list = [];
-  for (let i = 1; i <= 140; i++) {
+  // 30 nuevos puestos (141 al 170):
+  // Módulo Anexo 1: 141 al 154 (7x2 = 14 puestos)
+  // Módulo Anexo 2: 155 al 170 (8x2 = 16 puestos)
+  for (let i = 141; i <= 170; i++) {
+    const isAnexo1 = i <= 154;
     list.push({
       id: i,
+      modulo: isAnexo1 ? "Módulo Anexo 1 (7×2)" : "Módulo Anexo 2 (8×2)",
+      puesto: String(i),
       estado: "DISPONIBLE",
       marca: "DELL",
       modelo: "OptiPlex 3080",
@@ -187,11 +211,22 @@ export function buildInitialSpaces() {
       mouse: true,
       headset: true,
       hub: true,
-      observaciones: "",
-      ultimoMovimiento: "29/08/2026",
+      observaciones: isAnexo1 ? "Módulo Anexo 1 · Puestos 141 - 154 (7×2)" : "Módulo Anexo 2 · Puestos 155 - 170 (8×2)",
+      ultimoMovimiento: "17/09/2026",
       doctor: null,
       horario: null,
     });
   }
+
   return list;
+}
+
+/**
+ * Asegura que una lista de puestos contenga siempre los 170 espacios
+ */
+export function ensureAllSpaces(existingList) {
+  const fullDefaults = buildInitialSpaces();
+  if (!Array.isArray(existingList) || existingList.length === 0) return fullDefaults;
+  const map = new Map(existingList.map((s) => [Number(s.id), s]));
+  return fullDefaults.map((def) => map.get(Number(def.id)) || def);
 }

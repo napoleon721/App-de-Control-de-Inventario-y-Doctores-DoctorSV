@@ -1,10 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
-  X, Laptop, Monitor, Mouse, Headphones, Cable, History, Save, Sparkles
+  X, Laptop, Monitor, Mouse, Headphones, Cable, History, Save, Sparkles, UserX, Droplets, Wrench, Shield
 } from "lucide-react";
-import { ESTADOS, MARCAS, HORARIOS, DOCTORES_MOCK, pick } from "../../constants/tokens";
+import { ESTADOS, MARCAS, HORARIOS, DOCTORES_MOCK } from "../../constants/tokens";
 
-export default function SpaceDetailModal({ space, onClose, onSave, historial = [] }) {
+export default function SpaceDetailModal({
+  space,
+  onClose,
+  onSave,
+  historial = [],
+  supervisores = [],
+  horarios = HORARIOS,
+  onOpenSupervisorConfig = null,
+  onUpdateSupervisorOfficialShift = null,
+  isMaster = false,
+}) {
+  const mountTimeRef = useRef(Date.now());
+  const backdropMouseDownRef = useRef(false);
   const [form, setForm] = useState({ ...space });
 
   useEffect(() => {
@@ -26,10 +38,29 @@ export default function SpaceDetailModal({ space, onClose, onSave, historial = [
     .filter((h) => String(h.espacio) === String(space.id) || String(h.destino) === String(space.id) || String(h.origen) === String(space.id))
     .slice(0, 4);
 
+  const matchedSupervisor = supervisores?.find(
+    (s) => Number(s.puesto) === Number(space.id)
+  );
+
+  const handleBackdropMouseDown = (e) => {
+    if (e.target === e.currentTarget) {
+      backdropMouseDownRef.current = true;
+    }
+  };
+
+  const handleBackdropClick = (e) => {
+    if (Date.now() - mountTimeRef.current < 450) return;
+    if (e.target === e.currentTarget && backdropMouseDownRef.current) {
+      onClose();
+    }
+    backdropMouseDownRef.current = false;
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -60,6 +91,64 @@ export default function SpaceDetailModal({ space, onClose, onSave, historial = [
 
         {/* Content */}
         <div className="space-y-5 p-6">
+          {/* Tarjeta de Estación Oficial de Supervisión (si este puesto es de un supervisor) */}
+          {matchedSupervisor && (
+            <div className="rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/90 p-3.5 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[#0048B5] font-heading font-bold text-[13px]">
+                  <Shield size={16} className="text-[#0048B5]" />
+                  <span>Estación Física de Supervisión</span>
+                </div>
+                <span className="text-[10px] font-mono-data font-bold bg-[#0048B5] text-white px-2 py-0.5 rounded-full shadow-xs">
+                  Puesto #{matchedSupervisor.puesto}
+                </span>
+              </div>
+              <div className="text-[12px] text-slate-700 bg-white/70 p-2.5 rounded-xl border border-blue-100">
+                <p className="font-bold text-slate-900 text-[13px]">{matchedSupervisor.nombre}</p>
+                <p className="text-[11.5px] text-slate-500 font-medium">{matchedSupervisor.rol}</p>
+                <p className="text-[11px] text-[#0048B5] mt-1 font-semibold">
+                  Lote a cargo: Puestos #{matchedSupervisor.bloqueInicio} al #{matchedSupervisor.bloqueFin} ({matchedSupervisor.totalPuestos || 40} médicos)
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-blue-200/60">
+                <div className="flex items-center gap-2 text-[12px]">
+                  <span className="text-slate-600 font-bold text-[11px] uppercase tracking-wider">Turno Oficial:</span>
+                  {isMaster ? (
+                    <select
+                      value={matchedSupervisor.horario || ""}
+                      onChange={(e) => {
+                        if (onUpdateSupervisorOfficialShift) {
+                          onUpdateSupervisorOfficialShift(matchedSupervisor.id, e.target.value);
+                        }
+                      }}
+                      className="rounded-lg border border-blue-300 bg-white px-2.5 py-1 text-[11.5px] font-bold text-[#0048B5] shadow-xs cursor-pointer focus:ring-2 focus:ring-[#0048B5] outline-none"
+                      title="Cambiar turno oficial del supervisor (Doctor Master)"
+                    >
+                      {horarios.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="font-bold text-slate-800 bg-white px-2 py-0.5 rounded-md border border-slate-200 font-mono-data">
+                      {matchedSupervisor.horario}
+                    </span>
+                  )}
+                </div>
+                {isMaster && onOpenSupervisorConfig && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenSupervisorConfig();
+                    }}
+                    className="text-[11px] font-bold text-[#0048B5] hover:text-blue-900 hover:underline flex items-center gap-1 bg-blue-100/60 px-2 py-1 rounded-lg border border-blue-200 transition"
+                  >
+                    <span>Configurar Lotes & Turnos</span> →
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {/* Quick Action Bar for instant incidents & shift change */}
           <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3">
             <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
@@ -100,9 +189,12 @@ export default function SpaceDetailModal({ space, onClose, onSave, historial = [
                 type="button"
                 onClick={() => {
                   updateField({
-                    estado: form.marca ? "DISPONIBLE" : "VACIO",
+                    estado: "DISPONIBLE",
                     doctor: null,
                     horario: null,
+                    categoria: Number(form.id) === 1 ? null : form.categoria,
+                    marca: form.marca && form.marca !== "NO PC" ? form.marca : "DELL",
+                    modelo: form.modelo || "OptiPlex 3080",
                     observaciones: form.observaciones ? `${form.observaciones} | Turno liberado` : "",
                   });
                 }}
@@ -127,9 +219,18 @@ export default function SpaceDetailModal({ space, onClose, onSave, historial = [
                     key={k}
                     type="button"
                     onClick={() => {
-                      const newDoctor = k === "OCUPADO" ? (form.doctor || pick(DOCTORES_MOCK)) : null;
-                      const newHorario = k === "OCUPADO" ? (form.horario || pick(HORARIOS)) : null;
-                      updateField({ estado: k, doctor: newDoctor, horario: newHorario });
+                      const newDoctor = k === "OCUPADO" ? (form.doctor || "") : null;
+                      const newHorario = k === "OCUPADO" ? (form.horario || (horarios && horarios[0]) || "07:00 AM – 12:00 PM") : null;
+                      const newMarca = (k === "DISPONIBLE" && (!form.marca || form.marca === "NO PC")) ? "DELL" : form.marca;
+                      const newModelo = (k === "DISPONIBLE" && !form.modelo) ? "OptiPlex 3080" : form.modelo;
+                      updateField({
+                        estado: k,
+                        doctor: newDoctor,
+                        horario: newHorario,
+                        marca: newMarca,
+                        modelo: newModelo,
+                        categoria: Number(form.id) === 1 ? null : form.categoria,
+                      });
                     }}
                     className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 active:scale-95 shadow-2xs"
                     style={{
@@ -160,6 +261,9 @@ export default function SpaceDetailModal({ space, onClose, onSave, historial = [
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs"
                   >
                     <option value="">— Seleccionar médico —</option>
+                    {form.doctor && !DOCTORES_MOCK.includes(form.doctor) && (
+                      <option value={form.doctor}>{form.doctor}</option>
+                    )}
                     {DOCTORES_MOCK.map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
@@ -173,11 +277,33 @@ export default function SpaceDetailModal({ space, onClose, onSave, historial = [
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs"
                   >
                     <option value="">— Seleccionar horario —</option>
-                    {HORARIOS.map((h) => (
+                    {(horarios || HORARIOS).map((h) => (
                       <option key={h} value={h}>{h}</option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Botón directo para que el Master quite al médico de este puesto */}
+              <div className="mt-3 pt-2.5 border-t border-rose-200/80 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField({
+                      doctor: null,
+                      horario: null,
+                      estado: "DISPONIBLE",
+                      marca: (form.marca && form.marca !== "NO PC") ? form.marca : "DELL",
+                      modelo: form.modelo || "OptiPlex 3080",
+                      categoria: Number(form.id) === 1 ? null : form.categoria,
+                      observaciones: form.observaciones ? `${form.observaciones} | Puesto desocupado por Master` : "Turno liberado",
+                    });
+                  }}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-[12px] font-bold text-rose-700 bg-white hover:bg-rose-100 border border-rose-300 shadow-2xs active:scale-95 transition-all"
+                >
+                  <UserX size={14} className="text-rose-600" />
+                  <span>Quitar Médico (Dejar Puesto Disponible)</span>
+                </button>
               </div>
             </div>
           )}

@@ -2,12 +2,20 @@ import React, { useState } from "react";
 import { X, UserCheck, Stethoscope } from "lucide-react";
 import { HORARIOS } from "../../constants/tokens";
 
-export default function DoctorAssignModal({ doctor, currentSpace, availableSpaces, onClose, onAssign, onUnassign }) {
+export default function DoctorAssignModal({
+  doctor,
+  currentSpace,
+  availableSpaces,
+  onClose,
+  onAssign,
+  onUnassign,
+  horarios = HORARIOS,
+}) {
   const [selectedSpaceId, setSelectedSpaceId] = useState(
     currentSpace ? currentSpace.id : availableSpaces[0]?.id || ""
   );
   const [selectedHorario, setSelectedHorario] = useState(
-    currentSpace?.horario || HORARIOS[0]
+    currentSpace?.horario || (horarios && horarios[0]) || "07:00 AM – 12:00 PM"
   );
 
   function handleSubmit(e) {
@@ -73,11 +81,13 @@ export default function DoctorAssignModal({ doctor, currentSpace, availableSpace
                     Puesto #{currentSpace.id} (Puesto actual)
                   </option>
                 )}
-                {availableSpaces.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    Puesto #{s.id} — {s.marca ? `${s.marca} ` : ""} (Disponible)
-                  </option>
-                ))}
+                {availableSpaces
+                  .filter((s) => !currentSpace || Number(s.id) !== Number(currentSpace.id))
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      Puesto #{s.id} — {s.marca ? `${s.marca} ` : ""} (Disponible)
+                    </option>
+                  ))}
               </select>
             </div>
           )}
@@ -91,7 +101,7 @@ export default function DoctorAssignModal({ doctor, currentSpace, availableSpace
               onChange={(e) => setSelectedHorario(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] font-medium shadow-2xs outline-none focus:ring-2 focus:ring-[#0095FF]"
             >
-              {HORARIOS.map((h) => (
+              {(horarios || HORARIOS).map((h) => (
                 <option key={h} value={h}>
                   {h}
                 </option>

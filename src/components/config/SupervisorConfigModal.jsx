@@ -42,16 +42,16 @@ export default function SupervisorConfigModal({
       const bFin = Number(s.bloqueFin);
       const pFis = Number(s.puesto);
 
-      if (!bIni || !bFin || bIni < 1 || bFin > 140) {
-        setErrorMsg(`Error en ${s.nombre}: El rango del bloque debe estar entre los puestos #1 y #140.`);
+      if (!bIni || !bFin || bIni < 1 || bFin > 170) {
+        setErrorMsg(`Error en ${s.nombre}: El rango del bloque debe estar entre los puestos #1 y #170.`);
         return;
       }
       if (bIni > bFin) {
         setErrorMsg(`Error en ${s.nombre}: El puesto de inicio (#${bIni}) no puede ser mayor que el de fin (#${bFin}).`);
         return;
       }
-      if (!pFis || pFis < 1 || pFis > 140) {
-        setErrorMsg(`Error en ${s.nombre}: El puesto de estación física debe ser un número entre 1 y 140.`);
+      if (!pFis || pFis < 1 || pFis > 170) {
+        setErrorMsg(`Error en ${s.nombre}: El puesto de estación física debe ser un número entre 1 y 170.`);
         return;
       }
     }
@@ -92,10 +92,10 @@ export default function SupervisorConfigModal({
             </span>
             <div>
               <h3 className="font-heading text-lg font-bold">
-                Configuración de Supervisores & Lotes Asignados
+                Configuración de Supervisores, Lotes & Turnos Oficiales
               </h3>
               <p className="text-[11.5px] text-cyan-100">
-                Ajusta el rango de puestos (bloque de inicio y fin), estación física y turnos de cada supervisor
+                Ajusta el rango de puestos (bloque de inicio y fin), estación física y el turno oficial asignado a cada supervisor
               </p>
             </div>
           </div>
@@ -177,7 +177,7 @@ export default function SupervisorConfigModal({
                       <input
                         type="number"
                         min="1"
-                        max="140"
+                        max="170"
                         value={sup.puesto}
                         onChange={(e) => handleChange(idx, "puesto", Number(e.target.value))}
                         className="w-full rounded-xl border border-slate-200 bg-white pl-6 pr-3 py-1.5 text-[12.5px] font-mono-data font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40"
@@ -196,7 +196,7 @@ export default function SupervisorConfigModal({
                       <input
                         type="number"
                         min="1"
-                        max="140"
+                        max="170"
                         value={sup.bloqueInicio}
                         onChange={(e) => handleChange(idx, "bloqueInicio", Number(e.target.value))}
                         className="w-full rounded-xl border border-slate-200 bg-white pl-6 pr-3 py-1.5 text-[12.5px] font-mono-data font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40"
@@ -215,7 +215,7 @@ export default function SupervisorConfigModal({
                       <input
                         type="number"
                         min="1"
-                        max="140"
+                        max="170"
                         value={sup.bloqueFin}
                         onChange={(e) => handleChange(idx, "bloqueFin", Number(e.target.value))}
                         className="w-full rounded-xl border border-slate-200 bg-white pl-6 pr-3 py-1.5 text-[12.5px] font-mono-data font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40"
@@ -223,20 +223,20 @@ export default function SupervisorConfigModal({
                     </div>
                   </div>
 
-                  {/* Turno Asignado */}
+                  {/* Turno Oficial Asignado */}
                   <div>
                     <label className="block text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
                       <Clock size={11} className="text-amber-600" />
-                      <span>Turno</span>
+                      <span>Turno Oficial</span>
                     </label>
                     <select
                       value={sup.horario}
                       onChange={(e) => handleChange(idx, "horario", e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer font-mono-data"
                     >
                       {horarios.map((h) => (
                         <option key={h} value={h}>
-                          {h}
+                          🕒 {h}
                         </option>
                       ))}
                     </select>
@@ -258,7 +258,7 @@ export default function SupervisorConfigModal({
           <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-3.5 text-[11.5px] text-slate-600 flex items-start gap-2.5">
             <Sparkles size={16} className="text-[#0095FF] shrink-0 mt-0.5" />
             <span>
-              Al guardar, los nuevos rangos de ubicación y la estación física se actualizarán automáticamente en la vista de Control de Asistencia, en el mapa de cubículos y se sincronizarán en tiempo real en la nube.
+              Al guardar, los nuevos turnos oficiales, rangos de lote y estación física de cada supervisor se actualizarán de inmediato en Control de Asistencia y se sincronizarán en la nube.
             </span>
           </div>
 
@@ -273,11 +273,11 @@ export default function SupervisorConfigModal({
             <button
               type="button"
               onClick={handleSave}
-              className="flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-[12.5px] font-bold text-white transition hover:brightness-110 shadow-xs active:scale-95"
+              className="flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-[12.5px] font-bold text-white transition hover:brightness-110 shadow-xs active:scale-95 cursor-pointer"
               style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
             >
               <Save size={14} />
-              <span>Guardar Configuración de Lotes</span>
+              <span>Guardar Lotes & Turnos Oficiales</span>
             </button>
           </div>
         </div>

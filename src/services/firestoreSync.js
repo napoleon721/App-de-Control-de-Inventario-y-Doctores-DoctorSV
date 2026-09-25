@@ -43,15 +43,18 @@ export function subscribeToCloudSpaces(onUpdate, onError, myClientId = "") {
 }
 
 /**
- * Guarda los espacios en Firestore con control de fallos y debounce
+ * Guarda los espacios en Firestore con control de fallos y opción inmediata para relevos
  */
-export function saveCloudSpaces(spaces, clientId = "") {
+export function saveCloudSpaces(spaces, clientId = "", immediate = false) {
   if (!isFirestoreAvailable) return;
   if (!Array.isArray(spaces) || spaces.length === 0) return;
 
-  if (spacesTimer) clearTimeout(spacesTimer);
+  if (spacesTimer) {
+    clearTimeout(spacesTimer);
+    spacesTimer = null;
+  }
 
-  spacesTimer = setTimeout(async () => {
+  const persist = async () => {
     try {
       const docRef = doc(db, "sedes", SEDE_ID, "estado", "spaces");
       await setDoc(docRef, {
@@ -62,7 +65,13 @@ export function saveCloudSpaces(spaces, clientId = "") {
     } catch (error) {
       // Ignorar fallos transitorios de red para no interrumpir la experiencia local
     }
-  }, 400);
+  };
+
+  if (immediate) {
+    persist();
+  } else {
+    spacesTimer = setTimeout(persist, 400);
+  }
 }
 
 /**
@@ -252,7 +261,7 @@ export function subscribeToCloudRosters(onUpdate, onError, myClientId = "") {
  */
 export function saveCloudRosters(rosters, clientId = "") {
   if (!isFirestoreAvailable) return;
-  if (!rosters || typeof rosters !== "object") return;
+  if (!rosters || typeof rosters !== "object" || Object.keys(rosters).length === 0) return;
 
   if (rostersTimer) clearTimeout(rostersTimer);
 
@@ -319,4 +328,57 @@ export function saveCloudSupervisores(supervisores, clientId = "") {
     } catch (error) {}
   }, 500);
 }
+
+let attendanceTimer = null;
+
+/**
+ * Escucha cambios en tiempo real de los estados de asistencia desde Firestore
+ */
+export function subscribeToCloudAttendance(onUpdate, onError, myClientId = "") {
+  try {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "attendance");
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.metadata && snapshot.metadata.hasPendingWrites) return;
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (myClientId && data?.updatedBy === myClientId) return;
+          if (data && data.records && typeof data.records === "object") {
+            onUpdate(data.records);
+          }
+        }
+      },
+      (error) => {
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Guarda los estados de asistencia en Firestore con debounce
+ */
+export function saveCloudAttendance(attendanceRecords, clientId = "") {
+  if (!isFirestoreAvailable) return;
+  if (!attendanceRecords || typeof attendanceRecords !== "object") return;
+
+  if (attendanceTimer) clearTimeout(attendanceTimer);
+
+  attendanceTimer = setTimeout(async () => {
+    try {
+      const docRef = doc(db, "sedes", SEDE_ID, "estado", "attendance");
+      await setDoc(docRef, {
+        records: attendanceRecords,
+        updatedBy: clientId || "anon",
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (error) {}
+  }, 400);
+}
+
 

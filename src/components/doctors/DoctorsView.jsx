@@ -15,6 +15,7 @@ export default function DoctorsView({
   onAddStaff,
   onRemoveStaff,
   supervisores = SUPERVISORES_OFICIALES,
+  horarios = HORARIOS,
 }) {
   const [filterCategory, setFilterCategory] = useState("TODOS");
   const [filterShift, setFilterShift] = useState("TODOS");
@@ -72,10 +73,14 @@ export default function DoctorsView({
     DOCTORES_EXCEL.forEach((doc) => {
       const cleanName = doc.nombre.toLowerCase().trim();
       if (!addedNames.has(cleanName)) {
+        const cat = (doc.tipo && doc.tipo !== "Turno Rotativo")
+          ? doc.tipo
+          : (doc.grupo === "Servicios Profesionales" ? "Servicios Profesionales" : "Planilla");
         list.push({
           id: doc.id,
           nombre: doc.nombre,
-          categoria: doc.grupo || doc.tipo || "Planilla",
+          categoria: cat,
+          grupo: doc.grupo || null,
           rol: doc.tipo === "Planilla" ? "Médico Planilla" : (doc.tipo || "Médico de Turno"),
           horarioDefault: doc.horario || "Turno Rotativo",
           puestoOficial: null,
@@ -97,7 +102,7 @@ export default function DoctorsView({
     });
 
     return list;
-  }, [customStaff]);
+  }, [customStaff, supervisores]);
 
   const filteredDoctors = useMemo(() => {
     const q = (searchDoctor || "").toLowerCase().trim();
@@ -412,6 +417,7 @@ export default function DoctorsView({
           onClose={() => setAssigningDoctor(null)}
           onAssign={onAssignDoctor}
           onUnassign={onUnassignDoctor}
+          horarios={horarios}
         />
       )}
 

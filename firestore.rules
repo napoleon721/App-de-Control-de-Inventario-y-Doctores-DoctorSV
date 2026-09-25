@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Sincronización de estado operativo por sede oficial (ej. san-miguel)
+    match /sedes/{sedeId}/estado/{docId} {
+      // Permitir lectura de estados operativos para monitores y estaciones
+      allow read: if true;
+
+      // Permitir escritura únicamente sobre los documentos operativos reconocidos
+      allow write: if docId in ['spaces', 'bodega', 'historial', 'config', 'rosters', 'supervisores', 'attendance']
+                   && request.resource.data.updatedBy is string;
+    }
+
+    // Bloquear acceso a cualquier otra colección o documento no autorizado
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

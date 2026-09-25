@@ -77,7 +77,17 @@ export async function fetchSpacesFromGoogleSheets() {
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
     if (data && data.success && Array.isArray(data.spaces)) {
-      return { success: true, data: data.spaces, count: data.spaces.length };
+      const sanitized = data.spaces.map((s) => {
+        const sid = Number(s.id);
+        const isDisponible = s.estado === "DISPONIBLE";
+        return {
+          ...s,
+          marca: (isDisponible && (!s.marca || s.marca === "NO PC")) ? "DELL" : s.marca,
+          modelo: (isDisponible && !s.modelo) ? "OptiPlex 3080" : s.modelo,
+          categoria: sid === 1 ? null : s.categoria,
+        };
+      });
+      return { success: true, data: sanitized, count: sanitized.length };
     }
     return { success: false, data: [] };
   } catch (error) {
@@ -124,8 +134,8 @@ export async function updateSpacesBatchInGoogleSheets(spacesList) {
   if (!url || !Array.isArray(spacesList) || spacesList.length === 0) return false;
 
   const payload = spacesList.map((space) => ({
-    spaceId: space.id,
-    estado: space.estado,
+    spaceId: space.spaceId !== undefined ? Number(space.spaceId) : Number(space.id),
+    estado: space.estado || "DISPONIBLE",
     doctor: space.doctor || "",
     horario: space.horario || "",
     marca: space.marca || "",
@@ -133,8 +143,8 @@ export async function updateSpacesBatchInGoogleSheets(spacesList) {
     timestamp: new Date().toISOString(),
   }));
 
+  // 1. Intentar primero actualización atómica por lote con el endpoint nativo de Code.gs (1 sola transacción)
   try {
-    // Intentar acción batch en 1 sola llamada HTTP
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -143,27 +153,37 @@ export async function updateSpacesBatchInGoogleSheets(spacesList) {
         spaces: payload,
       }),
     });
-    const json = await res.json().catch(() => null);
-    if (json && json.success) return true;
-  } catch (error) {
-    console.warn("Fallo batch en Google Sheets, ejecutando fallback amortiguado:", error);
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.success) {
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn("Aviso: Fallo en updateSpacesBatch directo, ejecutando fallback amortiguado:", err);
   }
 
-  // Fallback: procesar en segundo plano con pequeños delays para no saturar el navegador
+  // 2. Fallback amortiguado por bloques concurrentes (5 llamadas simultáneas) para scripts antiguos
   setTimeout(async () => {
-    for (const item of payload) {
-      try {
-        await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({
-            action: "updateSpace",
-            ...item,
-          }),
-        });
-        await new Promise((r) => setTimeout(r, 60)); // Pausa de 60ms entre llamadas
-      } catch (e) {
-        // Silencioso en fondo
+    const CONCURRENCY = 5;
+    for (let i = 0; i < payload.length; i += CONCURRENCY) {
+      const chunk = payload.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        chunk.map((item) =>
+          fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+              action: "updateSpace",
+              ...item,
+            }),
+          }).catch((err) => {
+            console.warn("Aviso: Fallo individual al sincronizar celda en Sheets:", err);
+          })
+        )
+      );
+      if (i + CONCURRENCY < payload.length) {
+        await new Promise((r) => setTimeout(r, 50));
       }
     }
   }, 10);
@@ -233,8 +253,7 @@ export async function addStaffToGoogleSheets(staffMember) {
   try {
     await fetch(url, {
       method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "addStaff",
         staff: staffMember,
@@ -242,6 +261,7 @@ export async function addStaffToGoogleSheets(staffMember) {
     });
     return true;
   } catch (error) {
+    console.warn("Error al agregar personal en Google Sheets:", error);
     return false;
   }
 }
