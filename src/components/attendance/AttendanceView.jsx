@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
-  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle
+  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import SupervisorRosterModal from "./SupervisorRosterModal";
+import QuincenaManagerModal from "./QuincenaManagerModal";
 import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
 export default function AttendanceView({
@@ -29,6 +30,8 @@ export default function AttendanceView({
   onSetAttendance: propOnSetAttendance = null,
   onUpdateSupervisorFranja = null,
   onUpdateSupervisorOfficialShift = null,
+  quincena = null,
+  onSaveQuincena = null,
 }) {
   const isMaster = currentUser?.role === "MASTER";
 
@@ -55,6 +58,17 @@ export default function AttendanceView({
     () => currentSupervisor?.activeFranja || "TODOS"
   );
   const [rosterModalOpen, setRosterModalOpen] = useState(false);
+
+  // Fecha seleccionada para la asistencia y la nómina oficial (formato YYYY-MM-DD local)
+  const todayISO = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    if (quincena?.dias?.some((d) => d.dateKey === todayISO)) {
+      return todayISO;
+    }
+    return quincena?.dias?.[0]?.dateKey || todayISO;
+  });
+
+  const [quincenaModalOpen, setQuincenaModalOpen] = useState(false);
 
   // Sincronizar filterHorario cuando cambia el supervisor o cuando se actualiza su franja activa
   useEffect(() => {
@@ -93,30 +107,60 @@ export default function AttendanceView({
     );
   }, [spaces, currentSupervisor]);
 
-  // Lista de nombres de médicos asignados al supervisor actual
+  // Lista de nombres de médicos asignados al supervisor actual (con resolución dinámica por Quincena Oficial y Fecha)
   const currentRosterNames = useMemo(() => {
-    // 1. Revisar si hay un roster guardado específicamente para este supervisor en esta franja
+    // 0. Si hay un override guardado específicamente para este supervisor en esta fecha y franja
+    const dateFranjaKey = filterHorario && filterHorario !== "TODOS" && selectedDate ? `${currentSupervisor.id}__${selectedDate}__${filterHorario}` : null;
+    if (dateFranjaKey && activeRosters[dateFranjaKey] && Array.isArray(activeRosters[dateFranjaKey]) && activeRosters[dateFranjaKey].length > 0) {
+      return activeRosters[dateFranjaKey];
+    }
+    const dateOnlyKey = selectedDate ? `${currentSupervisor.id}__${selectedDate}` : null;
+    if (dateOnlyKey && activeRosters[dateOnlyKey] && Array.isArray(activeRosters[dateOnlyKey]) && activeRosters[dateOnlyKey].length > 0) {
+      return activeRosters[dateOnlyKey];
+    }
+
+    // 1. Quincena Oficial asignada desde Google Sheets para esta fecha y supervisor
+    if (quincena && quincena.dias && selectedDate) {
+      const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
+      const supQuincena = diaObj?.porSupervisor?.[currentSupervisor.id];
+      if (supQuincena && Array.isArray(supQuincena.doctorNames) && supQuincena.doctorNames.length > 0) {
+        if (filterHorario && filterHorario !== "TODOS" && Array.isArray(supQuincena.doctores)) {
+          const shiftDocs = supQuincena.doctores
+            .filter((d) => !d.horario || isSameHorario(d.horario, filterHorario))
+            .map((d) => d.nombre);
+          if (shiftDocs.length > 0) {
+            return shiftDocs;
+          }
+        }
+        return supQuincena.doctorNames;
+      }
+    }
+
+    // 2. Revisar si hay un roster guardado específicamente para este supervisor en esta franja
     const franjaKey = filterHorario && filterHorario !== "TODOS" ? `${currentSupervisor.id}__${filterHorario}` : null;
     if (franjaKey && activeRosters[franjaKey] && Array.isArray(activeRosters[franjaKey]) && activeRosters[franjaKey].length > 0) {
       return activeRosters[franjaKey];
     }
-    // 2. Si el supervisor tiene un roster general guardado, usarlo tal cual
+
+    // 3. Si el supervisor tiene un roster general guardado, usarlo tal cual
     if (activeRosters[currentSupervisor.id] && Array.isArray(activeRosters[currentSupervisor.id]) && activeRosters[currentSupervisor.id].length > 0) {
       return activeRosters[currentSupervisor.id];
     }
-    // 3. Médicos físicamente sentados en este lote
+
+    // 4. Médicos físicamente sentados en este lote
     const docsInMyLote = supervisorSpaces.filter((s) => s.doctor).map((s) => s.doctor);
     if (docsInMyLote.length > 0) {
       return docsInMyLote;
     }
-    // 4. Pre-carga oficial solo si coincide con el turno oficial de dicho supervisor
+
+    // 5. Pre-carga oficial solo si coincide con el turno oficial de dicho supervisor
     if (currentSupervisor.id === "sup-1" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "06:00 AM - 02:00 PM"))) {
       return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 1").slice(0, currentSupervisor.totalPuestos || 40).map((d) => d.nombre);
     } else if (currentSupervisor.id === "sup-2" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "02:00 PM - 10:00 PM"))) {
       return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 2").slice(0, currentSupervisor.totalPuestos || 34).map((d) => d.nombre);
     }
     return [];
-  }, [activeRosters, currentSupervisor, filterHorario, supervisorSpaces]);
+  }, [activeRosters, currentSupervisor, filterHorario, supervisorSpaces, quincena, selectedDate]);
 
   function handleSaveSupervisorRoster(newNames, franja = null, transferredDocs = []) {
     const franjaTarget = franja || (filterHorario !== "TODOS" ? filterHorario : null);
@@ -656,6 +700,87 @@ export default function AttendanceView({
           </div>
         </div>
       )}
+
+      {/* Barra de Nómina Quincenal Oficial (Servicios Profesionales) */}
+      <div className="bg-white p-4.5 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-50 text-[#0048B5] border border-blue-200 shrink-0">
+              <Calendar size={18} />
+            </span>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-[13.5px] font-black text-slate-900 tracking-tight">
+                  Nómina Quincenal Oficial (Servicios Profesionales)
+                </h3>
+                <span className="text-[10.5px] font-bold px-2 py-0.2 rounded-full bg-blue-100 text-[#0048B5] font-mono">
+                  {quincena?.titulo || "Septiembre 2026"}
+                </span>
+                {selectedDate && (
+                  <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Fecha activa: {quincena?.dias?.find((d) => d.dateKey === selectedDate)?.label || selectedDate}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                La nómina del supervisor cambia automáticamente según el día seleccionado. Puedes ver o importar los 15 días completos.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setQuincenaModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-[#0048B5] border border-blue-200 text-[11.5px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
+            >
+              <FileSpreadsheet size={14} className="text-blue-600" />
+              <span>Gestor Quincenal / Pegar de Sheets</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Tira interactiva de días de la quincena */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin pt-1">
+          <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
+            Días:
+          </span>
+          {(quincena?.dias || []).map((dia) => {
+            const isSelected = dia.dateKey === selectedDate;
+            const isToday = dia.dateKey === todayISO;
+            const supAssigned = dia.porSupervisor?.[currentSupervisor.id];
+            const countForCurrentSup = supAssigned?.totalDoctores || 0;
+
+            return (
+              <button
+                key={dia.dateKey}
+                type="button"
+                onClick={() => setSelectedDate(dia.dateKey)}
+                className={`shrink-0 px-3 py-1.5 rounded-xl border text-left transition-all relative flex items-center gap-2 ${
+                  isSelected
+                    ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs ring-2 ring-blue-500/20"
+                    : "bg-slate-50 hover:bg-white text-slate-700 border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span className={`text-[11.5px] font-extrabold leading-tight ${isSelected ? "text-white" : "text-slate-800"}`}>
+                    {dia.label?.split(" ")[0]} {dia.label?.split(" ")[1]}
+                    {isToday && <span className="ml-1 text-[8.5px] px-1 py-0.2 rounded bg-amber-400 text-amber-950 font-black">HOY</span>}
+                  </span>
+                  <span className={`text-[9.5px] font-medium ${isSelected ? "text-blue-200" : "text-slate-400"}`}>
+                    {dia.diaSemana?.slice(0, 3)}
+                  </span>
+                </div>
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                  isSelected ? "bg-white/20 text-white" : "bg-slate-200/80 text-slate-700"
+                }`}>
+                  {countForCurrentSup}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Selector de Supervisor & Lote + Filtro de Franja Horaria */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-start justify-between gap-4">
@@ -1529,8 +1654,27 @@ export default function AttendanceView({
           supervisores={supervisores}
           spaces={spaces}
           horarios={horarios}
+          selectedDate={selectedDate}
+          activeQuincena={quincena}
           onSaveRoster={handleSaveSupervisorRoster}
           onClose={() => setRosterModalOpen(false)}
+        />
+      )}
+
+      {/* Modal Gestor de Nóminas Quincenales de Servicios Profesionales */}
+      {quincenaModalOpen && (
+        <QuincenaManagerModal
+          activeQuincena={quincena}
+          selectedDate={selectedDate}
+          onSelectDate={(newDate) => {
+            setSelectedDate(newDate);
+            setQuincenaModalOpen(false);
+          }}
+          onSaveQuincena={(newQ) => {
+            if (onSaveQuincena) onSaveQuincena(newQ);
+          }}
+          onClose={() => setQuincenaModalOpen(false)}
+          supervisores={supervisores}
         />
       )}
     </div>

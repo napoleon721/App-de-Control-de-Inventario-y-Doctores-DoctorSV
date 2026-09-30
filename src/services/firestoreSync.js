@@ -277,6 +277,62 @@ export function saveCloudRosters(rosters, clientId = "") {
   }, 500);
 }
 
+let quincenaTimer = null;
+
+/**
+ * Escucha cambios en tiempo real de la Quincena Oficial desde Firestore
+ */
+export function subscribeToCloudQuincena(onUpdate, onError, myClientId = "") {
+  if (!isFirestoreAvailable) return () => {};
+  try {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "quincena");
+    const unsubscribe = onSnapshot(
+      docRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && data.updatedBy && data.updatedBy === myClientId) {
+            return;
+          }
+          if (data && data.quincena && typeof data.quincena === "object") {
+            onUpdate(data.quincena);
+          }
+        }
+      },
+      (error) => {
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Guarda la Quincena Oficial en Firestore con debounce
+ */
+export function saveCloudQuincena(quincena, clientId = "") {
+  if (!isFirestoreAvailable) return;
+  if (!quincena || typeof quincena !== "object") return;
+
+  if (quincenaTimer) clearTimeout(quincenaTimer);
+
+  quincenaTimer = setTimeout(async () => {
+    try {
+      const docRef = doc(db, "sedes", SEDE_ID, "estado", "quincena");
+      await setDoc(docRef, {
+        quincena: quincena,
+        updatedBy: clientId || "anon",
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (error) {
+      console.warn("Error guardando quincena en la nube:", error);
+    }
+  }, 500);
+}
+
 let supervisoresTimer = null;
 
 /**

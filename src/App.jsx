@@ -40,7 +40,10 @@ import {
   saveCloudSupervisores,
   subscribeToCloudAttendance,
   saveCloudAttendance,
+  subscribeToCloudQuincena,
+  saveCloudQuincena,
 } from "./services/firestoreSync";
+import { generateDefaultQuincena } from "./constants/quincenaDefault";
 import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
   fetchSpacesFromGoogleSheets,
@@ -205,6 +208,18 @@ export default function App() {
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
+    }
+  });
+
+  // 6. Quincena Oficial de Servicios Profesionales (sincronizada con Firestore y Google Sheets)
+  const isRemoteQuincenaRef = React.useRef(false);
+  const isInitialMountQuincena = React.useRef(true);
+  const [quincena, setQuincena] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_QUINCENA_OFICIAL_V1");
+      return saved ? JSON.parse(saved) : generateDefaultQuincena();
+    } catch {
+      return generateDefaultQuincena();
     }
   });
 
@@ -558,6 +573,31 @@ export default function App() {
     }
   }, [rosters]);
 
+  // Persistir quincena oficial localmente y en Firestore
+  useEffect(() => {
+    if (isInitialMountQuincena.current) {
+      isInitialMountQuincena.current = false;
+      return;
+    }
+    if (isRemoteQuincenaRef.current) {
+      isRemoteQuincenaRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem("DOCTORSV_QUINCENA_OFICIAL_V1", JSON.stringify(quincena));
+      if (typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "QUINCENA_UPDATED", payload: quincena, sender: myClientId.current });
+        bc.close();
+      }
+      if (quincena && typeof quincena === "object") {
+        saveCloudQuincena(quincena, myClientId.current);
+      }
+    } catch (e) {
+      console.error("Error saving quincena:", e);
+    }
+  }, [quincena]);
+
   // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo sin bucles
   useEffect(() => {
     const unsubSpaces = subscribeToCloudSpaces((cloudSpaces) => {
@@ -636,6 +676,16 @@ export default function App() {
       }
     }, null, myClientId.current);
 
+    const unsubQuincena = subscribeToCloudQuincena((cloudQuincena) => {
+      if (cloudQuincena && typeof cloudQuincena === "object" && cloudQuincena.dias) {
+        setQuincena((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudQuincena)) return prev;
+          isRemoteQuincenaRef.current = true;
+          return cloudQuincena;
+        });
+      }
+    }, null, myClientId.current);
+
     return () => {
       if (unsubSpaces) unsubSpaces();
       if (unsubBodega) unsubBodega();
@@ -644,6 +694,7 @@ export default function App() {
       if (unsubHorarios) unsubHorarios();
       if (unsubSupervisores) unsubSupervisores();
       if (unsubAttendance) unsubAttendance();
+      if (unsubQuincena) unsubQuincena();
     };
   }, []);
 
@@ -744,6 +795,12 @@ export default function App() {
             setAttendanceRecords((prev) => {
               if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
               isRemoteAttendanceRef.current = true;
+              return payload;
+            });
+          } else if (type === "QUINCENA_UPDATED" && payload) {
+            setQuincena((prev) => {
+              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              isRemoteQuincenaRef.current = true;
               return payload;
             });
           }
@@ -1958,6 +2015,8 @@ export default function App() {
               onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
               currentUser={currentUser}
               attendanceRecords={attendanceRecords}
+              quincena={quincena}
+              onSaveQuincena={(newQ) => setQuincena(newQ)}
               onSetAttendance={(docName, status) => {
                 setAttendanceRecords((prev) => ({
                   ...prev,

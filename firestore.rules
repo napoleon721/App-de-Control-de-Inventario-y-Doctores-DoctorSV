@@ -8,7 +8,7 @@ service cloud.firestore {
       allow read: if true;
 
       // Permitir escritura únicamente sobre los documentos operativos reconocidos
-      allow write: if docId in ['spaces', 'bodega', 'historial', 'config', 'rosters', 'supervisores', 'attendance']
+      allow write: if docId in ['spaces', 'bodega', 'historial', 'config', 'rosters', 'supervisores', 'attendance', 'quincena']
                    && request.resource.data.updatedBy is string;
     }
 

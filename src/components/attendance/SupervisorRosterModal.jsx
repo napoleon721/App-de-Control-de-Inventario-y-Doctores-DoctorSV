@@ -2,10 +2,11 @@ import React, { useState, useMemo, useCallback } from "react";
 import {
   X, Search, Check, Users, Settings2, Sparkles, Filter, Mail,
   CheckSquare, Square, AlertCircle, RefreshCw, UserCheck, Clock,
-  MapPin, AlertTriangle, ArrowRightLeft, Stethoscope
+  MapPin, AlertTriangle, ArrowRightLeft, Stethoscope, Calendar, Clipboard, FileSpreadsheet
 } from "lucide-react";
-import { DOCTORES_EXCEL, HORARIOS, getSPBlocks } from "../../constants/tokens";
+import { DOCTORES_EXCEL, STAFF_EXCEL, HORARIOS, getSPBlocks } from "../../constants/tokens";
 import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
+import { parseDoctorLine, buildLookupMaps } from "../../utils/quincenaParser";
 
 // Componente memoizado para cada tarjeta de médico: solo re-renderiza cuando su propio estado cambia
 const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({
@@ -123,6 +124,8 @@ export default function SupervisorRosterModal({
   supervisores = [],
   spaces = [],
   horarios = HORARIOS,
+  selectedDate = null,
+  activeQuincena = null,
   onSaveRoster,
   onClose,
 }) {
@@ -140,6 +143,56 @@ export default function SupervisorRosterModal({
   const [selectedGroup, setSelectedGroup] = useState("TODOS");
   const [selectedFranja, setSelectedFranja] = useState(() => activeFranja || "TODOS");
   const [filterAsignacion, setFilterAsignacion] = useState("TODOS"); // "TODOS", "MI_NOMINA", "DISPONIBLES", "OTROS_SUPERVISORES"
+
+  // Detección de nómina oficial de la Quincena para este supervisor en la fecha seleccionada
+  const quincenaDayObj = useMemo(() => {
+    if (!activeQuincena?.dias || !selectedDate) return null;
+    return activeQuincena.dias.find((d) => d.dateKey === selectedDate) || null;
+  }, [activeQuincena, selectedDate]);
+
+  const quincenaSupervisorRoster = useMemo(() => {
+    if (!quincenaDayObj?.porSupervisor || !supervisor?.id) return null;
+    return quincenaDayObj.porSupervisor[supervisor.id] || null;
+  }, [quincenaDayObj, supervisor?.id]);
+
+  const quincenaDoctorNames = quincenaSupervisorRoster?.doctorNames || [];
+
+  function handleLoadQuincenaDoctors() {
+    if (quincenaDoctorNames.length === 0) return;
+    setSelectedNames(new Set(quincenaDoctorNames));
+    setTransferredNames(new Set());
+  }
+
+  // Estado para el modal de pegar celda individual de Google Sheets
+  const [pasteCellModalOpen, setPasteCellModalOpen] = useState(false);
+  const [pastedCellText, setPastedCellText] = useState("");
+  const [pastedCellPreview, setPastedCellPreview] = useState(null);
+
+  const lookupMaps = useMemo(() => buildLookupMaps(DOCTORES_EXCEL, STAFF_EXCEL, supervisores), [supervisores]);
+
+  function handlePastedCellChange(text) {
+    setPastedCellText(text);
+    if (!text.trim()) {
+      setPastedCellPreview(null);
+      return;
+    }
+    const lines = text.split("\n").filter((l) => l.trim().length > 0);
+    const parsed = lines.map((l) => parseDoctorLine(l, lookupMaps.doctors)).filter(Boolean);
+    setPastedCellPreview({
+      total: parsed.length,
+      doctores: parsed,
+      reconocidos: parsed.filter((d) => d.isMatched).length,
+    });
+  }
+
+  function handleApplyPastedCell() {
+    if (!pastedCellPreview || pastedCellPreview.doctores.length === 0) return;
+    const names = pastedCellPreview.doctores.map((d) => d.nombre);
+    setSelectedNames(new Set(names));
+    setPastedCellText("");
+    setPastedCellPreview(null);
+    setPasteCellModalOpen(false);
+  }
 
   const capacity = supervisor?.totalPuestos ||
     (supervisor?.bloqueFin && supervisor?.bloqueInicio ? (Number(supervisor.bloqueFin) - Number(supervisor.bloqueInicio) + 1) : 40);
@@ -432,6 +485,30 @@ export default function SupervisorRosterModal({
 
           {/* Botones de Carga Rápida */}
           <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Botón directo de Quincena Oficial para este supervisor en esta fecha */}
+            {quincenaDoctorNames.length > 0 && (
+              <button
+                type="button"
+                onClick={handleLoadQuincenaDoctors}
+                className="px-3 py-1 text-[11px] font-extrabold rounded-lg bg-[#0048B5] hover:bg-blue-700 text-white transition shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                title={`Cargar los ${quincenaDoctorNames.length} médicos asignados a ${supervisor?.nombre?.split(" ")[0]} en la Quincena Oficial para el ${quincenaDayObj?.label || selectedDate}`}
+              >
+                <Calendar size={12} className="text-cyan-300" />
+                <span>📅 Quincena de Hoy ({quincenaDoctorNames.length})</span>
+              </button>
+            )}
+
+            {/* Botón para pegar la celda directamente desde Google Sheets */}
+            <button
+              type="button"
+              onClick={() => setPasteCellModalOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 hover:bg-indigo-100 transition shadow-2xs flex items-center gap-1 active:scale-95 cursor-pointer"
+              title="Pegar celda de médicos copiada directamente desde Google Sheets"
+            >
+              <Clipboard size={12} className="text-indigo-600" />
+              <span>📋 Pegar Celda de Sheets</span>
+            </button>
+
             {/* Si el supervisor activo tiene un bloque oficial de SP (Emerson, Salvador o Alfredo), botón directo */}
             {mySPBlock && (
               <button
@@ -723,6 +800,79 @@ export default function SupervisorRosterModal({
           </button>
         </div>
       </div>
+
+      {/* Mini Modal para Pegar Celda Individual de Google Sheets */}
+      {pasteCellModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Clipboard size={18} className="text-[#0048B5]" />
+                <h3 className="text-[14px] font-black text-slate-900">
+                  Pegar Celda de Google Sheets
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPasteCellModalOpen(false);
+                  setPastedCellText("");
+                  setPastedCellPreview(null);
+                }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-[11.5px] text-slate-500">
+              Selecciona la celda de tu hoja que contiene la lista de médicos (ej: <span className="font-mono font-bold text-slate-700">000FFF - FABRICIO... (2:00 PM - 10:00 PM)</span>), cópiala (<kbd className="font-bold">Ctrl+C</kbd>) y pégala aquí:
+            </p>
+
+            <textarea
+              value={pastedCellText}
+              onChange={(e) => handlePastedCellChange(e.target.value)}
+              rows={6}
+              placeholder="Pega aquí el contenido de la celda..."
+              className="w-full p-3 text-[11.5px] font-mono rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-[#0095FF]"
+            />
+
+            {pastedCellPreview && (
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[11px] flex items-center justify-between">
+                <span className="font-bold text-slate-700">
+                  Médicos detectados: {pastedCellPreview.reconocidos} de {pastedCellPreview.total}
+                </span>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Listo para aplicar
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPasteCellModalOpen(false);
+                  setPastedCellText("");
+                  setPastedCellPreview(null);
+                }}
+                className="px-3.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyPastedCell}
+                disabled={!pastedCellPreview || pastedCellPreview.doctores.length === 0}
+                className="px-4 py-2 text-[12px] font-bold bg-[#0048B5] hover:bg-blue-700 text-white rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                <Check size={14} />
+                <span>Cargar Médicos a mi Nómina</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
