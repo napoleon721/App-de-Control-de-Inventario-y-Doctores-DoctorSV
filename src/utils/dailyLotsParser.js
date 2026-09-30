@@ -412,13 +412,21 @@ export function parseDailyLotsSpreadsheet(rawText, supervisores = []) {
  * Busca de manera inteligente el lote asignado a un supervisor para una fecha y franja horaria determinada
  */
 export function findDailyLotForSupervisor(dailyLots, dateKey, supervisorId, supervisorName = null, filterHorario = null) {
+  const lots = findDailyLotsForSupervisor(dailyLots, dateKey, supervisorId, supervisorName, filterHorario);
+  return lots.length > 0 ? lots[0] : null;
+}
+
+/**
+ * Retorna todos los lotes asignados a un supervisor para una fecha (permite múltiples franjas y bloques en el mismo día)
+ */
+export function findDailyLotsForSupervisor(dailyLots, dateKey, supervisorId, supervisorName = null, filterHorario = null) {
   if (!dailyLots || !dateKey || !dailyLots[dateKey]) {
-    return null;
+    return [];
   }
 
   const dayEntries = dailyLots[dateKey];
   if (!Array.isArray(dayEntries) || dayEntries.length === 0) {
-    return null;
+    return [];
   }
 
   // 1. Filtrar primero por el supervisor si se especificó
@@ -428,16 +436,15 @@ export function findDailyLotForSupervisor(dailyLots, dateKey, supervisorId, supe
     return false;
   });
 
-  if (supMatches.length > 0) {
-    // Si hay franja horaria seleccionada distinta de TODOS, buscar coincidencia exacta de horario
-    if (filterHorario && filterHorario !== "TODOS") {
-      const exactShift = supMatches.find((e) => isSameHorario(e.horario, filterHorario));
-      if (exactShift) return exactShift;
-    }
-    // Si no coincide la franja exacta o el filtro es TODOS, devolver la primera entrada de este supervisor
-    return supMatches[0];
+  if (supMatches.length === 0) return [];
+
+  // Si hay franja horaria seleccionada distinta de TODOS, buscar coincidencias exactas de esa franja
+  if (filterHorario && filterHorario !== "TODOS") {
+    const shiftMatches = supMatches.filter((e) => isSameHorario(e.horario, filterHorario));
+    if (shiftMatches.length > 0) return shiftMatches;
   }
 
-  // 2. Si es para un supervisor sin asignación directa pero coincide por turno oficial de grupo
-  return null;
+  // Si el filtro es TODOS o no hubo match exacto de franja, retornar todos los lotes del supervisor
+  return supMatches;
 }
+

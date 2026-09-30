@@ -9,7 +9,7 @@ import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from
 import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
 import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
-import { findDailyLotForSupervisor } from "../../utils/dailyLotsParser";
+import { findDailyLotForSupervisor, findDailyLotsForSupervisor } from "../../utils/dailyLotsParser";
 
 export default function AttendanceView({
   spaces,
@@ -104,9 +104,65 @@ export default function AttendanceView({
     ? propRosters
     : localRosters;
 
-  // Lote dinámico oficial según fecha seleccionada y franja (hoja RESUMEN SAN MIGUEL)
-  const dynamicLot = useMemo(() => {
-    return findDailyLotForSupervisor(
+  // Lista de todas las franjas horarias asignadas al supervisor actual
+  const currentSupervisorFranjas = useMemo(() => {
+    const list = [];
+    const addFranja = (f) => {
+      if (!f) return;
+      const clean = String(f).trim();
+      if (clean && clean !== "TODOS" && !list.some((existing) => isSameHorario(existing, clean))) {
+        list.push(clean);
+      }
+    };
+
+    // 1. Configuración oficial del supervisor (horarios array o horario string separado por '·' o ',')
+    if (Array.isArray(currentSupervisor?.horarios) && currentSupervisor.horarios.length > 0) {
+      currentSupervisor.horarios.forEach(addFranja);
+    } else if (currentSupervisor?.horario) {
+      String(currentSupervisor.horario).split(/[·,]/).forEach(addFranja);
+    }
+
+    // 2. Lotes diarios en dailyLots para la fecha seleccionada
+    if (dailyLots && selectedDate && Array.isArray(dailyLots[selectedDate])) {
+      dailyLots[selectedDate].forEach((entry) => {
+        const matchesSup = (entry.supervisorId && entry.supervisorId === currentSupervisor?.id) ||
+          (entry.supervisorNombre && currentSupervisor?.nombre && isSameDoctor(entry.supervisorNombre, currentSupervisor.nombre));
+        if (matchesSup && entry.horario) {
+          addFranja(entry.horario);
+        }
+      });
+    }
+
+    // 3. Quincena oficial para la fecha seleccionada
+    if (quincena && quincena.dias && selectedDate) {
+      const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
+      const supQuincena = diaObj?.porSupervisor?.[currentSupervisor?.id];
+      if (supQuincena && Array.isArray(supQuincena.doctores)) {
+        supQuincena.doctores.forEach((d) => {
+          if (d.horario) addFranja(d.horario);
+        });
+      }
+    }
+
+    // 4. activeRosters guardados para este supervisor
+    if (activeRosters && typeof activeRosters === "object") {
+      Object.keys(activeRosters).forEach((key) => {
+        if (key.startsWith(`${currentSupervisor?.id}__`)) {
+          const parts = key.split("__");
+          const franjaPart = parts.length === 3 ? parts[2] : parts[1];
+          if (franjaPart && franjaPart !== "undefined" && franjaPart !== "null") {
+            addFranja(franjaPart);
+          }
+        }
+      });
+    }
+
+    return list;
+  }, [currentSupervisor, dailyLots, selectedDate, quincena, activeRosters]);
+
+  // Lotes dinámicos oficiales según fecha seleccionada y franja (hoja RESUMEN SAN MIGUEL)
+  const dynamicLots = useMemo(() => {
+    return findDailyLotsForSupervisor(
       dailyLots,
       selectedDate,
       currentSupervisor?.id,
@@ -115,76 +171,111 @@ export default function AttendanceView({
     );
   }, [dailyLots, selectedDate, currentSupervisor, filterHorario]);
 
-  const activeBloqueInicio = dynamicLot ? Number(dynamicLot.bloqueInicio) : Number(currentSupervisor.bloqueInicio);
-  const activeBloqueFin = dynamicLot ? Number(dynamicLot.bloqueFin) : Number(currentSupervisor.bloqueFin);
-  const activeTotalPuestos = (activeBloqueInicio === 0 && activeBloqueFin === 0)
-    ? 0
-    : dynamicLot
-      ? Number(dynamicLot.totalPuestos)
-      : (currentSupervisor.totalPuestos ?? (activeBloqueFin - activeBloqueInicio + 1));
+  const dynamicLot = dynamicLots.length > 0 ? dynamicLots[0] : null;
+  const isMultiLot = dynamicLots.length > 1;
 
-  // Espacios del lote del supervisor en el mapa (comparación numérica segura)
+  const activeBloqueInicio = dynamicLot ? Number(dynamicLot.bloqueInicio) : Number(currentSupervisor?.bloqueInicio || 0);
+  const activeBloqueFin = dynamicLot ? Number(dynamicLot.bloqueFin) : Number(currentSupervisor?.bloqueFin || 0);
+
+  const activeTotalPuestos = isMultiLot
+    ? dynamicLots.reduce((sum, dl) => sum + (Number(dl.totalPuestos) || 0), 0)
+    : (activeBloqueInicio === 0 && activeBloqueFin === 0)
+      ? 0
+      : dynamicLot
+        ? Number(dynamicLot.totalPuestos)
+        : (currentSupervisor?.totalPuestos ?? (activeBloqueFin - activeBloqueInicio + 1));
+
+  // Espacios del lote del supervisor en el mapa (soporta múltiples bloques si filterHorario es TODOS)
   const supervisorSpaces = useMemo(() => {
+    if (isMultiLot) {
+      return (spaces || []).filter((s) =>
+        dynamicLots.some((dl) => Number(s.id) >= Number(dl.bloqueInicio) && Number(s.id) <= Number(dl.bloqueFin))
+      );
+    }
     if (!activeBloqueInicio || activeBloqueInicio <= 0 || !activeBloqueFin || activeBloqueFin <= 0) return [];
     return (spaces || []).filter(
       (s) => Number(s.id) >= activeBloqueInicio && Number(s.id) <= activeBloqueFin
     );
-  }, [spaces, activeBloqueInicio, activeBloqueFin]);
+  }, [spaces, isMultiLot, dynamicLots, activeBloqueInicio, activeBloqueFin]);
 
-  // Lista de nombres de médicos asignados al supervisor actual (con resolución dinámica por Quincena Oficial y Fecha)
+  // Lista de nombres de médicos asignados al supervisor actual (con soporte multi-franja)
   const currentRosterNames = useMemo(() => {
-    // 0. Si hay un override guardado específicamente para este supervisor en esta fecha y franja
-    const dateFranjaKey = filterHorario && filterHorario !== "TODOS" && selectedDate ? `${currentSupervisor.id}__${selectedDate}__${filterHorario}` : null;
-    if (dateFranjaKey && activeRosters[dateFranjaKey] && Array.isArray(activeRosters[dateFranjaKey]) && activeRosters[dateFranjaKey].length > 0) {
-      return activeRosters[dateFranjaKey];
-    }
-    const dateOnlyKey = selectedDate ? `${currentSupervisor.id}__${selectedDate}` : null;
-    if (dateOnlyKey && activeRosters[dateOnlyKey] && Array.isArray(activeRosters[dateOnlyKey]) && activeRosters[dateOnlyKey].length > 0) {
-      return activeRosters[dateOnlyKey];
+    // Función auxiliar para obtener médicos asignados a una franja específica
+    const getDocsForShift = (shift) => {
+      // a. Override guardado específicamente para este supervisor en esta fecha y franja
+      const dateFranjaKey = shift && selectedDate ? `${currentSupervisor.id}__${selectedDate}__${shift}` : null;
+      if (dateFranjaKey && activeRosters[dateFranjaKey] && Array.isArray(activeRosters[dateFranjaKey]) && activeRosters[dateFranjaKey].length > 0) {
+        return activeRosters[dateFranjaKey];
+      }
+      // b. Quincena Oficial asignada para esta fecha y supervisor en esta franja
+      if (quincena && quincena.dias && selectedDate) {
+        const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
+        const supQuincena = diaObj?.porSupervisor?.[currentSupervisor.id];
+        if (supQuincena && Array.isArray(supQuincena.doctores)) {
+          const shiftDocs = supQuincena.doctores
+            .filter((d) => !shift || !d.horario || isSameHorario(d.horario, shift))
+            .map((d) => d.nombre);
+          if (shiftDocs.length > 0) return shiftDocs;
+        }
+      }
+      // c. Override guardado por franja
+      const franjaKey = shift ? `${currentSupervisor.id}__${shift}` : null;
+      if (franjaKey && activeRosters[franjaKey] && Array.isArray(activeRosters[franjaKey]) && activeRosters[franjaKey].length > 0) {
+        return activeRosters[franjaKey];
+      }
+      return [];
+    };
+
+    // 1. Si hay una franja horaria seleccionada distinta de TODOS
+    if (filterHorario && filterHorario !== "TODOS") {
+      const shiftDocs = getDocsForShift(filterHorario);
+      if (shiftDocs.length > 0) return shiftDocs;
     }
 
-    // 1. Quincena Oficial asignada desde Google Sheets para esta fecha y supervisor
+    // 2. Si el filtro es TODOS y el supervisor tiene múltiples franjas asignadas (ej. 2pm-10pm y 4pm-10pm)
+    if ((!filterHorario || filterHorario === "TODOS") && currentSupervisorFranjas.length > 1) {
+      const combinedDocs = new Set();
+      currentSupervisorFranjas.forEach((shift) => {
+        const docs = getDocsForShift(shift);
+        docs.forEach((name) => combinedDocs.add(name));
+      });
+      if (combinedDocs.size > 0) {
+        return Array.from(combinedDocs);
+      }
+    }
+
+    // 3. Quincena Oficial completa para este supervisor en esta fecha
     if (quincena && quincena.dias && selectedDate) {
       const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
       const supQuincena = diaObj?.porSupervisor?.[currentSupervisor.id];
       if (supQuincena && Array.isArray(supQuincena.doctorNames) && supQuincena.doctorNames.length > 0) {
-        if (filterHorario && filterHorario !== "TODOS" && Array.isArray(supQuincena.doctores)) {
-          const shiftDocs = supQuincena.doctores
-            .filter((d) => !d.horario || isSameHorario(d.horario, filterHorario))
-            .map((d) => d.nombre);
-          if (shiftDocs.length > 0) {
-            return shiftDocs;
-          }
-        }
         return supQuincena.doctorNames;
       }
     }
 
-    // 2. Revisar si hay un roster guardado específicamente para este supervisor en esta franja
-    const franjaKey = filterHorario && filterHorario !== "TODOS" ? `${currentSupervisor.id}__${filterHorario}` : null;
-    if (franjaKey && activeRosters[franjaKey] && Array.isArray(activeRosters[franjaKey]) && activeRosters[franjaKey].length > 0) {
-      return activeRosters[franjaKey];
+    // 4. Overrides generales por fecha o por supervisor
+    const dateOnlyKey = selectedDate ? `${currentSupervisor.id}__${selectedDate}` : null;
+    if (dateOnlyKey && activeRosters[dateOnlyKey] && Array.isArray(activeRosters[dateOnlyKey]) && activeRosters[dateOnlyKey].length > 0) {
+      return activeRosters[dateOnlyKey];
     }
-
-    // 3. Si el supervisor tiene un roster general guardado, usarlo tal cual
     if (activeRosters[currentSupervisor.id] && Array.isArray(activeRosters[currentSupervisor.id]) && activeRosters[currentSupervisor.id].length > 0) {
       return activeRosters[currentSupervisor.id];
     }
 
-    // 4. Médicos físicamente sentados en este lote
+    // 5. Médicos físicamente sentados en este lote
     const docsInMyLote = supervisorSpaces.filter((s) => s.doctor).map((s) => s.doctor);
     if (docsInMyLote.length > 0) {
       return docsInMyLote;
     }
 
-    // 5. Pre-carga oficial solo si coincide con el turno oficial de dicho supervisor
+    // 6. Pre-carga oficial solo si coincide con el turno oficial de dicho supervisor
     if (currentSupervisor.id === "sup-1" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "06:00 AM - 02:00 PM"))) {
       return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 1").slice(0, currentSupervisor.totalPuestos || 40).map((d) => d.nombre);
     } else if (currentSupervisor.id === "sup-2" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "02:00 PM - 10:00 PM"))) {
       return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 2").slice(0, currentSupervisor.totalPuestos || 34).map((d) => d.nombre);
     }
     return [];
-  }, [activeRosters, currentSupervisor, filterHorario, supervisorSpaces, quincena, selectedDate]);
+  }, [activeRosters, currentSupervisor, filterHorario, supervisorSpaces, quincena, selectedDate, currentSupervisorFranjas]);
 
   function handleSaveSupervisorRoster(newNames, franja = null, transferredDocs = []) {
     const franjaTarget = franja || (filterHorario !== "TODOS" ? filterHorario : null);
@@ -327,9 +418,9 @@ export default function AttendanceView({
       let status = "PENDIENTE";
       let assignedSpaceId = spaceAssigned ? Number(spaceAssigned.id) : null;
       const isSpaceInThisLote = assignedSpaceId &&
-        activeBloqueInicio > 0 &&
-        assignedSpaceId >= activeBloqueInicio &&
-        assignedSpaceId <= activeBloqueFin;
+        (isMultiLot
+          ? dynamicLots.some((dl) => assignedSpaceId >= Number(dl.bloqueInicio) && assignedSpaceId <= Number(dl.bloqueFin))
+          : (activeBloqueInicio > 0 && assignedSpaceId >= activeBloqueInicio && assignedSpaceId <= activeBloqueFin));
 
       if (explicitStatus === "AUSENTE") {
         status = "AUSENTE";
@@ -346,8 +437,35 @@ export default function AttendanceView({
         status = "PRESENTE";
       }
 
-      const doctorShift = spaceAssigned?.horario ||
-        (filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario));
+      // Determinar la franja horaria real del médico de forma inteligente
+      let doctorShift = spaceAssigned?.horario || null;
+      if (!doctorShift && filterHorario && filterHorario !== "TODOS") {
+        doctorShift = filterHorario;
+      }
+      if (!doctorShift && quincena && quincena.dias && selectedDate) {
+        const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
+        const supQuincena = diaObj?.porSupervisor?.[currentSupervisor.id];
+        const matchInQ = supQuincena?.doctores?.find((qd) => isSameDoctor(qd.nombre, name));
+        if (matchInQ?.horario) {
+          doctorShift = matchInQ.horario;
+        }
+      }
+      if (!doctorShift) {
+        for (const shift of currentSupervisorFranjas) {
+          const dateShiftKey = selectedDate ? `${currentSupervisor.id}__${selectedDate}__${shift}` : null;
+          const shiftKey = `${currentSupervisor.id}__${shift}`;
+          if ((dateShiftKey && activeRosters[dateShiftKey]?.includes(name)) ||
+              (activeRosters[shiftKey]?.includes(name))) {
+            doctorShift = shift;
+            break;
+          }
+        }
+      }
+      if (!doctorShift) {
+        doctorShift = (docObj.horario && docObj.horario !== "Turno Rotativo")
+          ? docObj.horario
+          : (currentSupervisor.activeFranja || currentSupervisor.horarios?.[0] || currentSupervisor.horario);
+      }
 
       list.push({
         id: docObj.id,
@@ -610,7 +728,9 @@ export default function AttendanceView({
       return;
     }
 
-    onAssignDoctor(docName, Number(firstFreeSpace.id), currentSupervisor.horario);
+    const docObj = batchDoctors.find((d) => isSameDoctor(d.nombre, docName));
+    const shiftToAssign = docObj?.horario || currentSupervisor.horario;
+    onAssignDoctor(docName, Number(firstFreeSpace.id), shiftToAssign);
     handleSetAttendance(docName, "PRESENTE");
   }
 
@@ -624,12 +744,12 @@ export default function AttendanceView({
 
     const availableInBatch = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO");
     if (availableInBatch.length === 0) {
-      alert(`No hay cubículos disponibles en tu lote (#${activeBloqueInicio} al #${activeBloqueFin}).`);
+      alert(`No hay cubículos disponibles en tu lote.`);
       return;
     }
 
     const countToAssign = Math.min(unseated.length, availableInBatch.length);
-    if (!window.confirm(`¿Deseas auto-asignar ${countToAssign} médico(s) a los puestos libres de tu lote (#${activeBloqueInicio} al #${activeBloqueFin})?`)) {
+    if (!window.confirm(`¿Deseas auto-asignar ${countToAssign} médico(s) a los puestos libres de tu lote?`)) {
       return;
     }
 
@@ -638,6 +758,7 @@ export default function AttendanceView({
       assignments.push({
         doctor: unseated[i].nombre,
         spaceId: Number(availableInBatch[i].id),
+        horario: unseated[i].horario || currentSupervisor.horario,
       });
     }
 
@@ -645,12 +766,12 @@ export default function AttendanceView({
       onAssignBatch(assignments, currentSupervisor.horario);
     } else {
       for (let i = 0; i < assignments.length; i++) {
-        onAssignDoctor(assignments[i].doctor, assignments[i].spaceId, currentSupervisor.horario);
+        onAssignDoctor(assignments[i].doctor, assignments[i].spaceId, assignments[i].horario || currentSupervisor.horario);
         handleSetAttendance(assignments[i].doctor, "PRESENTE");
       }
     }
 
-    alert(`✅ ¡Auto-asignación completada!\n\nSe ubicaron ${countToAssign} médicos en sus cubículos asignados (#${activeBloqueInicio} al #${activeBloqueFin}) y se marcaron como PRESENTES.`);
+    alert(`✅ ¡Auto-asignación completada!\n\nSe ubicaron ${countToAssign} médicos en sus cubículos asignados y se marcaron como PRESENTES.`);
   }
 
   function handleCopyReport() {
@@ -918,7 +1039,17 @@ export default function AttendanceView({
                 )}
               </div>
             </div>
-            {activeBloqueInicio === 0 ? (
+            {isMultiLot ? (
+              <div className="flex items-center gap-1.5 font-mono-data text-[12.5px] font-bold text-[#0048B5] bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200">
+                <MapPin size={14} className="text-emerald-600" />
+                <span>
+                  {dynamicLots.map((dl) => `#${dl.bloqueInicio}-#${dl.bloqueFin}`).join(" y ")}
+                </span>
+                <span className="text-[10.5px] font-normal text-slate-500">
+                  ({activeTotalPuestos} puestos en {dynamicLots.length} lotes)
+                </span>
+              </div>
+            ) : activeBloqueInicio === 0 ? (
               <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
                 <MapPin size={14} className="text-amber-600" />
                 <span>Sin Lote Asignado Hoy</span>
@@ -973,7 +1104,12 @@ export default function AttendanceView({
               </div>
             ) : (
               <div className="flex items-center gap-1.5 font-mono-data text-[12px] font-semibold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl">
-                <Clock size={14} /> {currentSupervisor.horario}
+                <Clock size={14} className="text-amber-600" />
+                <span>
+                  {currentSupervisorFranjas.length > 1
+                    ? currentSupervisorFranjas.join(" · ")
+                    : (currentSupervisor.horario || "Sin turno asignado")}
+                </span>
               </div>
             )}
           </div>
@@ -1212,6 +1348,49 @@ export default function AttendanceView({
             </div>
           }
         >
+          {/* Selector de Franjas cuando el supervisor tiene múltiples turnos asignados */}
+          {currentSupervisorFranjas.length > 1 && (
+            <div className="flex items-center gap-1.5 mb-3 p-2 rounded-2xl bg-blue-50/70 border border-blue-200/90 flex-wrap">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1 mr-1">
+                <Clock size={12} className="text-[#0048B5]" /> Franja Asignada:
+              </span>
+              <button
+                type="button"
+                onClick={() => handleFilterHorarioChange("TODOS")}
+                className={`px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all cursor-pointer ${
+                  filterHorario === "TODOS"
+                    ? "bg-[#0048B5] text-white shadow-xs"
+                    : "bg-white text-slate-700 border border-slate-200 hover:bg-blue-50"
+                }`}
+              >
+                Todas mis franjas ({batchDoctors.length})
+              </button>
+              {currentSupervisorFranjas.map((shift) => {
+                const countInShift = batchDoctors.filter((d) => isSameHorario(d.horario, shift)).length;
+                const isSelected = isSameHorario(filterHorario, shift);
+                return (
+                  <button
+                    key={shift}
+                    type="button"
+                    onClick={() => handleFilterHorarioChange(shift)}
+                    className={`px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? "bg-[#0048B5] text-white shadow-xs"
+                        : "bg-white text-slate-700 border border-slate-200 hover:bg-blue-50"
+                    }`}
+                  >
+                    <span>{shift}</span>
+                    <span className={`text-[10.5px] font-mono px-1.5 py-0.2 rounded-full ${
+                      isSelected ? "bg-white/20 text-white font-bold" : "bg-blue-100 text-[#0048B5]"
+                    }`}>
+                      {countInShift}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Pestañas de Filtro Rápido */}
           <div className="flex items-center gap-1.5 mb-3.5 flex-wrap">
             <button
@@ -1364,6 +1543,12 @@ export default function AttendanceView({
                         <p className="leading-tight">{doc.nombre}</p>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           <span className="text-[10px] font-normal text-slate-400">{doc.tipo}</span>
+                          {doc.horario && (
+                            <span className="text-[10px] font-mono bg-blue-50 text-[#0048B5] px-1.5 py-0.2 rounded font-bold border border-blue-200 flex items-center gap-1">
+                              <Clock size={10} className="text-[#0048B5]" />
+                              <span>{doc.horario}</span>
+                            </span>
+                          )}
                           {doc.correo && (
                             <span className="text-[10px] font-mono text-[#0048B5] font-normal">
                               {doc.correo}
@@ -1539,9 +1724,11 @@ export default function AttendanceView({
           icon={MapPin}
           title="Puestos del Lote en Vivo"
           subtitle={
-            activeBloqueInicio === 0
-              ? "Supervisor sin lote asignado hoy"
-              : `Puestos #${activeBloqueInicio} al #${activeBloqueFin}${dynamicLot ? ` · ${dynamicLot.horario}` : ""}`
+            isMultiLot
+              ? `${dynamicLots.map((dl) => `#${dl.bloqueInicio}-#${dl.bloqueFin} (${dl.horario})`).join(" · ")}`
+              : activeBloqueInicio === 0
+                ? "Supervisor sin lote asignado hoy"
+                : `Puestos #${activeBloqueInicio} al #${activeBloqueFin}${dynamicLot ? ` · ${dynamicLot.horario}` : ""}`
           }
         >
           <div className="flex flex-col gap-3">

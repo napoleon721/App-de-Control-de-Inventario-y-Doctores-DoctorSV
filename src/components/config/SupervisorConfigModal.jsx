@@ -4,6 +4,7 @@ import {
   Sparkles, AlertCircle, Save, Clock, Lock
 } from "lucide-react";
 import { SUPERVISORES_OFICIALES, HORARIOS as DEFAULT_HORARIOS } from "../../constants/tokens";
+import { isSameHorario } from "../../utils/safeHelpers";
 
 export default function SupervisorConfigModal({
   supervisores,
@@ -11,11 +12,57 @@ export default function SupervisorConfigModal({
   onClose,
   horarios = DEFAULT_HORARIOS,
 }) {
-  const [list, setList] = useState(
-    supervisores.map((s) => ({ ...s }))
+  const [list, setList] = useState(() =>
+    supervisores.map((s) => {
+      let turnos = [];
+      if (Array.isArray(s.horarios) && s.horarios.length > 0) {
+        turnos = [...s.horarios];
+      } else if (s.horario) {
+        turnos = String(s.horario)
+          .split(/[·,]/)
+          .map((h) => h.trim())
+          .filter(Boolean);
+      }
+      if (turnos.length === 0 && s.horario) {
+        turnos = [s.horario];
+      }
+      return {
+        ...s,
+        horarios: turnos,
+        horario: turnos.join(" · ") || s.horario || "02:00 PM – 10:00 PM",
+      };
+    })
   );
   const [errorMsg, setErrorMsg] = useState("");
   const [savedMsg, setSavedMsg] = useState("");
+
+  function toggleHorario(idx, shift) {
+    setErrorMsg("");
+    setSavedMsg("");
+    setList((prev) => {
+      const copy = prev.map((s) => ({ ...s }));
+      const currentSup = copy[idx];
+      let currentHorarios = Array.isArray(currentSup.horarios) ? [...currentSup.horarios] : [];
+      if (currentHorarios.length === 0 && currentSup.horario) {
+        currentHorarios = String(currentSup.horario)
+          .split(/[·,]/)
+          .map((h) => h.trim())
+          .filter(Boolean);
+      }
+
+      const exists = currentHorarios.some((h) => isSameHorario(h, shift));
+      let nextHorarios;
+      if (exists) {
+        nextHorarios = currentHorarios.filter((h) => !isSameHorario(h, shift));
+      } else {
+        nextHorarios = [...currentHorarios, shift];
+      }
+
+      copy[idx].horarios = nextHorarios;
+      copy[idx].horario = nextHorarios.join(" · ");
+      return copy;
+    });
+  }
 
   function handleChange(idx, field, val) {
     setErrorMsg("");
@@ -78,8 +125,9 @@ export default function SupervisorConfigModal({
 
   function handleResetDefaults() {
     if (window.confirm("¿Deseas restaurar los rangos y puestos oficiales originales de los 5 supervisores?")) {
-      setList(SUPERVISORES_OFICIALES.map((s) => ({ ...s })));
-      onSaveSupervisores(SUPERVISORES_OFICIALES);
+      const defs = SUPERVISORES_OFICIALES.map((s) => ({ ...s, horarios: [s.horario] }));
+      setList(defs);
+      onSaveSupervisores(defs);
       setSavedMsg("Rangos restablecidos a los valores por defecto del Excel.");
     }
   }
@@ -205,8 +253,8 @@ export default function SupervisorConfigModal({
                   </div>
                 </div>
 
-                {/* Campos de Configuración del Supervisor */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+                {/* Campos de Configuración del Supervisor: Puestos Físicos */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 mb-2.5">
                   {/* Puesto Estación Física */}
                   <div>
                     <label className="block text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
@@ -263,26 +311,63 @@ export default function SupervisorConfigModal({
                       />
                     </div>
                   </div>
-
-                  {/* Turno Oficial Asignado */}
-                  <div>
-                    <label className="block text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
-                      <Clock size={11} className="text-amber-600" />
-                      <span>Turno Oficial</span>
-                    </label>
-                    <select
-                      value={sup.horario}
-                      onChange={(e) => handleChange(idx, "horario", e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer font-mono-data"
-                    >
-                      {horarios.map((h) => (
-                        <option key={h} value={h}>
-                          🕒 {h}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                 </div>
+
+                {/* Sección Multiselección de Turnos Oficiales */}
+                {(() => {
+                  const currentHorarios = Array.isArray(sup.horarios) && sup.horarios.length > 0
+                    ? sup.horarios
+                    : (sup.horario ? String(sup.horario).split(/[·,]/).map((h) => h.trim()).filter(Boolean) : []);
+                  return (
+                    <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-200 mb-2">
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                          <Clock size={12} className="text-amber-600" />
+                          <span>Turno(s) / Franja(s) Oficial(es) Asignadas:</span>
+                        </label>
+                        <span className="text-[11px] font-bold text-[#0048B5]">
+                          {currentHorarios.length > 0
+                            ? `${currentHorarios.length} franja(s) activa(s)`
+                            : "Ninguna franja seleccionada"}
+                        </span>
+                      </div>
+
+                      {/* Botones / Chips interactivos para cada turno */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {horarios.map((h) => {
+                          const isSelected = currentHorarios.some((ch) => isSameHorario(ch, h));
+                          return (
+                            <button
+                              type="button"
+                              key={h}
+                              onClick={() => toggleHorario(idx, h)}
+                              className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                                isSelected
+                                  ? "bg-[#0048B5] text-white border-[#0048B5] ring-2 ring-blue-300 scale-102"
+                                  : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
+                              }`}
+                              title={`Haz clic para ${isSelected ? "desmarcar" : "asignar"} este turno`}
+                            >
+                              <span className={`text-[10px] font-black ${isSelected ? "text-amber-300" : "text-slate-400"}`}>
+                                {isSelected ? "✓" : "+"}
+                              </span>
+                              <span>{h}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {currentHorarios.length > 0 && (
+                        <div className="mt-2 text-[11px] text-slate-600 font-medium flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-700">Franjas asignadas:</span>
+                          <span className="font-mono text-[#0048B5] font-bold">
+                            {currentHorarios.join("  ·  ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
                   <span>
