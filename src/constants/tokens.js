@@ -230,3 +230,89 @@ export function ensureAllSpaces(existingList) {
   const map = new Map(existingList.map((s) => [Number(s.id), s]));
   return fullDefaults.map((def) => map.get(Number(def.id)) || def);
 }
+
+// Nombres normalizados de los 5 supervisores para excluir de nóminas clínicas operativas
+const SUPERVISORES_NOMBRES_NORM = SUPERVISORES_OFICIALES.map((s) =>
+  s.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim()
+);
+
+/**
+ * Obtiene la lista depurada de médicos operativos de Servicios Profesionales (excluyendo puestos de supervisión)
+ */
+export function getOperativeSPDoctors(doctorsList = DOCTORES_EXCEL) {
+  return (doctorsList || []).filter((d) => {
+    if (d.grupo !== "Servicios Profesionales") return false;
+    const norm = (d.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    return !SUPERVISORES_NOMBRES_NORM.some((s) => norm.includes(s) || s.includes(norm));
+  });
+}
+
+/**
+ * Bloques Oficiales de Servicios Profesionales (SP) distribuidos por supervisor y franja vespertina/nocturna:
+ * - Bloque 1 (Emerson · sup-1 · 02:00 PM – 10:00 PM): 40 médicos (Lote Puestos #37 al #76)
+ * - Bloque 2 (Salvador · sup-2 · 04:00 PM – 10:00 PM): 34 médicos (Lote Puestos #71 al #104)
+ * - Bloque 3 (Alfredo · sup-3 · 06:00 PM – 10:00 PM): 36 médicos (Lote Puestos #1 al #36)
+ * - Bloque 4 (Reserva / Rotativo): 26 médicos restantes
+ */
+export function getSPBlocks(doctorsList = DOCTORES_EXCEL) {
+  const operativeSP = getOperativeSPDoctors(doctorsList);
+  const b1 = operativeSP.slice(0, 40);
+  const b2 = operativeSP.slice(40, 74);
+  const b3 = operativeSP.slice(74, 110);
+  const bReserva = operativeSP.slice(110);
+
+  return {
+    "sup-1": {
+      id: "sup-1",
+      key: "SP_EMERSON",
+      label: "SP Bloque 1 (Emerson)",
+      shortLabel: "SP Emerson",
+      supervisorNombre: "EMERSON JOSUE VIGIL HERNANDEZ",
+      horario: "02:00 PM – 10:00 PM",
+      puestos: "Puestos #37 al #76",
+      total: b1.length,
+      doctors: b1,
+      doctorNames: b1.map((d) => d.nombre),
+      doctorNamesSet: new Set(b1.map((d) => d.nombre)),
+    },
+    "sup-2": {
+      id: "sup-2",
+      key: "SP_SALVADOR",
+      label: "SP Bloque 2 (Salvador)",
+      shortLabel: "SP Salvador",
+      supervisorNombre: "SALVADOR RENDEROS BONILLA",
+      horario: "04:00 PM – 10:00 PM",
+      puestos: "Puestos #71 al #104",
+      total: b2.length,
+      doctors: b2,
+      doctorNames: b2.map((d) => d.nombre),
+      doctorNamesSet: new Set(b2.map((d) => d.nombre)),
+    },
+    "sup-3": {
+      id: "sup-3",
+      key: "SP_ALFREDO",
+      label: "SP Bloque 3 (Alfredo)",
+      shortLabel: "SP Alfredo",
+      supervisorNombre: "ALFREDO ISAAC MARTINEZ AMAYA",
+      horario: "06:00 PM – 10:00 PM",
+      puestos: "Puestos #1 al #36",
+      total: b3.length,
+      doctors: b3,
+      doctorNames: b3.map((d) => d.nombre),
+      doctorNamesSet: new Set(b3.map((d) => d.nombre)),
+    },
+    "reserva": {
+      id: "reserva",
+      key: "SP_RESERVA",
+      label: "SP Bloque 4 (Reserva)",
+      shortLabel: "SP Reserva",
+      supervisorNombre: "Médicos de Reserva / Rotación",
+      horario: "Turno Rotativo",
+      puestos: "Pool de Reserva",
+      total: bReserva.length,
+      doctors: bReserva,
+      doctorNames: bReserva.map((d) => d.nombre),
+      doctorNamesSet: new Set(bReserva.map((d) => d.nombre)),
+    },
+  };
+}

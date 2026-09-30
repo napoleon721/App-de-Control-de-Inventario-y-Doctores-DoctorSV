@@ -182,12 +182,42 @@ const horarios = [
 ];
 
 // 7. Nóminas (Rosters)
+// Partición oficial de Servicios Profesionales (SP) para turnos de tarde/noche:
+// - Emerson (sup-1 · 02:00 PM – 10:00 PM): 40 médicos (Lote Puestos #37 al #76)
+// - Salvador (sup-2 · 04:00 PM – 10:00 PM): 34 médicos (Lote Puestos #71 al #104)
+// - Alfredo (sup-3 · 06:00 PM – 10:00 PM): 36 médicos (Lote Puestos #1 al #36)
+// - Planilla: Roxana (sup-4) con Grupo 2 y Edward (sup-5) con Grupo 1
+const supNamesNorm = [
+  "emerson josue vigil hernandez",
+  "salvador renderos bonilla",
+  "alfredo isaac martinez amaya",
+  "roxana guadalupe canales rodriguez",
+  "edward josue zelaya prudencio"
+];
+
+const operativeSP = allDoctors.filter((d) => {
+  if (d.grupo !== "Servicios Profesionales") return false;
+  const norm = (d.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return !supNamesNorm.some((s) => norm.includes(s) || s.includes(norm));
+});
+
+const spEmerson = operativeSP.slice(0, 40).map((d) => d.nombre);
+const spSalvador = operativeSP.slice(40, 74).map((d) => d.nombre);
+const spAlfredo = operativeSP.slice(74, 110).map((d) => d.nombre);
+
 const rosters = {
-  "sup-1": doctorsGrupo1.slice(0, 40),
-  "sup-2": doctorsGrupo2.slice(0, 34),
-  "sup-3": doctorsGrupo1.slice(0, 36),
+  // Por supervisor
+  "sup-1": spEmerson,
+  "sup-2": spSalvador,
+  "sup-3": spAlfredo,
   "sup-4": doctorsGrupo2.slice(0, 36),
-  "sup-5": allDoctors.slice(0, 40).map((d) => d.nombre),
+  "sup-5": doctorsGrupo1.slice(0, 40),
+  // Por franja horaria específica de la tarde
+  "sup-1__02:00 PM – 10:00 PM": spEmerson,
+  "sup-2__04:00 PM – 10:00 PM": spSalvador,
+  "sup-3__06:00 PM – 10:00 PM": spAlfredo,
+  "sup-4__07:00 AM – 12:00 PM": doctorsGrupo2.slice(0, 36),
+  "sup-5__02:00 PM – 10:00 PM": doctorsGrupo1.slice(0, 40),
 };
 
 async function seed() {

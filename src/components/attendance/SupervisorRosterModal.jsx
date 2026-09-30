@@ -2,9 +2,9 @@ import React, { useState, useMemo, useCallback } from "react";
 import {
   X, Search, Check, Users, Settings2, Sparkles, Filter, Mail,
   CheckSquare, Square, AlertCircle, RefreshCw, UserCheck, Clock,
-  MapPin, AlertTriangle, ArrowRightLeft
+  MapPin, AlertTriangle, ArrowRightLeft, Stethoscope
 } from "lucide-react";
-import { DOCTORES_EXCEL, HORARIOS } from "../../constants/tokens";
+import { DOCTORES_EXCEL, HORARIOS, getSPBlocks } from "../../constants/tokens";
 import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
 // Componente memoizado para cada tarjeta de médico: solo re-renderiza cuando su propio estado cambia
@@ -14,8 +14,19 @@ const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({
   onToggle,
   supInfo,
   currentSupervisorId,
+  spBlocks,
 }) {
   const isOtherSupervisor = supInfo?.supervisorId && supInfo.supervisorId !== currentSupervisorId;
+
+  // Determinar a qué bloque de SP pertenece si aplica
+  const spBlockTag = useMemo(() => {
+    if (doc.grupo !== "Servicios Profesionales" || !spBlocks) return null;
+    if (spBlocks["sup-1"]?.doctorNamesSet.has(doc.nombre)) return { label: "SP Emerson", color: "bg-emerald-50 text-emerald-800 border-emerald-200" };
+    if (spBlocks["sup-2"]?.doctorNamesSet.has(doc.nombre)) return { label: "SP Salvador", color: "bg-teal-50 text-teal-800 border-teal-200" };
+    if (spBlocks["sup-3"]?.doctorNamesSet.has(doc.nombre)) return { label: "SP Alfredo", color: "bg-blue-50 text-blue-800 border-blue-200" };
+    if (spBlocks["reserva"]?.doctorNamesSet.has(doc.nombre)) return { label: "SP Reserva", color: "bg-slate-100 text-slate-700 border-slate-200" };
+    return null;
+  }, [doc.grupo, doc.nombre, spBlocks]);
 
   return (
     <div
@@ -65,6 +76,14 @@ const DoctorCheckboxCard = React.memo(function DoctorCheckboxCard({
                 {doc.grupo}
               </span>
             )}
+
+            {/* Badge de Bloque oficial de SP si aplica */}
+            {spBlockTag && (
+              <span className={`text-[9.5px] border px-1.5 py-0.2 rounded-md font-bold ${spBlockTag.color}`}>
+                {spBlockTag.label}
+              </span>
+            )}
+
             {/* Badge de pertenencia de Supervisor */}
             {isOtherSupervisor ? (
               <span className="text-[9.5px] bg-amber-100/80 text-amber-900 border border-amber-300/60 px-1.5 py-0.2 rounded-md font-bold flex items-center gap-0.5">
@@ -126,13 +145,24 @@ export default function SupervisorRosterModal({
     (supervisor?.bloqueFin && supervisor?.bloqueInicio ? (Number(supervisor.bloqueFin) - Number(supervisor.bloqueInicio) + 1) : 40);
   const countSelected = selectedNames.size;
 
-  // Groups extracted from official list
+  // Bloques oficiales segmentados de Servicios Profesionales (SP)
+  const spBlocks = useMemo(() => getSPBlocks(DOCTORES_EXCEL), []);
+  const mySPBlock = spBlocks[supervisor?.id] || null;
+
+  // Grupos disponibles con los Bloques Oficiales de SP destacados
   const availableGroups = useMemo(() => {
-    const set = new Set();
-    DOCTORES_EXCEL.forEach((d) => {
-      if (d.grupo) set.add(d.grupo);
-    });
-    return ["TODOS", ...Array.from(set)];
+    return [
+      { key: "TODOS", label: "TODOS" },
+      { key: "Grupo 1", label: "Grupo 1" },
+      { key: "Grupo 2", label: "Grupo 2" },
+      { key: "SP_EMERSON", label: "SP Emerson (40)", isSP: true },
+      { key: "SP_SALVADOR", label: "SP Salvador (34)", isSP: true },
+      { key: "SP_ALFREDO", label: "SP Alfredo (36)", isSP: true },
+      { key: "SP_RESERVA", label: "SP Reserva (26)", isSP: true },
+      { key: "Servicios Profesionales", label: "Todos SP (136)" },
+      { key: "Grupo 3", label: "Grupo 3" },
+      { key: "Grupo General", label: "General" },
+    ];
   }, []);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -162,8 +192,20 @@ export default function SupervisorRosterModal({
       const supInfo = doctorSupInfoMap.get(d.nombre.toLowerCase().trim());
       const isOtherSup = supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id;
 
-      // Filtro por Grupo
-      if (selectedGroup !== "TODOS" && d.grupo !== selectedGroup) return false;
+      // Filtro por Grupo o Bloque SP
+      if (selectedGroup !== "TODOS") {
+        if (selectedGroup === "SP_EMERSON") {
+          if (!spBlocks["sup-1"]?.doctorNamesSet.has(d.nombre)) return false;
+        } else if (selectedGroup === "SP_SALVADOR") {
+          if (!spBlocks["sup-2"]?.doctorNamesSet.has(d.nombre)) return false;
+        } else if (selectedGroup === "SP_ALFREDO") {
+          if (!spBlocks["sup-3"]?.doctorNamesSet.has(d.nombre)) return false;
+        } else if (selectedGroup === "SP_RESERVA") {
+          if (!spBlocks["reserva"]?.doctorNamesSet.has(d.nombre)) return false;
+        } else if (d.grupo !== selectedGroup) {
+          return false;
+        }
+      }
 
       // Filtro por Asignación
       if (filterAsignacion === "MI_NOMINA" && !isChecked) return false;
@@ -191,7 +233,25 @@ export default function SupervisorRosterModal({
 
       return matchesText;
     });
-  }, [search, selectedGroup, selectedFranja, filterAsignacion, selectedNames, doctorSupInfoMap, supervisor?.id]);
+  }, [search, selectedGroup, selectedFranja, filterAsignacion, selectedNames, doctorSupInfoMap, supervisor?.id, spBlocks]);
+
+  // Carga rápida: Cargar bloque oficial de Servicios Profesionales con 1 clic
+  const handleLoadSPBlock = useCallback((blockKey) => {
+    const block = spBlocks[blockKey];
+    if (!block) return;
+
+    if (selectedNames.size > 0) {
+      const confirmReplace = window.confirm(
+        `¿Deseas cargar los ${block.total} médicos de "${block.label}"?\n\n` +
+        `• Aceptar: Reemplazar tu nómina actual por los ${block.total} médicos de este bloque.\n` +
+        `• Cancelar: Mantener tu selección actual.`
+      );
+      if (!confirmReplace) return;
+    }
+
+    setSelectedNames(new Set(block.doctorNames));
+    setTransferredNames(new Set());
+  }, [spBlocks, selectedNames.size]);
 
   // Toggle single doctor con confirmación amigable si pertenece a otro supervisor
   const handleToggleDoctor = useCallback((docName, supInfo) => {
@@ -372,6 +432,40 @@ export default function SupervisorRosterModal({
 
           {/* Botones de Carga Rápida */}
           <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Si el supervisor activo tiene un bloque oficial de SP (Emerson, Salvador o Alfredo), botón directo */}
+            {mySPBlock && (
+              <button
+                type="button"
+                onClick={() => handleLoadSPBlock(supervisor.id)}
+                className="px-3 py-1 text-[11px] font-extrabold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-2xs flex items-center gap-1.5 active:scale-95"
+                title={`Cargar los ${mySPBlock.total} médicos del bloque oficial de ${mySPBlock.label}`}
+              >
+                <Sparkles size={12} className="text-amber-300" />
+                <span>+ Cargar {mySPBlock.shortLabel} ({mySPBlock.total})</span>
+              </button>
+            )}
+
+            {/* Menú desplegable para cargar cualquier Bloque de SP */}
+            <div className="relative inline-flex items-center">
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleLoadSPBlock(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
+                defaultValue=""
+                className="px-2 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 hover:bg-indigo-100 transition shadow-2xs outline-none cursor-pointer"
+                title="Cargar cualquiera de los bloques predefinidos de Servicios Profesionales"
+              >
+                <option value="" disabled>+ Bloque SP...</option>
+                <option value="sup-1">Bloque 1 · Emerson (40 méd.)</option>
+                <option value="sup-2">Bloque 2 · Salvador (34 méd.)</option>
+                <option value="sup-3">Bloque 3 · Alfredo (36 méd.)</option>
+                <option value="reserva">Bloque 4 · Reserva (26 méd.)</option>
+              </select>
+            </div>
+
             {activeFranja && (
               <button
                 type="button"
@@ -380,7 +474,7 @@ export default function SupervisorRosterModal({
                 title={`Cargar médicos disponibles para la franja ${activeFranja}`}
               >
                 <Sparkles size={12} />
-                <span>+ Médicos de mi franja</span>
+                <span>+ Mi franja</span>
               </button>
             )}
             <button
@@ -506,25 +600,32 @@ export default function SupervisorRosterModal({
             </div>
 
             {/* Selector de Grupo */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
                 Grupo:
               </span>
-              <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 border border-slate-200">
-                {availableGroups.map((grp) => (
-                  <button
-                    key={grp}
-                    type="button"
-                    onClick={() => setSelectedGroup(grp)}
-                    className={`px-2 py-0.5 text-[10.5px] font-bold rounded-md transition-all ${
-                      selectedGroup === grp
-                        ? "bg-white text-[#0048B5] shadow-xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    {grp}
-                  </button>
-                ))}
+              <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 border border-slate-200 flex-wrap">
+                {availableGroups.map((grp) => {
+                  const key = typeof grp === "string" ? grp : grp.key;
+                  const label = typeof grp === "string" ? grp : grp.label;
+                  const isSelected = selectedGroup === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedGroup(key)}
+                      className={`px-2 py-0.5 text-[10.5px] font-bold rounded-md transition-all whitespace-nowrap ${
+                        isSelected
+                          ? "bg-white text-[#0048B5] shadow-xs"
+                          : grp.isSP
+                          ? "text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -532,6 +633,36 @@ export default function SupervisorRosterModal({
 
         {/* ================= LISTA DE MÉDICOS SELECCIONABLES ================= */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+          {/* Banner de acción rápida al filtrar un bloque de SP */}
+          {selectedGroup.startsWith("SP_") && (
+            <div className="mb-3 p-3 rounded-2xl bg-gradient-to-r from-indigo-50 via-blue-50 to-emerald-50 border border-indigo-200 flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-2xs">
+                  <Users size={14} />
+                </span>
+                <div>
+                  <p className="text-[12px] font-bold text-slate-800">
+                    Mostrando {filteredDoctors.length} médicos del bloque seleccionado
+                  </p>
+                  <p className="text-[10.5px] text-slate-500 font-medium">
+                    Puedes cargar este bloque oficial completo a tu nómina con 1 solo clic
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const blockKey = selectedGroup === "SP_EMERSON" ? "sup-1" : selectedGroup === "SP_SALVADOR" ? "sup-2" : selectedGroup === "SP_ALFREDO" ? "sup-3" : "reserva";
+                  handleLoadSPBlock(blockKey);
+                }}
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold transition shadow-xs flex items-center gap-1.5 active:scale-95"
+              >
+                <Check size={13} />
+                <span>Cargar este bloque ({filteredDoctors.length})</span>
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {filteredDoctors.map((doc) => {
               const isChecked = selectedNames.has(doc.nombre);
@@ -544,6 +675,7 @@ export default function SupervisorRosterModal({
                   onToggle={handleToggleDoctor}
                   supInfo={supInfo}
                   currentSupervisorId={supervisor?.id}
+                  spBlocks={spBlocks}
                 />
               );
             })}
