@@ -9,6 +9,7 @@ import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from
 import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
 import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
+import { findDailyLotForSupervisor } from "../../utils/dailyLotsParser";
 
 export default function AttendanceView({
   spaces,
@@ -32,6 +33,9 @@ export default function AttendanceView({
   onUpdateSupervisorOfficialShift = null,
   quincena = null,
   onSaveQuincena = null,
+  dailyLots = null,
+  onSaveDailyLots = null,
+  onOpenDailyLots = null,
 }) {
   const isMaster = currentUser?.role === "MASTER";
 
@@ -100,12 +104,27 @@ export default function AttendanceView({
     ? propRosters
     : localRosters;
 
+  // Lote dinámico oficial según fecha seleccionada y franja (hoja RESUMEN SAN MIGUEL)
+  const dynamicLot = useMemo(() => {
+    return findDailyLotForSupervisor(
+      dailyLots,
+      selectedDate,
+      currentSupervisor?.id,
+      currentSupervisor?.nombre,
+      filterHorario
+    );
+  }, [dailyLots, selectedDate, currentSupervisor, filterHorario]);
+
+  const activeBloqueInicio = dynamicLot ? Number(dynamicLot.bloqueInicio) : Number(currentSupervisor.bloqueInicio);
+  const activeBloqueFin = dynamicLot ? Number(dynamicLot.bloqueFin) : Number(currentSupervisor.bloqueFin);
+  const activeTotalPuestos = dynamicLot ? Number(dynamicLot.totalPuestos) : (currentSupervisor.totalPuestos || (activeBloqueFin - activeBloqueInicio + 1));
+
   // Espacios del lote del supervisor en el mapa (comparación numérica segura)
   const supervisorSpaces = useMemo(() => {
     return (spaces || []).filter(
-      (s) => Number(s.id) >= Number(currentSupervisor.bloqueInicio) && Number(s.id) <= Number(currentSupervisor.bloqueFin)
+      (s) => Number(s.id) >= activeBloqueInicio && Number(s.id) <= activeBloqueFin
     );
-  }, [spaces, currentSupervisor]);
+  }, [spaces, activeBloqueInicio, activeBloqueFin]);
 
   // Lista de nombres de médicos asignados al supervisor actual (con resolución dinámica por Quincena Oficial y Fecha)
   const currentRosterNames = useMemo(() => {
@@ -303,8 +322,8 @@ export default function AttendanceView({
       let status = "PENDIENTE";
       let assignedSpaceId = spaceAssigned ? Number(spaceAssigned.id) : null;
       const isSpaceInThisLote = assignedSpaceId &&
-        assignedSpaceId >= Number(currentSupervisor.bloqueInicio) &&
-        assignedSpaceId <= Number(currentSupervisor.bloqueFin);
+        assignedSpaceId >= activeBloqueInicio &&
+        assignedSpaceId <= activeBloqueFin;
 
       if (explicitStatus === "AUSENTE") {
         status = "AUSENTE";
@@ -402,8 +421,8 @@ export default function AttendanceView({
 
       // Solo incluir si el médico tiene un cubículo asignado EN ESTE lote
       if (!spaceAssigned) return;
-      const isSpaceInThisLote = Number(spaceAssigned.id) >= Number(currentSupervisor.bloqueInicio) &&
-                                Number(spaceAssigned.id) <= Number(currentSupervisor.bloqueFin);
+      const isSpaceInThisLote = Number(spaceAssigned.id) >= activeBloqueInicio &&
+                                Number(spaceAssigned.id) <= activeBloqueFin;
       if (!isSpaceInThisLote) return;
 
       const docObj = getDocObj(name);
@@ -599,12 +618,12 @@ export default function AttendanceView({
 
     const availableInBatch = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO");
     if (availableInBatch.length === 0) {
-      alert(`No hay cubículos disponibles en tu lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin}).`);
+      alert(`No hay cubículos disponibles en tu lote (#${activeBloqueInicio} al #${activeBloqueFin}).`);
       return;
     }
 
     const countToAssign = Math.min(unseated.length, availableInBatch.length);
-    if (!window.confirm(`¿Deseas auto-asignar ${countToAssign} médico(s) a los puestos libres de tu lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin})?`)) {
+    if (!window.confirm(`¿Deseas auto-asignar ${countToAssign} médico(s) a los puestos libres de tu lote (#${activeBloqueInicio} al #${activeBloqueFin})?`)) {
       return;
     }
 
@@ -625,7 +644,7 @@ export default function AttendanceView({
       }
     }
 
-    alert(`✅ ¡Auto-asignación completada!\n\nSe ubicaron ${countToAssign} médicos en sus cubículos asignados (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin}) y se marcaron como PRESENTES.`);
+    alert(`✅ ¡Auto-asignación completada!\n\nSe ubicaron ${countToAssign} médicos en sus cubículos asignados (#${activeBloqueInicio} al #${activeBloqueFin}) y se marcaron como PRESENTES.`);
   }
 
   function handleCopyReport() {
@@ -633,7 +652,7 @@ export default function AttendanceView({
     const reportText = `📊 REPORTE DE ASISTENCIA Y OCUPACIÓN · DOCTORSV\n` +
       `Supervisor: ${currentSupervisor.nombre}\n` +
       `Turno / Franja Horaria: ${horarioLabel}\n` +
-      `Bloque de Puestos Asignados: Puestos #${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin} (${currentSupervisor.totalPuestos} puestos)\n` +
+      `Bloque de Puestos Asignados: Puestos #${activeBloqueInicio} al #${activeBloqueFin} (${activeTotalPuestos} puestos)${dynamicLot ? ` [Resumen SM - ${dynamicLot.grupo}]` : ""}\n` +
       `------------------------------------\n` +
       `Total Programados: ${totalProgramados}${filterHorario !== "TODOS" ? ` (filtrado por ${filterHorario})` : ""}\n` +
       `Total Presentes: ${totalPresentes} (${asistenciaPct}%)\n` +
@@ -854,23 +873,47 @@ export default function AttendanceView({
 
           <div className="border-l border-slate-200 pl-3">
             <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Lote Asignado por Central
-              </span>
-              {isMaster && onOpenSupervisorConfig && (
-                <button
-                  type="button"
-                  onClick={onOpenSupervisorConfig}
-                  className="text-[10.5px] font-bold text-[#0048B5] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-lg border border-blue-200 transition-colors flex items-center gap-1"
-                  title="Configurar puestos, ubicación y turno oficial de este supervisor"
-                >
-                  <Settings2 size={11} />
-                  <span>Editar Lote & Turno</span>
-                </button>
-              )}
+              <div className="flex items-center gap-1.5">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Lote Asignado {dynamicLot ? "del Día" : "por Central"}
+                </span>
+                {dynamicLot && (
+                  <span className="bg-emerald-100 text-emerald-800 text-[9.5px] font-bold px-1.5 py-0.2 rounded-md font-mono" title={`Resumen San Miguel: ${dynamicLot.grupo} · ${dynamicLot.horario}`}>
+                    Resumen SM
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                {onOpenDailyLots && (
+                  <button
+                    type="button"
+                    onClick={onOpenDailyLots}
+                    className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1"
+                    title="Ver y editar la distribución diaria de puestos (Resumen San Miguel)"
+                  >
+                    <FileSpreadsheet size={10} />
+                    <span>Resumen SM</span>
+                  </button>
+                )}
+                {isMaster && onOpenSupervisorConfig && (
+                  <button
+                    type="button"
+                    onClick={onOpenSupervisorConfig}
+                    className="text-[10px] font-bold text-[#0048B5] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-lg border border-blue-200 transition-colors flex items-center gap-1"
+                    title="Configurar puestos, ubicación y turno oficial base de este supervisor"
+                  >
+                    <Settings2 size={10} />
+                    <span>Lote Base</span>
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-[#0048B5] bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200">
-              <MapPin size={14} /> Puestos #{currentSupervisor.bloqueInicio} al #{currentSupervisor.bloqueFin}
+              <MapPin size={14} className={dynamicLot ? "text-emerald-600" : "text-[#0048B5]"} />
+              <span>Puestos #{activeBloqueInicio} al #{activeBloqueFin}</span>
+              <span className="text-[10.5px] font-normal text-slate-500">
+                ({activeTotalPuestos} puestos)
+              </span>
             </div>
           </div>
 
@@ -939,8 +982,8 @@ export default function AttendanceView({
                 type="button"
                 onClick={() =>
                   onReleaseLote(
-                    currentSupervisor.bloqueInicio,
-                    currentSupervisor.bloqueFin,
+                    activeBloqueInicio,
+                    activeBloqueFin,
                     currentSupervisor.nombre,
                     currentSupervisor.id,
                     batchDoctors.map((d) => d.nombre)
@@ -949,7 +992,7 @@ export default function AttendanceView({
                 className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
                 title={
                   ocupadosEnMiLote > 0
-                    ? `Liberar todos los ${ocupadosEnMiLote} cubículos ocupados en el lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin}) y finalizar asistencia`
+                    ? `Liberar todos los ${ocupadosEnMiLote} cubículos ocupados en el lote (#${activeBloqueInicio} al #${activeBloqueFin}) y finalizar asistencia`
                     : `Finalizar jornada de los ${totalPresentes} médicos presentes remanentes en este turno`
                 }
               >
@@ -1009,12 +1052,23 @@ export default function AttendanceView({
           ) : totalSinPuesto > 0 && puestosLibresLote === 0 ? (
             <div
               className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs"
-              title={`No hay puestos libres en el lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin})`}
+              title={`No hay puestos libres en el lote (#${activeBloqueInicio} al #${activeBloqueFin})`}
             >
               <AlertCircle size={14} className="text-amber-600" />
               <span>Lote Lleno ({totalSinPuesto} sin puesto)</span>
             </div>
           ) : null}
+
+          {onOpenDailyLots && (
+            <button
+              onClick={onOpenDailyLots}
+              className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-indigo-700 border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 shadow-2xs transition-all active:scale-95 cursor-pointer"
+              title="Abre la distribución de puestos diaria de la hoja RESUMEN SAN MIGUEL"
+            >
+              <FileSpreadsheet size={15} className="text-indigo-600" />
+              <span>Resumen San Miguel</span>
+            </button>
+          )}
 
           <button
             onClick={() => setRosterModalOpen(true)}
@@ -1456,11 +1510,11 @@ export default function AttendanceView({
         <SectionCard
           icon={MapPin}
           title="Puestos del Lote en Vivo"
-          subtitle={`Puestos #${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin}`}
+          subtitle={`Puestos #${activeBloqueInicio} al #${activeBloqueFin}${dynamicLot ? ` · ${dynamicLot.horario}` : ""}`}
         >
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between text-[11.5px] font-medium text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-              <span>Capacidad: <b>{currentSupervisor.totalPuestos} puestos</b></span>
+              <span>Capacidad: <b>{activeTotalPuestos} puestos</b></span>
               <span className="text-emerald-700 font-bold">{puestosLibresLote} libres</span>
             </div>
 

@@ -437,4 +437,57 @@ export function saveCloudAttendance(attendanceRecords, clientId = "") {
   }, 400);
 }
 
+let dailyLotsTimer = null;
+
+/**
+ * Escucha cambios en tiempo real de la distribución diaria de lotes (RESUMEN SAN MIGUEL)
+ */
+export function subscribeToCloudDailyLots(onUpdate, onError, myClientId = "") {
+  try {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "dailyLots");
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.metadata && snapshot.metadata.hasPendingWrites) return;
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (myClientId && data?.updatedBy === myClientId) return;
+          if (data && data.dailyLots && typeof data.dailyLots === "object") {
+            onUpdate(data.dailyLots);
+          }
+        }
+      },
+      (error) => {
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Guarda la distribución diaria de lotes en Firestore
+ */
+export function saveCloudDailyLots(dailyLots, clientId = "") {
+  if (!isFirestoreAvailable) return;
+  if (!dailyLots || typeof dailyLots !== "object") return;
+
+  if (dailyLotsTimer) clearTimeout(dailyLotsTimer);
+
+  dailyLotsTimer = setTimeout(async () => {
+    try {
+      const docRef = doc(db, "sedes", SEDE_ID, "estado", "dailyLots");
+      await setDoc(docRef, {
+        dailyLots,
+        updatedBy: clientId || "anon",
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (error) {}
+  }, 400);
+}
+
+
 

@@ -17,6 +17,7 @@ const AttendanceView = lazy(() => import("./components/attendance/AttendanceView
 const QuickCheckInModal = lazy(() => import("./components/attendance/QuickCheckInModal"));
 const ShiftConfigModal = lazy(() => import("./components/config/ShiftConfigModal"));
 const SupervisorConfigModal = lazy(() => import("./components/config/SupervisorConfigModal"));
+const DailyLotsManagerModal = lazy(() => import("./components/config/DailyLotsManagerModal"));
 const LiveAttendanceReportModal = lazy(() => import("./components/attendance/LiveAttendanceReportModal"));
 const GoogleSheetsConfigModal = lazy(() => import("./components/config/GoogleSheetsConfigModal"));
 
@@ -42,8 +43,11 @@ import {
   saveCloudAttendance,
   subscribeToCloudQuincena,
   saveCloudQuincena,
+  subscribeToCloudDailyLots,
+  saveCloudDailyLots,
 } from "./services/firestoreSync";
 import { generateDefaultQuincena } from "./constants/quincenaDefault";
+import { DEFAULT_DAILY_LOTS } from "./utils/dailyLotsParser";
 import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
   fetchSpacesFromGoogleSheets,
@@ -222,6 +226,19 @@ export default function App() {
       return generateDefaultQuincena();
     }
   });
+
+  // 7. Distribución Diaria de Lotes (Hoja RESUMEN SAN MIGUEL sincronizada con Firestore)
+  const isRemoteDailyLotsRef = React.useRef(false);
+  const isInitialMountDailyLots = React.useRef(true);
+  const [dailyLots, setDailyLots] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_DAILY_LOTS_V1");
+      return saved ? JSON.parse(saved) : DEFAULT_DAILY_LOTS;
+    } catch {
+      return DEFAULT_DAILY_LOTS;
+    }
+  });
+  const [dailyLotsModalOpen, setDailyLotsModalOpen] = useState(false);
 
   // Reconexión automática de sesión de Firebase Auth tras recargar página (solo si había sesión activa guardada)
   useEffect(() => {
@@ -686,6 +703,16 @@ export default function App() {
       }
     }, null, myClientId.current);
 
+    const unsubDailyLots = subscribeToCloudDailyLots((cloudDailyLots) => {
+      if (cloudDailyLots && typeof cloudDailyLots === "object") {
+        setDailyLots((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudDailyLots)) return prev;
+          isRemoteDailyLotsRef.current = true;
+          return cloudDailyLots;
+        });
+      }
+    }, null, myClientId.current);
+
     return () => {
       if (unsubSpaces) unsubSpaces();
       if (unsubBodega) unsubBodega();
@@ -695,6 +722,7 @@ export default function App() {
       if (unsubSupervisores) unsubSupervisores();
       if (unsubAttendance) unsubAttendance();
       if (unsubQuincena) unsubQuincena();
+      if (unsubDailyLots) unsubDailyLots();
     };
   }, []);
 
@@ -722,6 +750,26 @@ export default function App() {
       console.error("Error saving attendance:", e);
     }
   }, [attendanceRecords]);
+
+  // Sincronizar dailyLots en localStorage y Firestore
+  useEffect(() => {
+    if (isInitialMountDailyLots.current) {
+      isInitialMountDailyLots.current = false;
+      return;
+    }
+    if (isRemoteDailyLotsRef.current) {
+      isRemoteDailyLotsRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem("DOCTORSV_DAILY_LOTS_V1", JSON.stringify(dailyLots));
+      if (dailyLots && typeof dailyLots === "object") {
+        saveCloudDailyLots(dailyLots, myClientId.current);
+      }
+    } catch (e) {
+      console.error("Error saving daily lots:", e);
+    }
+  }, [dailyLots]);
 
   useEffect(() => {
     try {
@@ -2016,6 +2064,7 @@ export default function App() {
         onOpenAuthPortal={() => setAuthPortalOpen(true)}
         onOpenShiftConfig={() => setShiftConfigOpen(true)}
         onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
+        onOpenDailyLots={() => setDailyLotsModalOpen(true)}
         onOpenLiveReport={() => setLiveReportOpen(true)}
         onOpenGoogleSheetsConfig={() => setGoogleSheetsModalOpen(true)}
       />
@@ -2090,6 +2139,9 @@ export default function App() {
               attendanceRecords={attendanceRecords}
               quincena={quincena}
               onSaveQuincena={(newQ) => setQuincena(newQ)}
+              dailyLots={dailyLots}
+              onSaveDailyLots={(newDL) => setDailyLots(newDL)}
+              onOpenDailyLots={() => setDailyLotsModalOpen(true)}
               onSetAttendance={(docName, status) => {
                 setAttendanceRecords((prev) => ({
                   ...prev,
@@ -2258,6 +2310,17 @@ export default function App() {
             supervisores={supervisores}
             onSaveSupervisores={(newSupervisores) => setSupervisores(newSupervisores)}
             onClose={() => setSupervisorConfigOpen(false)}
+            horarios={horarios}
+          />
+        )}
+
+        {dailyLotsModalOpen && (
+          <DailyLotsManagerModal
+            activeDailyLots={dailyLots}
+            selectedDate={null}
+            onSaveDailyLots={(newDL) => setDailyLots(newDL)}
+            onClose={() => setDailyLotsModalOpen(false)}
+            supervisores={supervisores}
             horarios={horarios}
           />
         )}

@@ -23,6 +23,7 @@ export default function Header({
   onOpenSupervisorConfig,
   onOpenLiveReport,
   onOpenGoogleSheetsConfig,
+  onOpenDailyLots,
 }) {
   const [alertOpen, setAlertOpen] = useState(false);
 
@@ -174,6 +175,18 @@ export default function Header({
             >
               <SheetIcon size={14} className="text-white" />
               <span>Google Sheets</span>
+            </button>
+          )}
+
+          {/* Distribución Diaria de Lotes (Resumen San Miguel) */}
+          {!isDoctorRole && onOpenDailyLots && (
+            <button
+              onClick={onOpenDailyLots}
+              className="hidden lg:flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100/80 px-3 py-1.5 text-[12px] font-bold text-indigo-800 transition shadow-2xs active:scale-95 cursor-pointer"
+              title="Distribución diaria de puestos por turno y supervisor (Hoja RESUMEN SAN MIGUEL)"
+            >
+              <FileSpreadsheet size={13} className="text-indigo-600" />
+              <span>Resumen San Miguel</span>
             </button>
           )}
 
