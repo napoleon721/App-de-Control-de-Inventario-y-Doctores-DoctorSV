@@ -62,6 +62,7 @@ export default function SpaceMap({
       if (filterSupervisor === "TODOS") return true;
       const targetSup = (supervisores || SUPERVISORES_OFICIALES).find((s) => s.id === filterSupervisor);
       if (!targetSup) return true;
+      if (Number(targetSup.bloqueInicio) === 0 && Number(targetSup.bloqueFin) === 0) return false;
       if (space.supervisorId) return space.supervisorId === targetSup.id;
       const sid = Number(space.id);
       return sid >= Number(targetSup.bloqueInicio) && sid <= Number(targetSup.bloqueFin);
@@ -76,10 +77,11 @@ export default function SpaceMap({
       isSameDoctor(space.doctor, currentUser.name)
     );
     const isMyAssignedSpace = isDoctorRole && isOwnSpace;
-    const isMySupervisorStation = currentUser?.role === "SUPERVISOR" && Number(currentUser?.puesto) === Number(space.id);
+    const isMySupervisorStation = currentUser?.role === "SUPERVISOR" && Number(currentUser?.puesto) > 0 && Number(currentUser?.puesto) === Number(space.id);
 
     // Determinar si este cubículo pertenece al lote del supervisor del médico actual
     const isInMyDoctorSupLote = currentDoctorSup &&
+      Number(currentDoctorSup.bloqueInicio) > 0 &&
       Number(space.id) >= Number(currentDoctorSup.bloqueInicio) &&
       Number(space.id) <= Number(currentDoctorSup.bloqueFin);
 

@@ -24,10 +24,14 @@ export default function SupervisorConfigModal({
       const copy = prev.map((s) => ({ ...s }));
       copy[idx][field] = val;
       if (field === "bloqueInicio" || field === "bloqueFin") {
-        const bIni = Number(field === "bloqueInicio" ? val : copy[idx].bloqueInicio);
-        const bFin = Number(field === "bloqueFin" ? val : copy[idx].bloqueFin);
-        if (bFin >= bIni && bIni > 0) {
+        const bIni = Number(field === "bloqueInicio" ? val : copy[idx].bloqueInicio) || 0;
+        const bFin = Number(field === "bloqueFin" ? val : copy[idx].bloqueFin) || 0;
+        if (bIni === 0 && bFin === 0) {
+          copy[idx].totalPuestos = 0;
+        } else if (bFin >= bIni && bIni > 0) {
           copy[idx].totalPuestos = bFin - bIni + 1;
+        } else {
+          copy[idx].totalPuestos = 0;
         }
       }
       return copy;
@@ -35,23 +39,32 @@ export default function SupervisorConfigModal({
   }
 
   function handleSave() {
-    // Validaciones
+    // Validaciones flexibles (permitiendo 0 si no asiste hoy)
     for (let i = 0; i < list.length; i++) {
       const s = list[i];
-      const bIni = Number(s.bloqueInicio);
-      const bFin = Number(s.bloqueFin);
-      const pFis = Number(s.puesto);
+      const bIni = Number(s.bloqueInicio) || 0;
+      const bFin = Number(s.bloqueFin) || 0;
+      const pFis = Number(s.puesto) || 0;
 
-      if (!bIni || !bFin || bIni < 1 || bFin > 170) {
-        setErrorMsg(`Error en ${s.nombre}: El rango del bloque debe estar entre los puestos #1 y #170.`);
+      // Si el supervisor no asiste ese día (puestos en 0)
+      if (bIni === 0 && bFin === 0) {
+        list[i].totalPuestos = 0;
+        list[i].bloqueInicio = 0;
+        list[i].bloqueFin = 0;
+        list[i].puesto = pFis;
+        continue;
+      }
+
+      if (bIni < 1 || bFin > 170) {
+        setErrorMsg(`Error en ${s.nombre}: El rango del bloque debe estar entre los puestos #1 y #170 (o ambos en 0 si no asiste hoy).`);
         return;
       }
       if (bIni > bFin) {
         setErrorMsg(`Error en ${s.nombre}: El puesto de inicio (#${bIni}) no puede ser mayor que el de fin (#${bFin}).`);
         return;
       }
-      if (!pFis || pFis < 1 || pFis > 170) {
-        setErrorMsg(`Error en ${s.nombre}: El puesto de estación física debe ser un número entre 1 y 170.`);
+      if (pFis < 0 || pFis > 170) {
+        setErrorMsg(`Error en ${s.nombre}: El puesto de estación física debe ser un número entre 0 y 170.`);
         return;
       }
     }
@@ -159,9 +172,37 @@ export default function SupervisorConfigModal({
                     </div>
                   </div>
 
-                  <span className="text-[11px] font-semibold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
-                    {sup.rol || "Supervisor Médico"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isInactive = Number(sup.bloqueInicio) === 0 && Number(sup.bloqueFin) === 0;
+                        if (isInactive) {
+                          const official = SUPERVISORES_OFICIALES.find((o) => o.id === sup.id) || SUPERVISORES_OFICIALES[idx];
+                          handleChange(idx, "bloqueInicio", official.bloqueInicio);
+                          handleChange(idx, "bloqueFin", official.bloqueFin);
+                          handleChange(idx, "puesto", official.puesto);
+                        } else {
+                          handleChange(idx, "bloqueInicio", 0);
+                          handleChange(idx, "bloqueFin", 0);
+                          handleChange(idx, "puesto", 0);
+                        }
+                      }}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-xl border transition-all cursor-pointer ${
+                        Number(sup.bloqueInicio) === 0 && Number(sup.bloqueFin) === 0
+                          ? "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                      title="Haz clic para alternar entre activo o no asiste hoy (0 puestos)"
+                    >
+                      {Number(sup.bloqueInicio) === 0 && Number(sup.bloqueFin) === 0
+                        ? "⚪ No Asiste Hoy (Sin Lote)"
+                        : "✓ Activo Hoy"}
+                    </button>
+                    <span className="text-[11px] font-semibold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                      {sup.rol || "Supervisor Médico"}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Campos de Configuración del Supervisor */}
@@ -176,7 +217,7 @@ export default function SupervisorConfigModal({
                       <span className="absolute left-2.5 top-2 text-[12px] font-mono font-bold text-slate-400">#</span>
                       <input
                         type="number"
-                        min="1"
+                        min="0"
                         max="170"
                         value={sup.puesto}
                         onChange={(e) => handleChange(idx, "puesto", Number(e.target.value))}
@@ -195,7 +236,7 @@ export default function SupervisorConfigModal({
                       <span className="absolute left-2.5 top-2 text-[12px] font-mono font-bold text-slate-400">#</span>
                       <input
                         type="number"
-                        min="1"
+                        min="0"
                         max="170"
                         value={sup.bloqueInicio}
                         onChange={(e) => handleChange(idx, "bloqueInicio", Number(e.target.value))}
@@ -214,7 +255,7 @@ export default function SupervisorConfigModal({
                       <span className="absolute left-2.5 top-2 text-[12px] font-mono font-bold text-slate-400">#</span>
                       <input
                         type="number"
-                        min="1"
+                        min="0"
                         max="170"
                         value={sup.bloqueFin}
                         onChange={(e) => handleChange(idx, "bloqueFin", Number(e.target.value))}
@@ -245,10 +286,17 @@ export default function SupervisorConfigModal({
 
                 <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
                   <span>
-                    Capacidad calculada: <strong className="text-slate-800">{sup.totalPuestos || (sup.bloqueFin - sup.bloqueInicio + 1)} puestos</strong>
+                    Capacidad calculada:{" "}
+                    <strong className={Number(sup.bloqueInicio) === 0 && Number(sup.bloqueFin) === 0 ? "text-amber-700 font-bold" : "text-slate-800"}>
+                      {Number(sup.bloqueInicio) === 0 && Number(sup.bloqueFin) === 0
+                        ? "0 puestos (No asiste hoy)"
+                        : `${sup.totalPuestos || (sup.bloqueFin - sup.bloqueInicio + 1)} puestos`}
+                    </strong>
                   </span>
-                  <span className="font-mono text-[10.5px] text-[#0048B5]">
-                    Puestos #{sup.bloqueInicio} al #{sup.bloqueFin}
+                  <span className={`font-mono text-[10.5px] ${Number(sup.bloqueInicio) === 0 && Number(sup.bloqueFin) === 0 ? "text-amber-700 font-bold" : "text-[#0048B5]"}`}>
+                    {Number(sup.bloqueInicio) === 0 && Number(sup.bloqueFin) === 0
+                      ? "Sin lote asignado hoy"
+                      : `Puestos #${sup.bloqueInicio} al #${sup.bloqueFin}`}
                   </span>
                 </div>
               </div>

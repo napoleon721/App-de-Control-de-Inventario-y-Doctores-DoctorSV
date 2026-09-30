@@ -320,7 +320,7 @@ export default function LiveAttendanceReportModal({
                   const cnt = countPerSupervisor[sup.id] || 0;
                   return (
                     <option key={sup.id} value={sup.id}>
-                      {sup.nombre} ({cnt} méd. · Lote #{sup.bloqueInicio}-#{sup.bloqueFin})
+                      {sup.nombre} ({cnt} méd. · {Number(sup.bloqueInicio) === 0 ? "Sin lote" : `Lote #${sup.bloqueInicio}-#${sup.bloqueFin}`})
                     </option>
                   );
                 })}
@@ -401,7 +401,7 @@ export default function LiveAttendanceReportModal({
                 <button
                   key={sup.id}
                   onClick={() => setFilterSupervisor(isActive ? "TODOS" : sup.id)}
-                  title={`${sup.nombre} — Lote Puestos #${sup.bloqueInicio} al #${sup.bloqueFin}`}
+                  title={`${sup.nombre} — ${Number(sup.bloqueInicio) === 0 ? "Sin lote asignado" : `Lote Puestos #${sup.bloqueInicio} al #${sup.bloqueFin}`}`}
                   className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-[11px] font-bold border transition-all ${
                     isActive
                       ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"

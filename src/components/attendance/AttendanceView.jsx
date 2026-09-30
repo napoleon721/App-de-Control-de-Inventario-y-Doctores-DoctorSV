@@ -117,10 +117,15 @@ export default function AttendanceView({
 
   const activeBloqueInicio = dynamicLot ? Number(dynamicLot.bloqueInicio) : Number(currentSupervisor.bloqueInicio);
   const activeBloqueFin = dynamicLot ? Number(dynamicLot.bloqueFin) : Number(currentSupervisor.bloqueFin);
-  const activeTotalPuestos = dynamicLot ? Number(dynamicLot.totalPuestos) : (currentSupervisor.totalPuestos || (activeBloqueFin - activeBloqueInicio + 1));
+  const activeTotalPuestos = (activeBloqueInicio === 0 && activeBloqueFin === 0)
+    ? 0
+    : dynamicLot
+      ? Number(dynamicLot.totalPuestos)
+      : (currentSupervisor.totalPuestos ?? (activeBloqueFin - activeBloqueInicio + 1));
 
   // Espacios del lote del supervisor en el mapa (comparación numérica segura)
   const supervisorSpaces = useMemo(() => {
+    if (!activeBloqueInicio || activeBloqueInicio <= 0 || !activeBloqueFin || activeBloqueFin <= 0) return [];
     return (spaces || []).filter(
       (s) => Number(s.id) >= activeBloqueInicio && Number(s.id) <= activeBloqueFin
     );
@@ -322,6 +327,7 @@ export default function AttendanceView({
       let status = "PENDIENTE";
       let assignedSpaceId = spaceAssigned ? Number(spaceAssigned.id) : null;
       const isSpaceInThisLote = assignedSpaceId &&
+        activeBloqueInicio > 0 &&
         assignedSpaceId >= activeBloqueInicio &&
         assignedSpaceId <= activeBloqueFin;
 
@@ -420,7 +426,7 @@ export default function AttendanceView({
       const spaceAssigned = getSpaceForDoctor(name);
 
       // Solo incluir si el médico tiene un cubículo asignado EN ESTE lote
-      if (!spaceAssigned) return;
+      if (!spaceAssigned || activeBloqueInicio <= 0) return;
       const isSpaceInThisLote = Number(spaceAssigned.id) >= activeBloqueInicio &&
                                 Number(spaceAssigned.id) <= activeBloqueFin;
       if (!isSpaceInThisLote) return;
@@ -652,7 +658,7 @@ export default function AttendanceView({
     const reportText = `📊 REPORTE DE ASISTENCIA Y OCUPACIÓN · DOCTORSV\n` +
       `Supervisor: ${currentSupervisor.nombre}\n` +
       `Turno / Franja Horaria: ${horarioLabel}\n` +
-      `Bloque de Puestos Asignados: Puestos #${activeBloqueInicio} al #${activeBloqueFin} (${activeTotalPuestos} puestos)${dynamicLot ? ` [Resumen SM - ${dynamicLot.grupo}]` : ""}\n` +
+      `Bloque de Puestos Asignados: ${activeBloqueInicio === 0 ? "Sin lote asignado (No asiste hoy)" : `Puestos #${activeBloqueInicio} al #${activeBloqueFin} (${activeTotalPuestos} puestos)`}${dynamicLot ? ` [Resumen SM - ${dynamicLot.grupo}]` : ""}\n` +
       `------------------------------------\n` +
       `Total Programados: ${totalProgramados}${filterHorario !== "TODOS" ? ` (filtrado por ${filterHorario})` : ""}\n` +
       `Total Presentes: ${totalPresentes} (${asistenciaPct}%)\n` +
@@ -867,7 +873,11 @@ export default function AttendanceView({
               Estación Física del Supervisor
             </span>
             <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-sky-700 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200">
-              <span>🔒 Puesto #{currentSupervisor.puesto}</span>
+              {Number(currentSupervisor.puesto) > 0 ? (
+                <span>🔒 Puesto #{currentSupervisor.puesto}</span>
+              ) : (
+                <span className="text-slate-500 font-semibold text-[12px]">⚪ Sin Estación Física</span>
+              )}
             </div>
           </div>
 
@@ -908,13 +918,23 @@ export default function AttendanceView({
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-[#0048B5] bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200">
-              <MapPin size={14} className={dynamicLot ? "text-emerald-600" : "text-[#0048B5]"} />
-              <span>Puestos #{activeBloqueInicio} al #{activeBloqueFin}</span>
-              <span className="text-[10.5px] font-normal text-slate-500">
-                ({activeTotalPuestos} puestos)
-              </span>
-            </div>
+            {activeBloqueInicio === 0 ? (
+              <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
+                <MapPin size={14} className="text-amber-600" />
+                <span>Sin Lote Asignado Hoy</span>
+                <span className="text-[10.5px] font-normal text-amber-700">
+                  (0 puestos)
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-[#0048B5] bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200">
+                <MapPin size={14} className={dynamicLot ? "text-emerald-600" : "text-[#0048B5]"} />
+                <span>Puestos #{activeBloqueInicio} al #{activeBloqueFin}</span>
+                <span className="text-[10.5px] font-normal text-slate-500">
+                  ({activeTotalPuestos} puestos)
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="border-l border-slate-200 pl-3">
@@ -977,7 +997,7 @@ export default function AttendanceView({
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {/* Botón Maestro/Supervisor: Liberar Mi Lote y Remanentes */}
-            {onReleaseLote && (ocupadosEnMiLote > 0 || totalPresentes > 0) && (
+            {onReleaseLote && activeBloqueInicio > 0 && (ocupadosEnMiLote > 0 || totalPresentes > 0) && (
               <button
                 type="button"
                 onClick={() =>
@@ -1030,7 +1050,15 @@ export default function AttendanceView({
             })()}
           </div>
 
-          {totalSinPuesto > 0 && puestosLibresLote > 0 ? (
+          {activeBloqueInicio === 0 ? (
+            <div
+              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs"
+              title="Supervisor sin lote asignado hoy (no asiste o en descanso)"
+            >
+              <AlertCircle size={14} className="text-amber-600" />
+              <span>⚪ Sin Lote Asignado Hoy</span>
+            </div>
+          ) : totalSinPuesto > 0 && puestosLibresLote > 0 ? (
             <button
               type="button"
               onClick={handleBatchAssignRoster}
@@ -1510,7 +1538,11 @@ export default function AttendanceView({
         <SectionCard
           icon={MapPin}
           title="Puestos del Lote en Vivo"
-          subtitle={`Puestos #${activeBloqueInicio} al #${activeBloqueFin}${dynamicLot ? ` · ${dynamicLot.horario}` : ""}`}
+          subtitle={
+            activeBloqueInicio === 0
+              ? "Supervisor sin lote asignado hoy"
+              : `Puestos #${activeBloqueInicio} al #${activeBloqueFin}${dynamicLot ? ` · ${dynamicLot.horario}` : ""}`
+          }
         >
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between text-[11.5px] font-medium text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
@@ -1518,66 +1550,80 @@ export default function AttendanceView({
               <span className="text-emerald-700 font-bold">{puestosLibresLote} libres</span>
             </div>
 
-            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-[460px] overflow-y-auto pr-1">
-              {supervisorSpaces.map((s) => {
-                const isOccupied = s.estado === "OCUPADO" || !!s.doctor;
-                const isFree = !isOccupied && s.estado !== "INHABILITADO";
-                const isTargetSelected = String(targetSpaceId) === String(s.id);
+            {activeBloqueInicio === 0 ? (
+              <div className="py-10 px-4 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                <AlertCircle size={32} className="mx-auto text-amber-500 mb-2" />
+                <p className="text-[13px] font-bold text-slate-700">
+                  Supervisor sin lote de puestos hoy
+                </p>
+                <p className="text-[11.5px] text-slate-500 mt-1 max-w-xs mx-auto">
+                  Este supervisor está configurado con 0 puestos (descanso o inasistencia). Puedes asignarle un bloque en <b>Lote Base</b> o <b>Resumen SM</b> cuando asista.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-[460px] overflow-y-auto pr-1">
+                  {supervisorSpaces.map((s) => {
+                    const isOccupied = s.estado === "OCUPADO" || !!s.doctor;
+                    const isFree = !isOccupied && s.estado !== "INHABILITADO";
+                    const isTargetSelected = String(targetSpaceId) === String(s.id);
 
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => {
-                      if (isFree) {
-                        if (manualAssignDoc) {
-                          setTargetSpaceId(String(s.id));
-                        } else {
-                          const firstUnseated = batchDoctors.find(
-                            (d) => !d.espacio && d.status !== "AUSENTE" && d.status !== "FINALIZADO"
-                          );
-                          if (firstUnseated) {
-                            setManualAssignDoc(firstUnseated);
-                            setTargetSpaceId(String(s.id));
-                            setTargetHorario(
-                              filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario)
-                            );
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          if (isFree) {
+                            if (manualAssignDoc) {
+                              setTargetSpaceId(String(s.id));
+                            } else {
+                              const firstUnseated = batchDoctors.find(
+                                (d) => !d.espacio && d.status !== "AUSENTE" && d.status !== "FINALIZADO"
+                              );
+                              if (firstUnseated) {
+                                setManualAssignDoc(firstUnseated);
+                                setTargetSpaceId(String(s.id));
+                                setTargetHorario(
+                                  filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario)
+                                );
+                              }
+                            }
                           }
-                        }
-                      }
-                    }}
-                    className={`p-2 rounded-xl border text-center transition-all flex flex-col justify-between h-20 ${
-                      isTargetSelected
-                        ? "bg-blue-100 border-[#0048B5] text-[#0048B5] ring-2 ring-[#0048B5] scale-105 shadow-sm"
-                        : isOccupied
-                        ? "bg-blue-50 border-blue-300 text-[#0048B5]"
-                        : s.estado === "INHABILITADO"
-                        ? "bg-slate-100 border-slate-300 text-slate-400"
-                        : "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs"
-                    }`}
-                    title={isFree ? `Puesto #${s.id} libre - Clic para asignar` : `Puesto #${s.id}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-heading font-extrabold text-[12px]">#{s.id}</span>
-                      <span className="text-[9px] font-bold font-mono-data opacity-75">{s.marca || "PC"}</span>
-                    </div>
+                        }}
+                        className={`p-2 rounded-xl border text-center transition-all flex flex-col justify-between h-20 ${
+                          isTargetSelected
+                            ? "bg-blue-100 border-[#0048B5] text-[#0048B5] ring-2 ring-[#0048B5] scale-105 shadow-sm"
+                            : isOccupied
+                            ? "bg-blue-50 border-blue-300 text-[#0048B5]"
+                            : s.estado === "INHABILITADO"
+                            ? "bg-slate-100 border-slate-300 text-slate-400"
+                            : "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs"
+                        }`}
+                        title={isFree ? `Puesto #${s.id} libre - Clic para asignar` : `Puesto #${s.id}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-heading font-extrabold text-[12px]">#{s.id}</span>
+                          <span className="text-[9px] font-bold font-mono-data opacity-75">{s.marca || "PC"}</span>
+                        </div>
 
-                    <div className="truncate text-[9.5px] font-semibold">
-                      {s.doctor ? String(s.doctor).replace("Dr. ", "").replace("Dra. ", "") : s.estado}
-                    </div>
+                        <div className="truncate text-[9.5px] font-semibold">
+                          {s.doctor ? String(s.doctor).replace("Dr. ", "").replace("Dra. ", "") : s.estado}
+                        </div>
 
-                    <div className="text-[8px] font-bold uppercase tracking-wider">
-                      {isOccupied ? "● Ocupado" : s.estado === "INHABILITADO" ? "⛔ No disp." : "○ Libre"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                        <div className="text-[8px] font-bold uppercase tracking-wider">
+                          {isOccupied ? "● Ocupado" : s.estado === "INHABILITADO" ? "⛔ No disp." : "○ Libre"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
 
-            <div className="mt-2 pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
-              <span>● Azul: Con Médico</span>
-              <span>○ Verde: Libre</span>
-              <span>⛔ Gris: Inhabilitado</span>
-            </div>
+                <div className="mt-2 pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
+                  <span>● Azul: Con Médico</span>
+                  <span>○ Verde: Libre</span>
+                  <span>⛔ Gris: Inhabilitado</span>
+                </div>
+              </>
+            )}
           </div>
         </SectionCard>
       </div>
