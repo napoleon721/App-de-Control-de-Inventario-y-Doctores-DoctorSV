@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
-  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar
+  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar, LogOut
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
@@ -510,18 +510,24 @@ export default function AttendanceView({
   const inasistenciaPct = totalProgramados > 0 ? Math.round((totalAusentes / totalProgramados) * 100) : 0;
   const puestosLibresLote = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO").length;
 
-  // Marcar con 1 clic a todos los médicos que no se sentaron como Ausentes (excluye a los ya ausentes)
-  function handleMarkUnseatedAsAbsent() {
-    const unseated = batchDoctors.filter(
-      (d) => !d.espacio && d.status !== "AUSENTE" && d.status !== "JUSTIFICADO" && d.status !== "FINALIZADO"
-    );
-    if (unseated.length === 0) {
-      alert("¡Excelente! Todos los médicos programados ya tienen puesto asignado, justificante o completaron su jornada.");
+  // Médicos que figuran como PRESENTE pero no tienen cubículo asignado (remanentes sin puesto)
+  const unseatedPresent = batchDoctors.filter(
+    (d) => d.status === "PRESENTE" && (!d.espacio || !d.enMiLote)
+  );
+
+  // Finalizar con 1 clic a todos los médicos presentes que no tienen puesto asignado
+  function handleFinalizeUnseatedPresent() {
+    if (unseatedPresent.length === 0) {
+      alert("No hay médicos presentes pendientes de puesto o remanentes.");
       return;
     }
-    if (window.confirm(`¿Deseas marcar a los ${unseated.length} médico(s) que NO tienen puesto como AUSENTES en este turno?`)) {
-      unseated.forEach((d) => {
-        handleSetAttendance(d.nombre, "AUSENTE");
+    if (
+      window.confirm(
+        `¿Deseas marcar la Salida (FINALIZADO) de los ${unseatedPresent.length} médico(s) remanentes sin puesto?\n\nEsto limpiará la lista de presentes para el siguiente turno.`
+      )
+    ) {
+      unseatedPresent.forEach((d) => {
+        handleSetAttendance(d.nombre, "FINALIZADO");
         const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
         if (seatedSpace && onUnassignDoctor) {
           onUnassignDoctor(d.nombre, Number(seatedSpace.id));
@@ -927,16 +933,32 @@ export default function AttendanceView({
           )}
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {/* Botón Maestro/Supervisor: Liberar Mi Lote */}
-            {onReleaseLote && ocupadosEnMiLote > 0 && (
+            {/* Botón Maestro/Supervisor: Liberar Mi Lote y Remanentes */}
+            {onReleaseLote && (ocupadosEnMiLote > 0 || totalPresentes > 0) && (
               <button
                 type="button"
-                onClick={() => onReleaseLote(currentSupervisor.bloqueInicio, currentSupervisor.bloqueFin, currentSupervisor.nombre)}
+                onClick={() =>
+                  onReleaseLote(
+                    currentSupervisor.bloqueInicio,
+                    currentSupervisor.bloqueFin,
+                    currentSupervisor.nombre,
+                    currentSupervisor.id,
+                    batchDoctors.map((d) => d.nombre)
+                  )
+                }
                 className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
-                title={`Liberar todos los ${ocupadosEnMiLote} cubículos ocupados en el lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin})`}
+                title={
+                  ocupadosEnMiLote > 0
+                    ? `Liberar todos los ${ocupadosEnMiLote} cubículos ocupados en el lote (#${currentSupervisor.bloqueInicio} al #${currentSupervisor.bloqueFin}) y finalizar asistencia`
+                    : `Finalizar jornada de los ${totalPresentes} médicos presentes remanentes en este turno`
+                }
               >
                 <RefreshCw size={13} />
-                <span>Liberar Mi Lote ({ocupadosEnMiLote})</span>
+                <span>
+                  {ocupadosEnMiLote > 0
+                    ? `Liberar Mi Lote (${ocupadosEnMiLote})`
+                    : `Liberar Remanentes (${totalPresentes})`}
+                </span>
               </button>
             )}
 
@@ -1055,11 +1077,25 @@ export default function AttendanceView({
           subtitle="Verifica la asistencia y vincula el puesto donde se sentó cada médico"
           right={
             <div className="flex items-center gap-2 flex-wrap justify-end">
+              {/* Botón rápido para finalizar remanentes en PRESENTE sin puesto */}
+              {unseatedPresent.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleFinalizeUnseatedPresent}
+                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-indigo-700 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
+                  title="Marca salida (FINALIZADO) a todos los médicos que figuran en PRESENTE pero no tienen cubículo asignado"
+                >
+                  <LogOut size={13} />
+                  <span className="hidden sm:inline">Finalizar Remanentes ({unseatedPresent.length})</span>
+                  <span className="sm:hidden">Finalizar ({unseatedPresent.length})</span>
+                </button>
+              )}
+
               {totalSinPuesto > 0 && (
                 <button
                   type="button"
                   onClick={handleMarkUnseatedAsAbsent}
-                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs"
+                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs cursor-pointer"
                   title="Marca a todos los médicos que aún no tienen puesto como ausentes"
                 >
                   <UserX size={13} />
@@ -1357,19 +1393,31 @@ export default function AttendanceView({
                         {doc.espacio ? (
                           <button
                             onClick={() => onUnassignDoctor(doc.nombre, doc.espacio)}
-                            className="text-[11px] font-semibold text-rose-600 hover:underline"
+                            className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
                           >
                             Liberar
                           </button>
                         ) : (
-                          <button
-                            onClick={() => openManualAssign(doc)}
-                            className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-[#0048B5] hover:bg-[#003487] transition-all shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
-                            title="Elegir y asignar puesto manualmente"
-                          >
-                            <span>Asignar Puesto</span>
-                            <ArrowRight size={12} />
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {doc.status === "PRESENTE" && (
+                              <button
+                                onClick={() => handleSetAttendance(doc.nombre, "FINALIZADO")}
+                                className="inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-all shadow-2xs cursor-pointer"
+                                title="Marcar salida a este médico para limpiar remanente"
+                              >
+                                <LogOut size={11} />
+                                <span>Salida</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openManualAssign(doc)}
+                              className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-[#0048B5] hover:bg-[#003487] transition-all shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                              title="Elegir y asignar puesto manualmente"
+                            >
+                              <span>Asignar Puesto</span>
+                              <ArrowRight size={12} />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

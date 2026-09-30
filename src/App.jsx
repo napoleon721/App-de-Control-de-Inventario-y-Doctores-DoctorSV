@@ -1057,6 +1057,20 @@ export default function App() {
     setSpaces(nextSpaces);
     saveCloudSpaces(nextSpaces, myClientId.current, true);
 
+    // Al liberar un médico del puesto, marcar su asistencia como FINALIZADO para evitar remanentes sin puesto
+    setAttendanceRecords((prev) => {
+      const next = { ...prev };
+      if (doctorName) {
+        Object.keys(next).forEach((k) => {
+          if (isSameDoctor(k, doctorName)) {
+            next[k] = "FINALIZADO";
+          }
+        });
+        next[doctorName] = "FINALIZADO";
+      }
+      return next;
+    });
+
     if (isGoogleSheetsConfigured() && unassignedSpaceId !== null) {
       updateSpaceInGoogleSheets({
         id: unassignedSpaceId,
@@ -1434,8 +1448,6 @@ export default function App() {
     const isOccupied = (s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup(s);
     const spacesToRelease = spaces.filter(isOccupied);
 
-    if (spacesToRelease.length === 0) return;
-
     // Registrar en caché de liberaciones recientes para blindar contra ecos de Google Sheets
     spacesToRelease.forEach((s) => {
       recentlyReleasedRef.current.set(Number(s.id), Date.now());
@@ -1465,9 +1477,14 @@ export default function App() {
     // Si el usuario actual tenía un cubículo asignado, desvincularlo
     setCurrentUser((prev) => (prev?.spaceId ? { ...prev, spaceId: null } : prev));
 
-    // Marcar asistencia de los médicos liberados como FINALIZADO
+    // Marcar asistencia de los médicos liberados y TODOS los presentes como FINALIZADO
     setAttendanceRecords((prev) => {
       const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (next[k] === "PRESENTE") {
+          next[k] = "FINALIZADO";
+        }
+      });
       spacesToRelease.forEach((s) => {
         if (s.doctor) {
           next[s.doctor] = "FINALIZADO";
@@ -1514,8 +1531,6 @@ export default function App() {
     const isOccupiedInShift = (s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup(s) && isSameHorario(s.horario, horario);
     const spacesToRelease = spaces.filter(isOccupiedInShift);
 
-    if (spacesToRelease.length === 0) return;
-
     spacesToRelease.forEach((s) => {
       recentlyReleasedRef.current.set(Number(s.id), Date.now());
     });
@@ -1548,11 +1563,23 @@ export default function App() {
       return prev;
     });
 
+    // Finalizar asistencia para puestos del turno y para doctores con este horario
     setAttendanceRecords((prev) => {
       const next = { ...prev };
       spacesToRelease.forEach((s) => {
         if (s.doctor) {
+          Object.keys(next).forEach((k) => {
+            if (isSameDoctor(k, s.doctor)) next[k] = "FINALIZADO";
+          });
           next[s.doctor] = "FINALIZADO";
+        }
+      });
+      Object.keys(next).forEach((docName) => {
+        if (next[docName] === "PRESENTE") {
+          const docObj = DOCTORES_EXCEL.find((d) => isSameDoctor(d.nombre, docName));
+          if (docObj && isSameHorario(docObj.horario, horario)) {
+            next[docName] = "FINALIZADO";
+          }
         }
       });
       return next;
@@ -1590,7 +1617,7 @@ export default function App() {
   }
 
   // Liberación atómica de todos los puestos ocupados en el lote a cargo de un supervisor
-  function handleReleaseLote(bloqueInicio, bloqueFin, supName) {
+  function handleReleaseLote(bloqueInicio, bloqueFin, supName, supId = null, targetDoctorNames = null) {
     const bIni = Number(bloqueInicio);
     const bFin = Number(bloqueFin);
     if (isNaN(bIni) || isNaN(bFin)) return;
@@ -1601,12 +1628,46 @@ export default function App() {
       return sid >= bIni && sid <= bFin && (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSupStation(sid);
     });
 
-    if (spacesToRelease.length === 0) {
-      alert(`No hay cubículos ocupados en el lote #${bIni} al #${bFin}.`);
+    // Detectar médicos remanentes asignados a este supervisor o lote que están en PRESENTE
+    const targetSupId = supId || (supervisores.find((s) => Number(s.bloqueInicio) === bIni)?.id);
+    let supervisorRosterNames = [];
+    if (Array.isArray(targetDoctorNames) && targetDoctorNames.length > 0) {
+      supervisorRosterNames = [...targetDoctorNames];
+    } else if (targetSupId) {
+      const explicitRoster = (rosters[targetSupId] || []).concat(
+        Object.keys(rosters).filter(k => k.startsWith(`${targetSupId}__`)).flatMap(k => rosters[k] || [])
+      );
+      if (explicitRoster.length > 0) {
+        supervisorRosterNames = explicitRoster;
+      } else {
+        // Fallback oficial según grupo asignado al lote
+        if (targetSupId === "sup-1" || bIni === 37) {
+          supervisorRosterNames = DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 1").map((d) => d.nombre);
+        } else if (targetSupId === "sup-2" || bIni === 71) {
+          supervisorRosterNames = DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 2").map((d) => d.nombre);
+        }
+      }
+    }
+
+    const presentRemanents = Object.keys(attendanceRecords).filter((docName) => {
+      if (attendanceRecords[docName] !== "PRESENTE") return false;
+      const isInRoster = supervisorRosterNames.some((rn) => isSameDoctor(rn, docName));
+      const isInLotSpaces = spacesToRelease.some((s) => s.doctor && isSameDoctor(s.doctor, docName));
+      return isInRoster || isInLotSpaces;
+    });
+
+    if (spacesToRelease.length === 0 && presentRemanents.length === 0) {
+      alert(`No hay cubículos ocupados ni médicos con asistencia activa pendientes en el lote #${bIni} al #${bFin}.`);
       return;
     }
 
-    if (!window.confirm(`¿Liberar los ${spacesToRelease.length} puesto(s) ocupados en tu lote (#${bIni} al #${bFin})?\n\nLos cubículos quedarán 100% DISPONIBLES de inmediato para los nuevos médicos.`)) {
+    const totalToFree = spacesToRelease.length + presentRemanents.length;
+    if (!window.confirm(
+      `¿Liberar y finalizar jornada del lote #${bIni} al #${bFin}?\n\n` +
+      `• ${spacesToRelease.length} cubículo(s) quedarán 100% DISPONIBLES.\n` +
+      `• ${presentRemanents.length} médico(s) en asistencia pasarán a FINALIZADO (Salida).\n\n` +
+      `Los remanentes sin puesto quedarán limpios para el siguiente turno.`
+    )) {
       return;
     }
 
@@ -1643,12 +1704,24 @@ export default function App() {
       return prev;
     });
 
+    // Finalizar asistencia de todos los médicos liberados y de los remanentes de este supervisor
     setAttendanceRecords((prev) => {
       const next = { ...prev };
+      // 1. Médicos con puesto en el lote
       spacesToRelease.forEach((s) => {
         if (s.doctor) {
+          Object.keys(next).forEach((k) => {
+            if (isSameDoctor(k, s.doctor)) next[k] = "FINALIZADO";
+          });
           next[s.doctor] = "FINALIZADO";
         }
+      });
+      // 2. Médicos remanentes en PRESENTE de este supervisor
+      presentRemanents.forEach((name) => {
+        Object.keys(next).forEach((k) => {
+          if (isSameDoctor(k, name)) next[k] = "FINALIZADO";
+        });
+        next[name] = "FINALIZADO";
       });
       return next;
     });
@@ -1664,7 +1737,7 @@ export default function App() {
       origen: `Lote #${bIni}-${bFin}`,
       destino: "DISPONIBLE",
       falla: "N/A",
-      obs: `Supervisor ${supName || "Oficial"} liberó ${spacesToRelease.length} puestos del lote #${bIni} al #${bFin}`,
+      obs: `Supervisor ${supName || "Oficial"} liberó ${spacesToRelease.length} puestos y finalizó ${presentRemanents.length} remanentes del lote #${bIni} al #${bFin}`,
     };
 
     setHistorial((prev) => [newEntry, ...prev]);

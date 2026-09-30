@@ -419,7 +419,7 @@ export default function SpaceMap({
               {isSupervisorRole && onReleaseLote && occupiedInSupervisorLote > 0 && (
                 <button
                   type="button"
-                  onClick={() => onReleaseLote(currentUser.bloqueInicio, currentUser.bloqueFin, currentUser.name)}
+                  onClick={() => onReleaseLote(currentUser.bloqueInicio, currentUser.bloqueFin, currentUser.name, currentUser.supervisorId || currentUser.id)}
                   className="flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-bold text-white bg-rose-600 hover:bg-rose-700 transition shadow-2xs active:scale-95"
                   title={`Liberar los ${occupiedInSupervisorLote} puestos ocupados de tu lote (#${currentUser.bloqueInicio} al #${currentUser.bloqueFin})`}
                 >
@@ -525,7 +525,7 @@ export default function SpaceMap({
             {onReleaseLote && occupiedInSupervisorLote > 0 && (
               <button
                 type="button"
-                onClick={() => onReleaseLote(currentUser.bloqueInicio, currentUser.bloqueFin, currentUser.name)}
+                onClick={() => onReleaseLote(currentUser.bloqueInicio, currentUser.bloqueFin, currentUser.name, currentUser.supervisorId || currentUser.id)}
                 className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-white bg-rose-600 hover:bg-rose-700 transition shadow-2xs active:scale-95 cursor-pointer"
                 title={`Liberar los ${occupiedInSupervisorLote} cubículos ocupados en tu lote (#${currentUser.bloqueInicio} al #${currentUser.bloqueFin})`}
               >
