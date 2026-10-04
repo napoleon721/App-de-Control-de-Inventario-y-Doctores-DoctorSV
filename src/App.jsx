@@ -2454,7 +2454,7 @@ export default function App() {
         </footer>
       </main>
 
-      {/* Modal de edición de espacio (Master) */}
+      {/* Modal de edición de espacio (Master y Supervisores) */}
       {selectedSpace && (
         <SpaceDetailModal
           space={selectedSpace}
@@ -2466,6 +2466,8 @@ export default function App() {
           onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
           onUpdateSupervisorOfficialShift={handleUpdateSupervisorOfficialShift}
           isMaster={currentUser?.role === "MASTER"}
+          spaces={spaces}
+          customStaff={customStaff}
         />
       )}
 

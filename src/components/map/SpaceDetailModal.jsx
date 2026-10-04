@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  X, Laptop, Monitor, Mouse, Headphones, Cable, History, Save, Sparkles, UserX, Droplets, Wrench, Shield
+  X, Laptop, Monitor, Mouse, Headphones, Cable, History, Save, Sparkles, UserX, Droplets, Wrench, Shield, Search, UserCheck
 } from "lucide-react";
-import { ESTADOS, MARCAS, HORARIOS, DOCTORES_MOCK } from "../../constants/tokens";
+import { ESTADOS, MARCAS, HORARIOS, DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 
 export default function SpaceDetailModal({
   space,
@@ -14,10 +14,13 @@ export default function SpaceDetailModal({
   onOpenSupervisorConfig = null,
   onUpdateSupervisorOfficialShift = null,
   isMaster = false,
+  spaces = [],
+  customStaff = [],
 }) {
   const mountTimeRef = useRef(Date.now());
   const backdropMouseDownRef = useRef(false);
   const [form, setForm] = useState({ ...space });
+  const [doctorSearch, setDoctorSearch] = useState("");
 
   useEffect(() => {
     setForm({ ...space });
@@ -72,6 +75,100 @@ export default function SpaceDetailModal({
   const matchedSupervisor = supervisores?.find(
     (s) => Number(s.puesto) === Number(space.id)
   );
+
+  // Lista unificada de médicos de toda la nómina oficial (Supervisores, Planilla, Servicios Profesionales, SSM)
+  const allDoctors = useMemo(() => {
+    const map = new Map();
+
+    // 1. Supervisores oficiales
+    (supervisores && supervisores.length > 0 ? supervisores : SUPERVISORES_OFICIALES).forEach((sup) => {
+      if (sup?.nombre) {
+        const key = sup.nombre.trim().toUpperCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            nombre: key,
+            categoria: "Supervisores",
+            rol: sup.rol || "Supervisor",
+            horarioDefault: sup.horario || "02:00 PM – 10:00 PM",
+            puestoOficial: sup.puesto || null,
+          });
+        }
+      }
+    });
+
+    // 2. Personal SSM / Administrativo (STAFF_EXCEL)
+    (STAFF_EXCEL || []).forEach((st) => {
+      if (st?.nombre) {
+        const key = st.nombre.trim().toUpperCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            nombre: key,
+            categoria: st.categoria || "Personal SSM",
+            rol: st.rol || "Personal",
+            horarioDefault: "07:00 AM – 12:00 PM",
+            puestoOficial: null,
+          });
+        }
+      }
+    });
+
+    // 3. Nómina oficial de médicos (DOCTORES_EXCEL)
+    (DOCTORES_EXCEL || []).forEach((doc) => {
+      if (doc?.nombre) {
+        const key = doc.nombre.trim().toUpperCase();
+        if (!map.has(key)) {
+          const cat = doc.tipo || (doc.grupo === "Servicios Profesionales" ? "Servicios Profesionales" : "Planilla");
+          map.set(key, {
+            nombre: key,
+            categoria: cat,
+            rol: doc.tipo === "Planilla" ? "Médico Planilla" : (doc.tipo || "Médico"),
+            horarioDefault: doc.horario && doc.horario !== "Turno Rotativo" ? doc.horario : "07:00 AM – 12:00 PM",
+            puestoOficial: null,
+          });
+        }
+      }
+    });
+
+    // 4. Custom staff agregado manualmente
+    (customStaff || []).forEach((cs) => {
+      if (cs?.nombre) {
+        const key = cs.nombre.trim().toUpperCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            nombre: key,
+            categoria: cs.categoria || "Personal Agregado",
+            rol: cs.rol || "Personal",
+            horarioDefault: cs.horario || "07:00 AM – 12:00 PM",
+            puestoOficial: null,
+          });
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [supervisores, customStaff]);
+
+  // Mapa de cubículos actualmente ocupados por otros médicos
+  const occupiedDoctorsMap = useMemo(() => {
+    const map = new Map();
+    (spaces || []).forEach((s) => {
+      if (s?.doctor && Number(s.id) !== Number(space?.id)) {
+        map.set(s.doctor.trim().toUpperCase(), Number(s.id));
+      }
+    });
+    return map;
+  }, [spaces, space?.id]);
+
+  // Médicos filtrados por búsqueda
+  const filteredDoctors = useMemo(() => {
+    if (!doctorSearch.trim()) return allDoctors;
+    const q = doctorSearch.trim().toUpperCase();
+    return allDoctors.filter(
+      (d) =>
+        d.nombre.includes(q) ||
+        (d.categoria && d.categoria.toUpperCase().includes(q))
+    );
+  }, [allDoctors, doctorSearch]);
 
   const hasPc = Boolean(form.marca && form.marca !== "NO PC");
   const hasMonitor = Boolean(form.monitor && (form.monitor.marca || form.monitor.activo || form.monitor === true));
@@ -287,46 +384,144 @@ export default function SpaceDetailModal({
             </div>
           </div>
 
-          {/* Doctor and Schedule assignment if Occupied */}
-          {form.estado === "OCUPADO" && (
-            <div className="rounded-2xl p-4 border border-rose-200 bg-rose-50/60">
-              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wider text-rose-900 flex items-center gap-1.5">
-                <Sparkles size={13} className="text-rose-600" /> Médico Asignado & Turno
+          {/* Tarjeta de Asignación de Médico de Nómina & Turno (Visible para TODOS los cubículos) */}
+          <div
+            className={`rounded-2xl p-4 border transition-all duration-200 ${
+              form.doctor
+                ? "border-rose-200 bg-rose-50/70 shadow-2xs"
+                : "border-blue-200/90 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 shadow-2xs"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2.5">
+              <p
+                className={`text-[11.5px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  form.doctor ? "text-rose-900" : "text-[#0048B5]"
+                }`}
+              >
+                <Sparkles size={14} className={form.doctor ? "text-rose-600" : "text-[#0095FF]"} />
+                <span>{form.doctor ? "Médico Asignado & Turno" : "Asignar Médico de la Nómina & Turno"}</span>
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-[11px] font-semibold text-slate-700">Médico en turno</label>
-                  <select
-                    value={form.doctor || ""}
-                    onChange={(e) => updateField({ doctor: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs"
+
+              {form.doctor ? (
+                <span className="text-[10.5px] font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-600 animate-pulse" />
+                  <span>Puesto Ocupado</span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold text-slate-500 bg-white/90 px-2 py-0.5 rounded-full border border-slate-200">
+                  {allDoctors.length} en nómina
+                </span>
+              )}
+            </div>
+
+            {/* Buscador rápido de médico para no scrollear 150 nombres */}
+            <div className="mb-2.5">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={doctorSearch}
+                  onChange={(e) => setDoctorSearch(e.target.value)}
+                  placeholder="Filtrar médico por nombre o categoría (ej. Cristian, Planilla)..."
+                  className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-[11.5px] placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#0095FF]/40 shadow-2xs font-medium"
+                />
+                {doctorSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setDoctorSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
                   >
-                    <option value="">— Seleccionar médico —</option>
-                    {form.doctor && !DOCTORES_MOCK.includes(form.doctor) && (
-                      <option value={form.doctor}>{form.doctor}</option>
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-700">
+                  Médico en turno
+                </label>
+                <select
+                  value={form.doctor || ""}
+                  onChange={(e) => {
+                    const docName = e.target.value;
+                    if (docName) {
+                      const foundDoc = allDoctors.find(
+                        (d) => d.nombre.toUpperCase() === docName.toUpperCase()
+                      );
+                      const shiftToSet =
+                        form.horario ||
+                        foundDoc?.horarioDefault ||
+                        (horarios && horarios[0]) ||
+                        "07:00 AM – 12:00 PM";
+                      updateField({
+                        doctor: foundDoc ? foundDoc.nombre : docName,
+                        horario: shiftToSet,
+                        estado: "OCUPADO",
+                      });
+                    } else {
+                      updateField({
+                        doctor: null,
+                        horario: null,
+                      });
+                    }
+                  }}
+                  className={`w-full rounded-xl border bg-white px-3 py-2 text-[12px] font-medium shadow-2xs transition-all ${
+                    form.doctor
+                      ? "border-rose-300 text-rose-950 font-bold focus:ring-2 focus:ring-rose-400"
+                      : "border-slate-200 text-slate-800 focus:ring-2 focus:ring-[#0095FF]/40"
+                  }`}
+                >
+                  <option value="">— Seleccionar médico de la nómina —</option>
+                  {form.doctor &&
+                    !filteredDoctors.some(
+                      (d) => d.nombre.toUpperCase() === form.doctor.toUpperCase()
+                    ) && (
+                      <option value={form.doctor}>
+                        {form.doctor} (Médico Asignado Actual)
+                      </option>
                     )}
-                    {DOCTORES_MOCK.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-semibold text-slate-700">Horario de atención</label>
-                  <select
-                    value={form.horario || ""}
-                    onChange={(e) => updateField({ horario: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium shadow-2xs"
-                  >
-                    <option value="">— Seleccionar horario —</option>
-                    {(horarios || HORARIOS).map((h) => (
-                      <option key={h} value={h}>{h}</option>
-                    ))}
-                  </select>
-                </div>
+                  {filteredDoctors.map((doc) => {
+                    const otherSpace = occupiedDoctorsMap.get(doc.nombre.toUpperCase());
+                    const isHere = form.doctor && form.doctor.toUpperCase() === doc.nombre.toUpperCase();
+                    return (
+                      <option key={doc.nombre} value={doc.nombre}>
+                        {doc.nombre} — {doc.categoria}
+                        {isHere
+                          ? " (En este puesto)"
+                          : otherSpace
+                          ? ` [Ocupando Puesto #${otherSpace}]`
+                          : ""}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
-              {/* Botón directo para que el Master quite al médico de este puesto */}
-              <div className="mt-3 pt-2.5 border-t border-rose-200/80 flex justify-end">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-700">
+                  Horario de atención
+                </label>
+                <select
+                  value={form.horario || ""}
+                  onChange={(e) => updateField({ horario: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium shadow-2xs focus:ring-2 focus:ring-[#0095FF]/40"
+                >
+                  <option value="">— Seleccionar horario —</option>
+                  {(horarios || HORARIOS).map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Botón directo para quitar al médico de este puesto */}
+            {form.doctor && (
+              <div className="mt-3 pt-2.5 border-t border-rose-200/80 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] text-rose-800 font-medium truncate max-w-full">
+                  Asignado a este puesto: <strong className="font-bold">{form.doctor}</strong>
+                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -337,17 +532,17 @@ export default function SpaceDetailModal({
                       marca: (form.marca && form.marca !== "NO PC") ? form.marca : "DELL",
                       modelo: form.modelo || "OptiPlex 3080",
                       categoria: Number(form.id) === 1 ? null : form.categoria,
-                      observaciones: form.observaciones ? `${form.observaciones} | Puesto desocupado por Master` : "Turno liberado",
+                      observaciones: form.observaciones ? `${form.observaciones} | Puesto desocupado por Master/Supervisor` : "Turno liberado",
                     });
                   }}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-[12px] font-bold text-rose-700 bg-white hover:bg-rose-100 border border-rose-300 shadow-2xs active:scale-95 transition-all"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-bold text-rose-700 bg-white hover:bg-rose-100 border border-rose-300 shadow-2xs active:scale-95 transition-all cursor-pointer ml-auto"
                 >
                   <UserX size={14} className="text-rose-600" />
                   <span>Quitar Médico (Dejar Puesto Disponible)</span>
                 </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Equipment Details */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
