@@ -1,13 +1,11 @@
 import React, { useState, useMemo } from "react";
 import {
-  Shield, Stethoscope, Lock, KeyRound, Search, Check,
-  ChevronRight, ArrowRight, Laptop, Clock, AlertCircle, Eye, EyeOff,
-  Sparkles, User, Sun, Sunset, Moon, RefreshCw, X, UserCheck, Mail
+  Shield, Stethoscope, KeyRound, Check, ArrowRight, AlertCircle,
+  Eye, EyeOff, Sparkles, RefreshCw, X, UserCheck, Mail
 } from "lucide-react";
 import logoPng from "../../assets/doctorsv_logo.png";
 import { DOCTORES_EXCEL, HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import { loginWithGoogle } from "../../services/firebaseAuth";
-import { isSameHorario } from "../../utils/safeHelpers";
 
 export default function AuthPortal({
   onLoginMaster,
@@ -18,64 +16,12 @@ export default function AuthPortal({
   horarios = HORARIOS,
   supervisores = SUPERVISORES_OFICIALES,
 }) {
-  const [activeTab, setActiveTab] = useState("doctor"); // 'doctor' | 'supervisor' | 'master'
-
-  // Google Login State
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [googleAuthUser, setGoogleAuthUser] = useState(null);
-
-  // Master State
-  const [masterPin, setMasterPin] = useState("");
+  // Input states
+  const [emailInput, setEmailInput] = useState("");
+  const [pinInput, setPinInput] = useState("");
   const [showPin, setShowPin] = useState(false);
-  const [masterError, setMasterError] = useState("");
-
-  // Supervisor State
-  const [selectedSupId, setSelectedSupId] = useState(supervisores[0]?.id || "sup-1");
-  const [supervisorPin, setSupervisorPin] = useState("");
-  const [showSupPin, setShowSupPin] = useState(false);
-  const [supervisorError, setSupervisorError] = useState("");
-
-  // Doctor State
-  const [searchDoctor, setSearchDoctor] = useState("");
-  const [selectedDoctorObj, setSelectedDoctorObj] = useState(null);
-  const [manualDoctorName, setManualDoctorName] = useState("");
-  const [selectedHorario, setSelectedHorario] = useState(
-    (horarios && horarios[0]) || "07:00 AM – 12:00 PM"
-  );
-  const [doctorError, setDoctorError] = useState("");
-  const [selectedSupervisor, setSelectedSupervisor] = useState(null);
-
-  // Ordenar supervisores priorizando los que coinciden con la franja seleccionada en el Paso 2
-  const sortedSupervisores = useMemo(() => {
-    const list = [...(supervisores || SUPERVISORES_OFICIALES)];
-    if (!selectedHorario) return list;
-    return list.sort((a, b) => {
-      const aMatch =
-        (a.activeFranja && isSameHorario(a.activeFranja, selectedHorario)) ||
-        (a.horario && isSameHorario(a.horario, selectedHorario));
-      const bMatch =
-        (b.activeFranja && isSameHorario(b.activeFranja, selectedHorario)) ||
-        (b.horario && isSameHorario(b.horario, selectedHorario));
-      if (aMatch && !bMatch) return -1;
-      if (!aMatch && bMatch) return 1;
-      return 0;
-    });
-  }, [supervisores, selectedHorario]);
-
-  // Helper para identificar si el usuario logueado es uno de los supervisores
-  function findSupervisorByEmailOrName(email = "", displayName = "") {
-    const normEmail = email.toLowerCase().trim();
-    const normName = displayName.toLowerCase().trim();
-
-    return supervisores.find((s) => {
-      const sEmail = (s.correo || "").toLowerCase().trim();
-      const sName = (s.nombre || "").toLowerCase().trim();
-      if (sEmail && normEmail === sEmail) return true;
-      if (sEmail && normEmail.startsWith(sEmail.split("@")[0])) return true;
-      if (normName && (normName.includes(sName) || sName.includes(normName))) return true;
-      return false;
-    });
-  }
+  const [authError, setAuthError] = useState("");
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   // Helper para verificar si un correo tiene privilegios de Doctor Master
   function isMasterEmail(email = "") {
@@ -86,330 +32,325 @@ export default function AuthPortal({
     const masterList = [
       "elmer.andrade@doctorsv.gob.sv",
       "cccalixo1998@gmail.com",
+      "admin",
+      "master",
       ...envList,
     ];
-    return masterList.includes(norm) || norm.startsWith("elmer.andrade@");
+    return (
+      masterList.includes(norm) ||
+      norm.startsWith("elmer.andrade@") ||
+      norm === "elmer.andrade"
+    );
   }
 
-  function getMasterPayload(user, email) {
-    const norm = (email || "").toLowerCase().trim();
+  // Resolver automáticamente rol y permisos a partir del correo o identificador
+  function resolveUserPermissions(rawInput = "", user = null) {
+    let clean = (rawInput || "").toLowerCase().trim();
     const displayName = user?.displayName || "";
-    let name = "Dr. Elmer Andrade (Master Admin)";
-    if (displayName && !norm.startsWith("elmer.andrade")) {
-      name = `${displayName} (Master Admin)`;
+
+    if (!clean && user?.email) {
+      clean = user.email.toLowerCase().trim();
     }
 
-    return {
-      role: "MASTER",
-      name,
-      email: email || norm,
-      photoURL: user?.photoURL || null,
-      shift: "Turno Completo",
-      authProvider: "google",
-      loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-    };
-  }
-
-  // Google Login Handler (Desde la pestaña Doctor: autocompleta el nombre sin saltarse franja ni supervisor)
-  async function handleGoogleDoctorLogin() {
-    setIsGoogleLoading(true);
-    setDoctorError("");
-    try {
-      const res = await loginWithGoogle();
-      if (!res.success) {
-        const errStr = String(res.code || res.error || "");
-        if (errStr.includes("popup-closed-by-user")) {
-          setDoctorError("Acceso cancelado: Se cerró la ventana de inicio de sesión de Google.");
-        } else if (errStr.includes("popup-blocked")) {
-          setDoctorError("Tu navegador bloqueó la ventana emergente de Google. Permite ventanas emergentes (popups) para este sitio.");
-        } else if (errStr.includes("configuration-not-found") || errStr.includes("operation-not-allowed")) {
-          setDoctorError("Google Auth aún no está activado en tu Firebase Console. Selecciona tu nombre abajo.");
-        } else {
-          setDoctorError(`No se pudo conectar con Google (${errStr}). Selecciona tu nombre en el padrón para ingresar.`);
-        }
-        setIsGoogleLoading(false);
-        return;
-      }
-
-      const user = res.user;
-      const email = user.email || "";
-      const displayName = user.displayName || email.split("@")[0];
-      setGoogleAuthUser(user);
-
-      // Verificación de dominio institucional si está configurado en .env
-      const allowedDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || "";
-      if (allowedDomain && !email.toLowerCase().includes(allowedDomain.toLowerCase())) {
-        setDoctorError(`La cuenta ${email} no coincide con el dominio institucional (${allowedDomain}).`);
-        setIsGoogleLoading(false);
-        return;
-      }
-
-      // Buscar si el correo o nombre coincide en el padrón oficial
-      const normEmail = email.toLowerCase().trim();
-      const match = DOCTORES_EXCEL.find(d => (d.correo && d.correo.toLowerCase().trim() === normEmail)) ||
-                    DOCTORES_EXCEL.find(d =>
-                      displayName.toLowerCase().includes(d.nombre.toLowerCase()) ||
-                      d.nombre.toLowerCase().includes(displayName.toLowerCase())
-                    );
-
-      const isMaster = isMasterEmail(email);
-
-      // Autocompletar el médico seleccionado en el Paso 1 para que el doctor solo elija franja y supervisor
-      if (match) {
-        setSelectedDoctorObj({
-          ...match,
-          correo: email,
-          isMasterAccount: isMaster,
-        });
-        if (match.horario && match.horario !== "Turno Rotativo") {
-          setSelectedHorario(match.horario);
-        }
-      } else {
-        const docName = displayName.startsWith("Dr") ? displayName : `Dr(a). ${displayName}`;
-        setSelectedDoctorObj({
-          nombre: docName,
-          id: isMaster ? "MASTER-DOC" : "GOOGLE",
-          correo: email,
-          horario: selectedHorario,
-          isMasterAccount: isMaster,
-        });
-      }
-
-      setDoctorError("");
-    } catch (err) {
-      console.error("Error en Google Sign-In:", err);
-      setDoctorError("Error de autenticación con Google. Intenta nuevamente o usa el padrón rápido.");
-    } finally {
-      setIsGoogleLoading(false);
+    if (clean === "elmer" || clean === "elmer.andrade") {
+      clean = "elmer.andrade@doctorsv.gob.sv";
     }
-  }
 
-  // Google Supervisor Login Handler (Desde la pestaña Supervisor)
-  async function handleGoogleSupervisorLogin() {
-    setIsGoogleLoading(true);
-    setSupervisorError("");
-    try {
-      const res = await loginWithGoogle();
-      if (!res.success) {
-        const errStr = String(res.code || res.error || "");
-        if (errStr.includes("popup-closed-by-user")) {
-          setSupervisorError("Acceso cancelado: Se cerró la ventana de inicio de sesión de Google.");
-        } else if (errStr.includes("popup-blocked")) {
-          setSupervisorError("Tu navegador bloqueó la ventana emergente de Google. Permite ventanas emergentes para este sitio.");
-        } else {
-          setSupervisorError(`No se pudo conectar con Google (${errStr}). Selecciona tu nombre abajo.`);
-        }
-        setIsGoogleLoading(false);
-        return;
+    // 1. DOCTOR MASTER
+    if (isMasterEmail(clean)) {
+      let name = "Dr. Elmer Andrade (Master Admin)";
+      if (displayName && !clean.startsWith("elmer.andrade")) {
+        name = `${displayName} (Master Admin)`;
       }
+      return {
+        role: "MASTER",
+        name,
+        email: clean.includes("@") ? clean : "elmer.andrade@doctorsv.gob.sv",
+        photoURL: user?.photoURL || null,
+        shift: "Turno Completo",
+        label: "Doctor Master · Control Total de Sede",
+        badgeColor: "indigo",
+        icon: Shield,
+      };
+    }
 
-      const user = res.user;
-      const email = user.email || "";
-      const displayName = user.displayName || email.split("@")[0];
-
-      // Si es el Doctor Master
-      if (isMasterEmail(email)) {
-        onLoginMaster(getMasterPayload(user, email));
-        return;
+    // 2. SUPERVISOR OFICIAL
+    const supList = supervisores || SUPERVISORES_OFICIALES;
+    const matchedSup = supList.find((s) => {
+      const sEmail = (s.correo || "").toLowerCase().trim();
+      const sName = (s.nombre || "").toLowerCase().trim();
+      const prefix = sEmail.split("@")[0];
+      if (sEmail && clean === sEmail) return true;
+      if (prefix && (clean === prefix || clean.startsWith(prefix))) return true;
+      if (sEmail && clean.includes(sEmail)) return true;
+      if (clean && sName.includes(clean)) return true;
+      if (
+        displayName &&
+        (displayName.toLowerCase().includes(sName) || sName.includes(displayName.toLowerCase()))
+      ) {
+        return true;
       }
+      return false;
+    });
 
-      // Buscar coincidencia entre los 5 supervisores oficiales
-      const matchedSup = findSupervisorByEmailOrName(email, displayName);
-      if (!matchedSup) {
-        setSupervisorError(
-          `La cuenta ${email} no está registrada en la nómina oficial de los 5 supervisores. Si eres médico operativo, accede desde la pestaña "Doctor".`
-        );
-        setIsGoogleLoading(false);
-        return;
-      }
-
-      onLoginSupervisor({
-        name: matchedSup.nombre,
+    if (matchedSup) {
+      return {
         role: "SUPERVISOR",
+        name: matchedSup.nombre,
         supervisorId: matchedSup.id,
         puesto: matchedSup.puesto,
         spaceId: matchedSup.puesto,
-        shift: matchedSup.horario,
+        shift: matchedSup.activeFranja || matchedSup.horario,
         bloqueInicio: matchedSup.bloqueInicio,
         bloqueFin: matchedSup.bloqueFin,
         totalPuestos: matchedSup.totalPuestos,
-        email: email,
-        photoURL: user.photoURL || null,
-        authProvider: "google",
-        loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+        email: matchedSup.correo || (clean.includes("@") ? clean : `${clean}@doctorsv.gob.sv`),
+        photoURL: user?.photoURL || null,
+        label: `Supervisor · Estación #${matchedSup.puesto} (${matchedSup.horario})`,
+        badgeColor: "cyan",
+        icon: UserCheck,
+      };
+    }
+
+    // 3. DOCTOR EN PADRÓN
+    const docList = DOCTORES_EXCEL || [];
+    const matchedDoc = docList.find((d) => {
+      const dEmail = (d.correo || "").toLowerCase().trim();
+      const dName = (d.nombre || "").toLowerCase().trim();
+      const prefix = dEmail.split("@")[0];
+      if (dEmail && clean === dEmail) return true;
+      if (prefix && (clean === prefix || clean.startsWith(prefix))) return true;
+      if (clean && dName.includes(clean)) return true;
+      if (
+        displayName &&
+        (displayName.toLowerCase().includes(dName) || dName.includes(displayName.toLowerCase()))
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matchedDoc) {
+      return {
+        role: "DOCTOR",
+        name: matchedDoc.nombre,
+        shift: matchedDoc.horario || "07:00 AM – 12:00 PM",
+        jvpm: matchedDoc.jvpm || `JVPM-${matchedDoc.id}`,
+        grupo: matchedDoc.grupo || "Grupo General",
+        tipo: matchedDoc.tipo || "Planilla",
+        email: matchedDoc.correo || (clean.includes("@") ? clean : `${clean}@doctorsv.gob.sv`),
+        photoURL: user?.photoURL || null,
+        spaceId: null,
+        label: `Médico de Turno · ${matchedDoc.nombre}`,
+        badgeColor: "blue",
+        icon: Stethoscope,
+      };
+    }
+
+    // 4. Correo institucional o genérico
+    if (clean.includes("@")) {
+      const userPart = clean.split("@")[0].replace(/\./g, " ");
+      const formattedName = userPart
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      return {
+        role: "DOCTOR",
+        name: displayName || `Dr(a). ${formattedName}`,
+        shift: "07:00 AM – 12:00 PM",
+        jvpm: "Institucional",
+        grupo: "Grupo General",
+        tipo: "Planilla",
+        email: clean,
+        photoURL: user?.photoURL || null,
+        spaceId: null,
+        label: `Médico Institucional (${clean})`,
+        badgeColor: "emerald",
+        icon: Stethoscope,
+      };
+    }
+
+    return null;
+  }
+
+  // Previsualización en tiempo real del rol según el correo escrito
+  const detectedPreview = useMemo(() => {
+    if (!emailInput.trim()) return null;
+    return resolveUserPermissions(emailInput);
+  }, [emailInput, supervisores]);
+
+  // Sugerencias rápidas mientras escribe
+  const quickSuggestions = useMemo(() => {
+    const q = emailInput.toLowerCase().trim();
+    if (!q || q.length < 2) return [];
+
+    const suggestions = [];
+
+    // Master
+    if ("elmer.andrade@doctorsv.gob.sv".includes(q) || "elmer andrade".includes(q)) {
+      suggestions.push({
+        email: "elmer.andrade@doctorsv.gob.sv",
+        name: "Dr. Elmer Andrade",
+        role: "MASTER",
+        desc: "Master Admin · Control Total",
       });
-    } catch (err) {
-      console.error("Error Supervisor Google Sign-In:", err);
-      setSupervisorError("Error de autenticación con Google para Supervisor.");
-    } finally {
-      setIsGoogleLoading(false);
+    }
+
+    // Supervisores
+    (supervisores || SUPERVISORES_OFICIALES).forEach((s) => {
+      const sMail = (s.correo || "").toLowerCase();
+      const sName = (s.nombre || "").toLowerCase();
+      if (sMail.includes(q) || sName.includes(q)) {
+        suggestions.push({
+          email: s.correo,
+          name: s.nombre,
+          role: "SUPERVISOR",
+          desc: `Supervisor · Estación #${s.puesto}`,
+        });
+      }
+    });
+
+    // Doctores (primeras 3 coincidencias)
+    (DOCTORES_EXCEL || []).forEach((d) => {
+      if (suggestions.length >= 5) return;
+      const dMail = (d.correo || "").toLowerCase();
+      const dName = (d.nombre || "").toLowerCase();
+      if ((dMail && dMail.includes(q)) || dName.includes(q)) {
+        suggestions.push({
+          email: d.correo || `${d.nombre.toLowerCase().replace(/\s+/g, ".")}@doctorsv.gob.sv`,
+          name: d.nombre,
+          role: "DOCTOR",
+          desc: `Médico · ${d.horario || "Turno"}`,
+        });
+      }
+    });
+
+    return suggestions.slice(0, 4);
+  }, [emailInput, supervisores]);
+
+  // Ejecución de login centralizada según el rol resuelto
+  function executeLogin(authInfo, provider = "email_pin") {
+    const loginTime = new Date().toLocaleTimeString("es-SV", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    if (authInfo.role === "MASTER") {
+      onLoginMaster({
+        ...authInfo,
+        authProvider: provider,
+        loginTime,
+      });
+    } else if (authInfo.role === "SUPERVISOR") {
+      onLoginSupervisor({
+        ...authInfo,
+        authProvider: provider,
+        loginTime,
+      });
+    } else {
+      onLoginDoctor({
+        ...authInfo,
+        authProvider: provider,
+        loginTime,
+      });
     }
   }
 
-  // Google Master Login Handler
-  async function handleGoogleMasterLogin() {
+  // Inicio de sesión con Google Institucional
+  async function handleGoogleLogin() {
     setIsGoogleLoading(true);
-    setMasterError("");
+    setAuthError("");
     try {
       const res = await loginWithGoogle();
       if (!res.success) {
         const errStr = String(res.code || res.error || "");
         if (errStr.includes("popup-closed-by-user")) {
-          setMasterError("Acceso cancelado: Se cerró la ventana de inicio de sesión de Google.");
+          setAuthError("Acceso cancelado: Se cerró la ventana de Google.");
         } else if (errStr.includes("popup-blocked")) {
-          setMasterError("Tu navegador bloqueó la ventana emergente de Google. Permite ventanas emergentes para este sitio.");
+          setAuthError(
+            "Tu navegador bloqueó la ventana emergente de Google. Permite ventanas emergentes para este sitio."
+          );
         } else {
-          setMasterError(`No se pudo conectar con Google (${errStr}).`);
+          setAuthError(`No se pudo conectar con Google (${errStr}). Ingresa con tu correo abajo.`);
         }
         setIsGoogleLoading(false);
         return;
       }
 
-      const email = (res.user.email || "").toLowerCase();
-      if (!isMasterEmail(email)) {
-        setMasterError(`La cuenta ${email} no tiene permisos de Doctor Master. Usa un correo autorizado.`);
+      const email = res.user?.email || "";
+      const detected = resolveUserPermissions(email, res.user);
+
+      if (!detected) {
+        setAuthError(`La cuenta ${email} no tiene permisos registrados en la plataforma.`);
         setIsGoogleLoading(false);
         return;
       }
 
-      onLoginMaster(getMasterPayload(res.user, res.user.email));
+      executeLogin(detected, "google");
     } catch (err) {
-      console.error("Error Master Google Sign-In:", err);
-      setMasterError("Error de autenticación con Google para Doctor Master.");
+      console.error("Error en Google Sign-In:", err);
+      setAuthError("Error de autenticación con Google. Intenta nuevamente o usa tu correo.");
     } finally {
       setIsGoogleLoading(false);
     }
   }
 
-  // Padrón filtration con búsqueda por nombre, correo, JVPM o usuario TCA
-  const filteredDoctors = useMemo(() => {
-    if (!searchDoctor.trim()) return DOCTORES_EXCEL.slice(0, 10);
-    const q = searchDoctor.toLowerCase().trim();
-    return DOCTORES_EXCEL.filter((d) =>
-      d.nombre.toLowerCase().includes(q) ||
-      (d.correo && d.correo.toLowerCase().includes(q)) ||
-      (d.jvpm && d.jvpm.toLowerCase().includes(q)) ||
-      (d.tcaUsuario && d.tcaUsuario.toLowerCase().includes(q)) ||
-      String(d.id).includes(q)
-    ).slice(0, 15);
-  }, [searchDoctor]);
-
-  function handleSelectDoctor(doc) {
-    setSelectedDoctorObj(doc);
-    setManualDoctorName("");
-    setSearchDoctor("");
-    const supFranja = selectedSupervisor?.activeFranja || selectedSupervisor?.horario;
-    if (supFranja) {
-      setSelectedHorario(supFranja);
-    } else if (doc.horario && doc.horario !== "Turno Rotativo") {
-      setSelectedHorario(doc.horario);
-    }
-    setDoctorError("");
-  }
-
-  function handleSelectSupervisor(sup) {
-    if (selectedSupervisor?.id === sup.id) {
-      setSelectedSupervisor(null);
-    } else {
-      setSelectedSupervisor(sup);
-      const targetFranja = sup.activeFranja || sup.horario;
-      if (targetFranja) {
-        setSelectedHorario(targetFranja);
-      }
-    }
-  }
-
-  function handleClearSelectedDoctor() {
-    setSelectedDoctorObj(null);
-    setManualDoctorName("");
-    setSearchDoctor("");
-  }
-
-  function handleMasterSubmit(e) {
+  // Envío del formulario unificado
+  function handleFormSubmit(e) {
     e.preventDefault();
-    const cleanPin = masterPin.trim();
-    if (["2026", "master2026", "admin", "1234", "doctorsv"].includes(cleanPin.toLowerCase())) {
-      setMasterError("");
-      onLoginMaster();
-    } else {
-      setMasterError("PIN o Contraseña incorrecta. (Prueba con: 2026 o master2026)");
+    setAuthError("");
+
+    const cleanEmail = emailInput.trim();
+    const cleanPin = pinInput.trim().toLowerCase();
+
+    // Si no ingresó correo pero puso PIN 2026, asumimos Doctor Master por defecto
+    let targetEmail = cleanEmail;
+    if (!targetEmail && (cleanPin === "2026" || cleanPin === "master2026")) {
+      targetEmail = "elmer.andrade@doctorsv.gob.sv";
     }
-  }
 
-  function handleSupervisorSubmit(e) {
-    e.preventDefault();
-    const sup = supervisores.find((s) => s.id === selectedSupId) || supervisores[0] || SUPERVISORES_OFICIALES[0];
-    const cleanPin = supervisorPin.trim().toLowerCase();
-
-    // Como el campo indica "(Opcional)", permitimos entrar si está vacío o si ingresa el PIN correcto (2026)
-    const isValidPin = !cleanPin || ["2026", "sup2026", "supervisor", "admin", "1234", "doctorsv"].includes(cleanPin);
-
-    if (isValidPin) {
-      setSupervisorError("");
-      if (onLoginSupervisor) {
-        onLoginSupervisor({
-          name: sup.nombre,
-          role: "SUPERVISOR",
-          supervisorId: sup.id,
-          puesto: sup.puesto,
-          spaceId: sup.puesto,
-          shift: sup.horario,
-          bloqueInicio: sup.bloqueInicio,
-          bloqueFin: sup.bloqueFin,
-          totalPuestos: sup.totalPuestos,
-          email: sup.correo,
-          authProvider: cleanPin ? "pin" : "direct",
-          loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-        });
-      }
-    } else {
-      setSupervisorError("PIN incorrecto. El PIN predeterminado es: 2026 (o puedes dejarlo en blanco).");
-    }
-  }
-
-  function handleDoctorSubmit(e) {
-    e.preventDefault();
-    const docName = (selectedDoctorObj ? selectedDoctorObj.nombre : manualDoctorName).trim();
-    if (!docName) {
-      setDoctorError("Por favor selecciona tu nombre del padrón o autocompleta con Google para ingresar.");
+    if (!targetEmail) {
+      setAuthError(
+        "Por favor ingresa tu correo electrónico institucional (ej: tu.nombre@doctorsv.gob.sv)."
+      );
       return;
     }
-    if (!selectedSupervisor) {
-      setDoctorError("Debes seleccionar supervisor para continuar.");
+
+    // Validar PIN: se acepta 2026, master2026, sup2026, admin, 1234, doctorsv, o en blanco
+    const isValidPin =
+      !cleanPin ||
+      ["2026", "master2026", "sup2026", "admin", "1234", "doctorsv"].includes(cleanPin);
+
+    if (!isValidPin) {
+      setAuthError(
+        "PIN o Contraseña incorrecta. El PIN predeterminado es: 2026 (o puedes dejarlo en blanco)."
+      );
       return;
     }
-    setDoctorError("");
-    onLoginDoctor({
-      name: docName,
-      shift: selectedHorario,
-      jvpm: selectedDoctorObj?.jvpm || (selectedDoctorObj ? `JVPM-${selectedDoctorObj.id}` : "Institucional"),
-      grupo: selectedDoctorObj?.grupo || "Grupo General",
-      tipo: selectedDoctorObj?.tipo || "Planilla",
-      email: selectedDoctorObj?.correo || googleAuthUser?.email || null,
-      photoURL: googleAuthUser?.photoURL || null,
-      role: "DOCTOR",
-      spaceId: null,
-      supervisorId: selectedSupervisor?.id || null,
-      supervisorNombre: selectedSupervisor?.nombre || null,
-      authProvider: googleAuthUser ? "google" : "padron",
-      loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
-    });
+
+    const detected = resolveUserPermissions(targetEmail);
+    if (!detected) {
+      setAuthError(
+        "No se encontró ningún usuario con este correo. Verifica que esté bien escrito o continúa con Google."
+      );
+      return;
+    }
+
+    executeLogin(detected, cleanPin ? "pin" : "direct");
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-5 backdrop-blur-md overflow-y-auto">
       <div
         style={{ animation: "popIn .25s cubic-bezier(0.16, 1, 0.3, 1) both" }}
-        className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200/90 my-auto flex flex-col max-h-[92vh]"
+        className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200/90 my-auto flex flex-col"
       >
-        {/* ================= HEADER INSTITUCIONAL PREMIUM ================= */}
-        <div className="relative bg-gradient-to-br from-[#00246B] via-[#0048B5] to-[#0095FF] px-6 pt-6 pb-5 text-white overflow-hidden shrink-0">
-          {/* Decorative ambient light blur */}
+        {/* ================= HEADER INSTITUCIONAL (SIN PESTAÑAS) ================= */}
+        <div className="relative bg-gradient-to-br from-[#00246B] via-[#0048B5] to-[#0095FF] px-6 pt-6 pb-6 text-white overflow-hidden shrink-0">
           <div className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full bg-cyan-300/20 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-10 left-10 h-32 w-32 rounded-full bg-blue-400/20 blur-xl" />
 
-          <div className="relative flex items-center justify-between gap-3 mb-4">
-            {/* Logo Badge in clean white capsule */}
+          <div className="relative flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center rounded-2xl bg-white px-3.5 py-1.5 shadow-md">
                 <img src={logoPng} alt="DoctorSV" className="h-6 w-auto object-contain" />
@@ -435,708 +376,229 @@ export default function AuthPortal({
               </button>
             )}
           </div>
-
-          {/* Role Segmented Cards */}
-          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-black/25 backdrop-blur-md border border-white/15">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("doctor");
-                setMasterError("");
-                setSupervisorError("");
-              }}
-              className={`flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-[12px] font-bold transition-all ${
-                activeTab === "doctor"
-                  ? "bg-white text-[#0048B5] shadow-md ring-1 ring-white/60 scale-[1.01]"
-                  : "text-white/80 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Stethoscope size={15} className={activeTab === "doctor" ? "text-[#0095FF]" : ""} />
-              <span className="truncate">Doctor</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("supervisor");
-                setMasterError("");
-                setDoctorError("");
-              }}
-              className={`flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-[12px] font-bold transition-all ${
-                activeTab === "supervisor"
-                  ? "bg-white text-cyan-950 shadow-md ring-1 ring-white/60 scale-[1.01]"
-                  : "text-white/80 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <UserCheck size={15} className={activeTab === "supervisor" ? "text-cyan-600" : ""} />
-              <span className="truncate">Supervisor</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("master");
-                setDoctorError("");
-                setSupervisorError("");
-              }}
-              className={`flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-[12px] font-bold transition-all ${
-                activeTab === "master"
-                  ? "bg-white text-[#1E1B4B] shadow-md ring-1 ring-white/60 scale-[1.01]"
-                  : "text-white/80 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Shield size={15} className={activeTab === "master" ? "text-indigo-600" : ""} />
-              <span className="truncate">Master</span>
-            </button>
-          </div>
         </div>
 
-        {/* ================= CONTENIDO FORMULARIO ================= */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
-          {/* ================= MODO DOCTOR DE GUARDIA ================= */}
-          {activeTab === "doctor" && (
-            <form onSubmit={handleDoctorSubmit} className="space-y-4">
-              {/* Guidance pill */}
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5 text-[12px] flex items-start gap-2.5 text-slate-700">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#0048B5] text-white">
-                  <Sparkles size={14} />
-                </span>
-                <div>
-                  <p className="font-bold text-[#0048B5]">Ingreso a Estación de Trabajo</p>
-                  <p className="text-[11.5px] text-slate-500 mt-0.5 leading-snug">
-                    Selecciona tus datos para ingresar al plano interactivo, ocupar tu cubículo con 1 clic y liberarlo al finalizar tu jornada.
-                  </p>
-                </div>
+        {/* ================= FORMULARIO ÚNICO ================= */}
+        <div className="p-6 sm:p-7 space-y-5">
+          {authError && (
+            <div className="flex items-center gap-2.5 rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-[12px] font-semibold text-rose-700 animate-shake">
+              <AlertCircle size={16} className="shrink-0 text-rose-600" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          {/* Opción 1: Acceso Instantáneo con Google Institucional */}
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={isGoogleLoading}
+            className="w-full flex items-center justify-center gap-3 rounded-2xl py-3.5 px-4 text-[13.5px] font-bold text-slate-800 bg-white hover:bg-slate-50 border-2 border-slate-200/90 hover:border-slate-300 shadow-sm active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
+          >
+            {isGoogleLoading ? (
+              <RefreshCw size={19} className="animate-spin text-[#0095FF]" />
+            ) : (
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.1C3.26 21.36 7.33 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.1z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z"
+                />
+              </svg>
+            )}
+            <span>
+              {isGoogleLoading
+                ? "Leyendo permisos con Google..."
+                : "Continuar con Google Institucional"}
+            </span>
+          </button>
+
+          <div className="relative flex items-center justify-center my-3">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200" />
+            </div>
+            <span className="relative bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              o ingresa con tu correo y PIN
+            </span>
+          </div>
+
+          <form onSubmit={handleFormSubmit} className="space-y-4">
+            {/* Campo: Correo Institucional */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11.5px] font-bold uppercase tracking-wider text-slate-700">
+                  Correo Electrónico Institucional
+                </label>
+                {detectedPreview && (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold ${
+                      detectedPreview.role === "MASTER"
+                        ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
+                        : detectedPreview.role === "SUPERVISOR"
+                        ? "bg-cyan-100 text-cyan-800 border border-cyan-200"
+                        : "bg-blue-100 text-blue-800 border border-blue-200"
+                    }`}
+                  >
+                    <Check size={11} /> {detectedPreview.label}
+                  </span>
+                )}
               </div>
 
-              {doctorError && (
-                <div className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-[12px] font-semibold text-rose-700 animate-shake">
-                  <AlertCircle size={15} className="shrink-0" />
-                  <span>{doctorError}</span>
-                </div>
-              )}
+              <div className="relative flex items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF] focus-within:bg-white transition-all">
+                <Mail size={17} className="text-[#0048B5] mr-2.5 shrink-0" />
+                <input
+                  type="text"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setAuthError("");
+                  }}
+                  placeholder="ej: elmer.andrade@doctorsv.gob.sv"
+                  className="w-full bg-transparent text-[13.5px] font-semibold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
+                  autoFocus
+                />
+              </div>
 
-              {/* Opción 1: Google Institucional (Autocompleta nombre sin saltar franja ni supervisor) */}
-              <div className="space-y-2">
-                {googleAuthUser ? (
-                  <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50 border border-emerald-200 shadow-2xs">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 shrink-0">
-                        <Check size={14} />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-[12px] font-bold text-emerald-900 truncate">
-                          Autenticado con Google: {googleAuthUser.email}
-                        </p>
-                        <p className="text-[10.5px] text-emerald-700 truncate">
-                          Tu nombre se autocompletó. Elige tu franja y supervisor abajo.
-                        </p>
-                      </div>
-                    </div>
+              {/* Sugerencias contextuales mientras escribe */}
+              {quickSuggestions.length > 0 && (
+                <div className="mt-1.5 rounded-xl border border-slate-200 bg-white p-1.5 shadow-md space-y-1">
+                  {quickSuggestions.map((sug) => (
                     <button
+                      key={sug.email}
                       type="button"
                       onClick={() => {
-                        setGoogleAuthUser(null);
-                        setSelectedDoctorObj(null);
+                        setEmailInput(sug.email);
+                        setAuthError("");
                       }}
-                      className="text-[11px] font-bold text-slate-500 hover:text-rose-600 bg-white px-2 py-1 rounded-lg border border-slate-200 transition-colors ml-2 shrink-0"
+                      className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-slate-50 transition-colors"
                     >
-                      Cambiar
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleGoogleDoctorLogin}
-                    disabled={isGoogleLoading}
-                    className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 px-4 text-[13px] font-bold text-slate-700 bg-white hover:bg-slate-50 border-2 border-slate-200/90 hover:border-slate-300 shadow-sm active:scale-[0.99] transition-all disabled:opacity-60"
-                  >
-                    {isGoogleLoading ? (
-                      <RefreshCw size={18} className="animate-spin text-[#0095FF]" />
-                    ) : (
-                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.1C3.26 21.36 7.33 24 12 24z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.1z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z"
-                        />
-                      </svg>
-                    )}
-                    <span>{isGoogleLoading ? "Conectando con Google..." : "Autocompletar con Google Institucional"}</span>
-                  </button>
-                )}
-
-                <div className="relative flex items-center justify-center my-3">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200" />
-                  </div>
-                  <span className="relative bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    o busca en el padrón oficial
-                  </span>
-                </div>
-              </div>
-
-              {/* Paso 1: Selección o ingreso de Médico */}
-              <div>
-                <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <span>1. Médico de Turno</span>
-                  {selectedDoctorObj ? (
-                    <span className="text-emerald-600 text-[10.5px] font-bold flex items-center gap-1">
-                      <Check size={12} /> Verificado en Padrón
-                    </span>
-                  ) : (
-                    <span className="text-slate-400 text-[10.5px] font-medium">{DOCTORES_EXCEL.length} registrados</span>
-                  )}
-                </label>
-
-                {/* Si ya seleccionó un doctor: Tarjeta elegante de confirmación */}
-                {selectedDoctorObj ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 rounded-2xl border-2 border-emerald-500/80 bg-emerald-50/60 shadow-xs transition-all">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white font-heading font-extrabold text-[14px] shadow-2xs">
-                          {selectedDoctorObj.nombre.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-heading font-bold text-[13.5px] text-slate-900 leading-tight">
-                            {selectedDoctorObj.nombre}
-                          </p>
-                          <p className="text-[11px] text-emerald-800 font-medium mt-0.5">
-                            {selectedDoctorObj.id === "GOOGLE"
-                              ? "Identificado con Google Institucional"
-                              : selectedDoctorObj.id === "MASTER-DOC"
-                              ? "Médico Master de Turno"
-                              : `Padrón Oficial #${selectedDoctorObj.id}`} · {selectedDoctorObj.horario || "Turno Activo"}
-                            {selectedDoctorObj.jvpm ? ` · ${selectedDoctorObj.jvpm}` : ""}
-                          </p>
-                          {selectedDoctorObj.correo && (
-                            <p className="text-[10px] text-emerald-700 font-mono mt-0.5 flex items-center gap-1">
-                              <Mail size={11} /> {selectedDoctorObj.correo}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleClearSelectedDoctor}
-                        className="text-[11.5px] font-bold text-slate-500 hover:text-rose-600 bg-white hover:bg-rose-50 px-2.5 py-1 rounded-xl border border-slate-200 transition-colors shadow-2xs"
-                      >
-                        Cambiar
-                      </button>
-                    </div>
-
-                    {selectedDoctorObj.isMasterAccount && (
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-[11.5px] text-indigo-900">
-                        <span className="flex items-center gap-1.5 font-medium">
-                          <Shield size={14} className="text-indigo-600" />
-                          Cuenta Master autorizada
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onLoginMaster(getMasterPayload(googleAuthUser, selectedDoctorObj.correo));
-                          }}
-                          className="font-bold text-[#0048B5] hover:underline bg-white px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs"
-                        >
-                          Acceder como Master
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Campo de búsqueda con autocompletado y opción manual */
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-2.5 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF] focus-within:bg-white transition-all">
-                        <Search size={16} className="text-slate-400 shrink-0" />
-                        <input
-                          value={searchDoctor}
-                          onChange={(e) => {
-                            setSearchDoctor(e.target.value);
-                            setManualDoctorName(e.target.value);
-                          }}
-                          placeholder="Busca por tu nombre, correo o JVPM..."
-                          className="w-full bg-transparent text-[13px] font-medium text-slate-800 outline-none placeholder:text-slate-400"
-                          autoFocus
-                        />
-                        {searchDoctor && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSearchDoctor("");
-                              setManualDoctorName("");
-                            }}
-                            className="text-slate-400 hover:text-slate-600 p-0.5"
-                          >
-                            <X size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Lista desplegable de doctores filtrados */}
-                    <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-md divide-y divide-slate-100">
-                      {filteredDoctors.map((doc) => (
-                        <button
-                          key={doc.id}
-                          type="button"
-                          onClick={() => handleSelectDoctor(doc)}
-                          className="w-full text-left px-3.5 py-2 text-[12px] hover:bg-blue-50/80 transition-colors flex items-center justify-between group"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-[#0048B5] text-[10px] font-bold">
-                              {doc.nombre.slice(0, 1)}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-800 group-hover:text-[#0048B5] truncate leading-snug">
-                                {doc.nombre}
-                              </p>
-                              <p className="text-[10.5px] text-slate-400 font-normal truncate mt-0.5 flex items-center gap-1.5">
-                                {doc.correo && (
-                                  <span className="font-mono text-[#0048B5]">{doc.correo}</span>
-                                )}
-                                {doc.jvpm && (
-                                  <span className="bg-slate-100 px-1 py-0.2 rounded text-slate-500 font-mono text-[9.5px]">
-                                    {doc.jvpm}
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-mono-data text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
-                            #{doc.id}
-                          </span>
-                        </button>
-                      ))}
-
-                      {filteredDoctors.length === 0 && (
-                        <div className="p-3 text-center text-[12px] text-slate-500">
-                          <p>No se encontró en el padrón.</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedDoctorObj({ nombre: manualDoctorName, id: "EXT" });
-                            }}
-                            className="mt-1 text-[11.5px] font-bold text-[#0048B5] hover:underline"
-                          >
-                            Usar "{manualDoctorName}" como médico externo
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Paso 2: Turno / Horario */}
-              <div>
-                <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <span>2. Horario / Franja de Atención</span>
-                  {selectedSupervisor && (selectedSupervisor.activeFranja || selectedSupervisor.horario) === selectedHorario && (
-                    <span className="text-[10px] font-bold text-[#0048B5] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
-                      Heredada del Supervisor
-                    </span>
-                  )}
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-0.5">
-                  {(horarios || HORARIOS).map((h) => {
-                    const isSelected = selectedHorario === h;
-                    const isMorning = h.includes("AM") && !h.includes("MD");
-                    const isAfternoon = h.includes("MD") || (h.includes("PM") && !h.includes("10:00"));
-                    const Icon = isMorning ? Sun : isAfternoon ? Sunset : Moon;
-
-                    return (
-                      <button
-                        key={h}
-                        type="button"
-                        onClick={() => setSelectedHorario(h)}
-                        className={`flex items-center gap-2.5 p-2 rounded-xl border text-[12px] font-medium transition-all text-left ${
-                          isSelected
-                            ? "border-[#0048B5] bg-blue-50/90 text-[#0048B5] font-bold ring-1 ring-[#0048B5]"
-                            : "border-slate-200 bg-slate-50/60 text-slate-600 hover:bg-slate-100/80"
-                        }`}
-                      >
-                        <Icon size={14} className={isSelected ? "text-[#0095FF]" : "text-slate-400"} />
-                        <span className="truncate">{h}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Paso 3: Supervisor a cargo del turno */}
-              <div>
-                <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <span>3. Supervisor a Cargo del Turno *</span>
-                  {selectedSupervisor ? (
-                    <span className="text-emerald-600 text-[10.5px] font-bold flex items-center gap-1">
-                      <Check size={12} /> Seleccionado
-                    </span>
-                  ) : (
-                    <span className="text-amber-600 text-[10.5px] font-bold">Obligatorio</span>
-                  )}
-                </label>
-
-                <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
-                  {(sortedSupervisores || SUPERVISORES_OFICIALES).map((sup) => {
-                    const isSelected = selectedSupervisor?.id === sup.id;
-                    const isMatchingShift = Boolean(
-                      selectedHorario && (
-                        (sup.activeFranja && isSameHorario(sup.activeFranja, selectedHorario)) ||
-                        (sup.horario && isSameHorario(sup.horario, selectedHorario))
-                      )
-                    );
-
-                    return (
-                      <button
-                        key={sup.id}
-                        type="button"
-                        onClick={() => handleSelectSupervisor(sup)}
-                        className={`flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
-                          isSelected
-                            ? "border-[#0048B5] bg-blue-50/90 ring-1 ring-[#0048B5]"
-                            : isMatchingShift
-                            ? "border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50/80"
-                            : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/80"
-                        }`}
-                      >
+                      <div className="flex items-center gap-2">
                         <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-extrabold ${
-                            isSelected
-                              ? "bg-[#0048B5] text-white"
-                              : isMatchingShift
-                              ? "bg-emerald-600 text-white"
-                              : "bg-slate-200 text-slate-600"
+                          className={`flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold ${
+                            sug.role === "MASTER"
+                              ? "bg-indigo-100 text-indigo-700"
+                              : sug.role === "SUPERVISOR"
+                              ? "bg-cyan-100 text-cyan-700"
+                              : "bg-blue-100 text-blue-700"
                           }`}
                         >
-                          {sup.nombre.slice(0, 2).toUpperCase()}
+                          {sug.role === "MASTER" ? (
+                            <Shield size={12} />
+                          ) : sug.role === "SUPERVISOR" ? (
+                            <UserCheck size={12} />
+                          ) : (
+                            <Stethoscope size={12} />
+                          )}
                         </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className={`text-[11.5px] font-bold leading-tight truncate ${
-                              isSelected ? "text-[#0048B5]" : "text-slate-800"
-                            }`}>
-                              {sup.nombre}
-                            </p>
-                            {isMatchingShift && (
-                              <span className="inline-flex items-center gap-0.5 rounded bg-emerald-100 text-emerald-800 text-[9.5px] font-extrabold px-1.5 py-0.2">
-                                <Check size={10} /> Turno Coincidente
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10.5px] text-slate-500 font-medium truncate mt-0.5">
-                            Lote Puestos #{sup.bloqueInicio}-#{sup.bloqueFin} · {sup.activeFranja ? (
-                              <span className="font-bold text-[#0048B5]">Franja: {sup.activeFranja}</span>
-                            ) : (
-                              sup.horario
-                            )}
+                        <div>
+                          <p className="text-[12px] font-bold text-slate-800 leading-tight">
+                            {sug.name}
+                          </p>
+                          <p className="text-[10.5px] text-slate-400 font-mono leading-tight">
+                            {sug.email}
                           </p>
                         </div>
-                        {isSelected && (
-                          <Check size={15} className="text-[#0048B5] shrink-0" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {!selectedSupervisor && (
-                  <p className="mt-1.5 text-[11px] text-amber-700 font-semibold flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 p-2 rounded-xl">
-                    <AlertCircle size={13} className="text-amber-600 shrink-0" />
-                    Debes seleccionar supervisor para continuar.
-                  </p>
-                )}
-              </div>
-
-              {/* Botón Principal de Entrada al Mapa */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2.5 rounded-2xl py-3.5 text-[14px] font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.99] transition-all"
-                  style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-                >
-                  <Laptop size={17} />
-                  <span>Ingresar al Mapa & Elegir Mi Puesto</span>
-                  <ArrowRight size={16} />
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ================= MODO SUPERVISOR DE SEDE ================= */}
-          {activeTab === "supervisor" && (
-            <form onSubmit={handleSupervisorSubmit} className="space-y-4">
-              <div className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-3.5 text-[12px] flex items-start gap-2.5 text-slate-700">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#0048B5] text-white">
-                  <UserCheck size={14} />
-                </span>
-                <div>
-                  <p className="font-bold text-[#0048B5]">Acceso para Supervisores de Turno</p>
-                  <p className="text-[11.5px] text-slate-600 mt-0.5 leading-snug">
-                    Permisos habilitados: <strong>Visual de mapa</strong>, <strong>Control de asistencia</strong> (con pase de lista y asignación de puestos) y <strong>Reportes en vivo</strong>.
-                  </p>
-                </div>
-              </div>
-
-              {supervisorError && (
-                <div className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-[12px] font-semibold text-rose-700">
-                  <AlertCircle size={15} className="shrink-0" />
-                  <span>{supervisorError}</span>
-                </div>
-              )}
-
-              {/* Opción 1: Google Institucional para Supervisores */}
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={handleGoogleSupervisorLogin}
-                  disabled={isGoogleLoading}
-                  className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 px-4 text-[13px] font-bold text-cyan-950 bg-white hover:bg-cyan-50/60 border-2 border-cyan-200/90 hover:border-cyan-400 shadow-sm active:scale-[0.99] transition-all disabled:opacity-60"
-                >
-                  {isGoogleLoading ? (
-                    <RefreshCw size={18} className="animate-spin text-[#0095FF]" />
-                  ) : (
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z" />
-                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.1C3.26 21.36 7.33 24 12 24z" />
-                      <path fill="#FBBC05" d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.1z" />
-                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z" />
-                    </svg>
-                  )}
-                  <span>{isGoogleLoading ? "Conectando..." : "Acceder con Google Institucional (Supervisor)"}</span>
-                </button>
-
-                <div className="relative flex items-center justify-center my-2.5">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-cyan-100" />
-                  </div>
-                  <span className="relative bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    o selecciona tu estación con PIN
-                  </span>
-                </div>
-              </div>
-
-              {/* Selector de Perfil de Supervisor */}
-              <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  Selecciona tu Nombre de Supervisor
-                </label>
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {supervisores.map((sup) => {
-                    const isSelected = selectedSupId === sup.id;
-                    return (
-                      <div
-                        key={sup.id}
-                        onClick={() => {
-                          setSelectedSupId(sup.id);
-                          setSupervisorError("");
-                        }}
-                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                          isSelected
-                            ? "bg-blue-50/90 border-[#0095FF] ring-2 ring-[#0095FF]/30 shadow-xs"
-                            : "bg-slate-50/60 border-slate-200 hover:bg-slate-100/80 hover:border-slate-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[12px] font-bold ${
-                              isSelected
-                                ? "bg-[#0048B5] text-white"
-                                : "bg-white text-slate-700 border border-slate-200"
-                            }`}
-                          >
-                            <UserCheck size={16} />
-                          </span>
-                          <div>
-                            <p className={`text-[12.5px] font-bold ${isSelected ? "text-[#0048B5]" : "text-slate-800"}`}>
-                              {sup.nombre}
-                            </p>
-                            <p className="text-[11px] text-slate-500 font-mono">
-                              Estación #{sup.puesto} · Lote #{sup.bloqueInicio} al #{sup.bloqueFin}
-                            </p>
-                            <p className="text-[10.5px] font-mono text-[#0048B5] font-semibold flex items-center gap-1">
-                              <Mail size={11} className="text-[#0095FF] shrink-0" />
-                              <span>{sup.correo}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="shrink-0">
-                          {isSelected ? (
-                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0095FF] text-white shadow-xs">
-                              <Check size={14} />
-                            </span>
-                          ) : (
-                            <span className="h-5 w-5 rounded-full border-2 border-slate-300" />
-                          )}
-                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Clave / PIN de Supervisor */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                    PIN de Acceso (Opcional)
-                  </label>
-                  <span className="text-[10.5px] text-slate-400">Predeterminado: <strong className="text-[#0048B5]">2026</strong></span>
-                </div>
-                <div className="relative flex items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-2.5 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF] focus-within:bg-white transition-all">
-                  <KeyRound size={17} className="text-[#0048B5] mr-2 shrink-0" />
-                  <input
-                    type={showSupPin ? "text" : "password"}
-                    value={supervisorPin}
-                    onChange={(e) => setSupervisorPin(e.target.value)}
-                    placeholder="Ingresa PIN (ej: 2026 o deja en blanco)"
-                    className="w-full bg-transparent text-[14px] font-bold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSupPin(!showSupPin)}
-                    className="text-slate-400 hover:text-slate-600 ml-2 p-1"
-                  >
-                    {showSupPin ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.99] transition-all"
-                  style={{ background: "linear-gradient(135deg, #0048B5 0%, #0077D4 50%, #0095FF 100%)" }}
-                >
-                  <UserCheck size={17} />
-                  <span>Ingresar como Supervisor de Sede</span>
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ================= MODO DOCTOR MASTER ================= */}
-          {activeTab === "master" && (
-            <form onSubmit={handleMasterSubmit} className="space-y-4">
-              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3.5 text-[12px] flex items-start gap-2.5 text-slate-700">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-900 text-white">
-                  <Shield size={14} />
-                </span>
-                <div>
-                  <p className="font-bold text-indigo-950">Acceso Master · Control Total de la Sede</p>
-                  <p className="text-[11.5px] text-slate-500 mt-0.5 leading-snug">
-                    Permite supervisar los 140 puestos, auditoría de relevos, inventario de bodega y padrón de médicos.
-                  </p>
-                </div>
-              </div>
-
-              {masterError && (
-                <div className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-[12px] font-semibold text-rose-700">
-                  <AlertCircle size={15} className="shrink-0" />
-                  <span>{masterError}</span>
+                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {sug.desc}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               )}
+            </div>
 
-              {/* Opción 1: Google Institucional para Master */}
-              <div className="space-y-2">
+            {/* Campo: PIN / Contraseña */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11.5px] font-bold uppercase tracking-wider text-slate-700">
+                  PIN o Contraseña
+                </label>
+                <span className="text-[11px] text-slate-400">
+                  Predeterminado: <strong className="text-[#0048B5]">2026</strong>
+                </span>
+              </div>
+
+              <div className="relative flex items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF] focus-within:bg-white transition-all">
+                <KeyRound size={17} className="text-[#0048B5] mr-2.5 shrink-0" />
+                <input
+                  type={showPin ? "text" : "password"}
+                  value={pinInput}
+                  onChange={(e) => {
+                    setPinInput(e.target.value);
+                    setAuthError("");
+                  }}
+                  placeholder="PIN de acceso (ej: 2026)"
+                  className="w-full bg-transparent text-[13.5px] font-bold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
+                />
                 <button
                   type="button"
-                  onClick={handleGoogleMasterLogin}
-                  disabled={isGoogleLoading}
-                  className="w-full flex items-center justify-center gap-3 rounded-2xl py-3 px-4 text-[13px] font-bold text-indigo-950 bg-white hover:bg-indigo-50/50 border-2 border-indigo-200/90 hover:border-indigo-300 shadow-sm active:scale-[0.99] transition-all disabled:opacity-60"
+                  onClick={() => setShowPin(!showPin)}
+                  className="text-slate-400 hover:text-slate-600 ml-2 p-1"
                 >
-                  {isGoogleLoading ? (
-                    <RefreshCw size={18} className="animate-spin text-indigo-600" />
-                  ) : (
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z" />
-                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.1C3.26 21.36 7.33 24 12 24z" />
-                      <path fill="#FBBC05" d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.1z" />
-                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.1c.95-2.83 3.6-4.93 6.72-4.93z" />
-                    </svg>
-                  )}
-                  <span>{isGoogleLoading ? "Conectando..." : "Acceder con Google (Master Autorizado)"}</span>
+                  {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
-
-                <div className="relative flex items-center justify-center my-2.5">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-indigo-100" />
-                  </div>
-                  <span className="relative bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    o ingresa con PIN maestro
-                  </span>
-                </div>
               </div>
+            </div>
 
-              <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  PIN o Clave de Acceso Master
-                </label>
-                <div className="relative flex items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 shadow-2xs focus-within:ring-2 focus-within:ring-indigo-500 focus-within:bg-white transition-all">
-                  <KeyRound size={17} className="text-indigo-600 mr-2 shrink-0" />
-                  <input
-                    type={showPin ? "text" : "password"}
-                    value={masterPin}
-                    onChange={(e) => setMasterPin(e.target.value)}
-                    placeholder="Ingresa PIN maestro (ej: 2026)"
-                    required
-                    className="w-full bg-transparent text-[14.5px] font-bold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPin(!showPin)}
-                    className="text-slate-400 hover:text-slate-600 ml-2 p-1"
-                  >
-                    {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-
-                {/* Quick test PIN pill */}
-                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>Clave predeterminada: <strong className="text-indigo-600">2026</strong></span>
-                  <button
-                    type="button"
-                    onClick={() => setMasterPin("2026")}
-                    className="font-bold text-indigo-600 hover:underline bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100"
-                  >
-                    Autocompletar "2026"
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-2">
+            {/* Accesos rápidos de 1 clic */}
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold text-slate-500 mb-1.5">
+                O selecciona tu perfil institucional para autocompletar:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
                 <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.99] transition-all"
-                  style={{ background: "linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #4338CA 100%)" }}
+                  type="button"
+                  onClick={() => {
+                    setEmailInput("elmer.andrade@doctorsv.gob.sv");
+                    setPinInput("2026");
+                    setAuthError("");
+                  }}
+                  className="inline-flex items-center gap-1 rounded-xl bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
                 >
-                  <Lock size={16} />
-                  <span>Entrar como Doctor Master</span>
-                  <ChevronRight size={16} />
+                  <Shield size={12} /> Dr. Elmer Andrade (Master)
                 </button>
+                {(supervisores || SUPERVISORES_OFICIALES).slice(0, 3).map((sup) => (
+                  <button
+                    key={sup.id}
+                    type="button"
+                    onClick={() => {
+                      setEmailInput(sup.correo);
+                      setPinInput("2026");
+                      setAuthError("");
+                    }}
+                    className="inline-flex items-center gap-1 rounded-xl bg-cyan-50 border border-cyan-200 px-2 py-1 text-[11px] font-bold text-cyan-800 hover:bg-cyan-100 transition shadow-2xs cursor-pointer"
+                  >
+                    <UserCheck size={12} /> {sup.nombre.split(" ")[0]} ({sup.nombre.split(" ")[1] || ""})
+                  </button>
+                ))}
               </div>
-            </form>
-          )}
-        </div>
+            </div>
 
-        {/* ================= FOOTER ================= */}
-        <div className="border-t border-slate-100 bg-slate-50/80 px-6 py-3 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
-          <span>DoctorSV Telemedicina · v2.5</span>
-          <span className="font-semibold text-slate-500">Sede San Miguel</span>
+            {/* Botón de Ingreso Principal */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2.5 rounded-2xl py-3.5 text-[14px] font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer"
+                style={{
+                  background: "linear-gradient(135deg, #0048B5 0%, #0077D4 50%, #0095FF 100%)",
+                }}
+              >
+                <span>Ingresar al Sistema</span>
+                <ArrowRight size={17} />
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
