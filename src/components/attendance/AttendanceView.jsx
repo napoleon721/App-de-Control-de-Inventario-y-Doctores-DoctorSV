@@ -1325,7 +1325,7 @@ export default function AttendanceView({
               {unseatedPresent.length > 0 && (
                 <button
                   type="button"
-                  onClick={handleFinalizeUnseatedPresent}
+                  onClick={() => typeof handleFinalizeUnseatedPresent === "function" && handleFinalizeUnseatedPresent()}
                   className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-indigo-700 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
                   title="Marca salida (FINALIZADO) a todos los médicos que figuran en PRESENTE pero no tienen cubículo asignado"
                 >
@@ -1338,7 +1338,7 @@ export default function AttendanceView({
               {totalSinPuesto > 0 && (
                 <button
                   type="button"
-                  onClick={handleMarkUnseatedAsAbsent}
+                  onClick={() => typeof handleMarkUnseatedAsAbsent === "function" && handleMarkUnseatedAsAbsent()}
                   className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs cursor-pointer"
                   title="Marca a todos los médicos que aún no tienen puesto como ausentes"
                 >

@@ -21,7 +21,8 @@ export default class ErrorBoundary extends React.Component {
   };
 
   handleReload = () => {
-    window.location.reload();
+    // Forzar recarga limpia para descargar la versión más reciente del servidor
+    window.location.href = window.location.origin + window.location.pathname + "?refresh=" + Date.now();
   };
 
   render() {
