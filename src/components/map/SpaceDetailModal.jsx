@@ -350,6 +350,7 @@ export default function SpaceDetailModal({
             </p>
             <div className="flex flex-wrap gap-1.5">
               {Object.keys(ESTADOS).map((k) => {
+                if (!isMaster && k === "OCUPADO" && !form.doctor) return null;
                 const isCurrent = form.estado === k;
                 const e = ESTADOS[k];
                 return (
@@ -384,165 +385,190 @@ export default function SpaceDetailModal({
             </div>
           </div>
 
-          {/* Tarjeta de Asignación de Médico de Nómina & Turno (Visible para TODOS los cubículos) */}
-          <div
-            className={`rounded-2xl p-4 border transition-all duration-200 ${
-              form.doctor
-                ? "border-rose-200 bg-rose-50/70 shadow-2xs"
-                : "border-blue-200/90 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 shadow-2xs"
-            }`}
-          >
-            <div className="flex items-center justify-between mb-2.5">
-              <p
-                className={`text-[11.5px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                  form.doctor ? "text-rose-900" : "text-[#0048B5]"
-                }`}
-              >
-                <Sparkles size={14} className={form.doctor ? "text-rose-600" : "text-[#0095FF]"} />
-                <span>{form.doctor ? "Médico Asignado & Turno" : "Asignar Médico de la Nómina & Turno"}</span>
-              </p>
+          {/* Tarjeta de Asignación de Médico de Nómina & Turno: EXCLUSIVA para Doctor Master */}
+          {isMaster ? (
+            <div
+              className={`rounded-2xl p-4 border transition-all duration-200 ${
+                form.doctor
+                  ? "border-rose-200 bg-rose-50/70 shadow-2xs"
+                  : "border-blue-200/90 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 shadow-2xs"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2.5">
+                <p
+                  className={`text-[11.5px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                    form.doctor ? "text-rose-900" : "text-[#0048B5]"
+                  }`}
+                >
+                  <Sparkles size={14} className={form.doctor ? "text-rose-600" : "text-[#0095FF]"} />
+                  <span>{form.doctor ? "Médico Asignado & Turno" : "Asignar Médico de la Nómina & Turno (Doctor Master)"}</span>
+                </p>
 
-              {form.doctor ? (
+                {form.doctor ? (
+                  <span className="text-[10.5px] font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-600 animate-pulse" />
+                    <span>Puesto Ocupado</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold text-slate-500 bg-white/90 px-2 py-0.5 rounded-full border border-slate-200">
+                    {allDoctors.length} en nómina
+                  </span>
+                )}
+              </div>
+
+              {/* Buscador rápido de médico para no scrollear 150 nombres */}
+              <div className="mb-2.5">
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={doctorSearch}
+                    onChange={(e) => setDoctorSearch(e.target.value)}
+                    placeholder="Filtrar médico por nombre o categoría (ej. Cristian, Planilla)..."
+                    className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-[11.5px] placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#0095FF]/40 shadow-2xs font-medium"
+                  />
+                  {doctorSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setDoctorSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-slate-700">
+                    Médico en turno
+                  </label>
+                  <select
+                    value={form.doctor || ""}
+                    onChange={(e) => {
+                      const docName = e.target.value;
+                      if (docName) {
+                        const foundDoc = allDoctors.find(
+                          (d) => d.nombre.toUpperCase() === docName.toUpperCase()
+                        );
+                        const shiftToSet =
+                          form.horario ||
+                          foundDoc?.horarioDefault ||
+                          (horarios && horarios[0]) ||
+                          "07:00 AM – 12:00 PM";
+                        updateField({
+                          doctor: foundDoc ? foundDoc.nombre : docName,
+                          horario: shiftToSet,
+                          estado: "OCUPADO",
+                        });
+                      } else {
+                        updateField({
+                          doctor: null,
+                          horario: null,
+                        });
+                      }
+                    }}
+                    className={`w-full rounded-xl border bg-white px-3 py-2 text-[12px] font-medium shadow-2xs transition-all ${
+                      form.doctor
+                        ? "border-rose-300 text-rose-950 font-bold focus:ring-2 focus:ring-rose-400"
+                        : "border-slate-200 text-slate-800 focus:ring-2 focus:ring-[#0095FF]/40"
+                    }`}
+                  >
+                    <option value="">— Seleccionar médico de la nómina —</option>
+                    {form.doctor &&
+                      !filteredDoctors.some(
+                        (d) => d.nombre.toUpperCase() === form.doctor.toUpperCase()
+                      ) && (
+                        <option value={form.doctor}>
+                          {form.doctor} (Médico Asignado Actual)
+                        </option>
+                      )}
+                    {filteredDoctors.map((doc) => {
+                      const otherSpace = occupiedDoctorsMap.get(doc.nombre.toUpperCase());
+                      const isHere = form.doctor && form.doctor.toUpperCase() === doc.nombre.toUpperCase();
+                      return (
+                        <option key={doc.nombre} value={doc.nombre}>
+                          {doc.nombre} — {doc.categoria}
+                          {isHere
+                            ? " (En este puesto)"
+                            : otherSpace
+                            ? ` [Ocupando Puesto #${otherSpace}]`
+                            : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-slate-700">
+                    Horario de atención
+                  </label>
+                  <select
+                    value={form.horario || ""}
+                    onChange={(e) => updateField({ horario: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium shadow-2xs focus:ring-2 focus:ring-[#0095FF]/40"
+                  >
+                    <option value="">— Seleccionar horario —</option>
+                    {(horarios || HORARIOS).map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Botón directo para que el Master quite al médico de este puesto */}
+              {form.doctor && (
+                <div className="mt-3 pt-2.5 border-t border-rose-200/80 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-rose-800 font-medium truncate max-w-full">
+                    Asignado a este puesto: <strong className="font-bold">{form.doctor}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateField({
+                        doctor: null,
+                        horario: null,
+                        estado: "DISPONIBLE",
+                        marca: (form.marca && form.marca !== "NO PC") ? form.marca : "DELL",
+                        modelo: form.modelo || "OptiPlex 3080",
+                        categoria: Number(form.id) === 1 ? null : form.categoria,
+                        observaciones: form.observaciones ? `${form.observaciones} | Puesto desocupado por Doctor Master` : "Turno liberado",
+                      });
+                    }}
+                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-bold text-rose-700 bg-white hover:bg-rose-100 border border-rose-300 shadow-2xs active:scale-95 transition-all cursor-pointer ml-auto"
+                  >
+                    <UserX size={14} className="text-rose-600" />
+                    <span>Quitar Médico (Dejar Puesto Disponible)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : form.doctor ? (
+            /* Si NO es Master pero el puesto está ocupado: tarjeta informativa de solo lectura para el supervisor */
+            <div className="rounded-2xl p-3.5 border border-rose-200 bg-rose-50/60 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-rose-900 font-bold text-[12px]">
+                  <Sparkles size={14} className="text-rose-600" />
+                  <span>Médico Asignado en este Puesto</span>
+                </div>
                 <span className="text-[10.5px] font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-rose-600 animate-pulse" />
                   <span>Puesto Ocupado</span>
                 </span>
-              ) : (
-                <span className="text-[10px] font-semibold text-slate-500 bg-white/90 px-2 py-0.5 rounded-full border border-slate-200">
-                  {allDoctors.length} en nómina
+              </div>
+              <div className="mt-2 text-[12px] bg-white/90 p-2.5 rounded-xl border border-rose-100 flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-slate-900 text-[13px]">{form.doctor}</p>
+                  <p className="text-[11.5px] text-slate-500 font-medium">Turno: {form.horario || "Turno Oficial"}</p>
+                </div>
+                <span className="text-[10.5px] text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-lg">
+                  Gestión exclusiva Doctor Master
                 </span>
-              )}
-            </div>
-
-            {/* Buscador rápido de médico para no scrollear 150 nombres */}
-            <div className="mb-2.5">
-              <div className="relative">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={doctorSearch}
-                  onChange={(e) => setDoctorSearch(e.target.value)}
-                  placeholder="Filtrar médico por nombre o categoría (ej. Cristian, Planilla)..."
-                  className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-[11.5px] placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#0095FF]/40 shadow-2xs font-medium"
-                />
-                {doctorSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setDoctorSearch("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-[11px] font-semibold text-slate-700">
-                  Médico en turno
-                </label>
-                <select
-                  value={form.doctor || ""}
-                  onChange={(e) => {
-                    const docName = e.target.value;
-                    if (docName) {
-                      const foundDoc = allDoctors.find(
-                        (d) => d.nombre.toUpperCase() === docName.toUpperCase()
-                      );
-                      const shiftToSet =
-                        form.horario ||
-                        foundDoc?.horarioDefault ||
-                        (horarios && horarios[0]) ||
-                        "07:00 AM – 12:00 PM";
-                      updateField({
-                        doctor: foundDoc ? foundDoc.nombre : docName,
-                        horario: shiftToSet,
-                        estado: "OCUPADO",
-                      });
-                    } else {
-                      updateField({
-                        doctor: null,
-                        horario: null,
-                      });
-                    }
-                  }}
-                  className={`w-full rounded-xl border bg-white px-3 py-2 text-[12px] font-medium shadow-2xs transition-all ${
-                    form.doctor
-                      ? "border-rose-300 text-rose-950 font-bold focus:ring-2 focus:ring-rose-400"
-                      : "border-slate-200 text-slate-800 focus:ring-2 focus:ring-[#0095FF]/40"
-                  }`}
-                >
-                  <option value="">— Seleccionar médico de la nómina —</option>
-                  {form.doctor &&
-                    !filteredDoctors.some(
-                      (d) => d.nombre.toUpperCase() === form.doctor.toUpperCase()
-                    ) && (
-                      <option value={form.doctor}>
-                        {form.doctor} (Médico Asignado Actual)
-                      </option>
-                    )}
-                  {filteredDoctors.map((doc) => {
-                    const otherSpace = occupiedDoctorsMap.get(doc.nombre.toUpperCase());
-                    const isHere = form.doctor && form.doctor.toUpperCase() === doc.nombre.toUpperCase();
-                    return (
-                      <option key={doc.nombre} value={doc.nombre}>
-                        {doc.nombre} — {doc.categoria}
-                        {isHere
-                          ? " (En este puesto)"
-                          : otherSpace
-                          ? ` [Ocupando Puesto #${otherSpace}]`
-                          : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[11px] font-semibold text-slate-700">
-                  Horario de atención
-                </label>
-                <select
-                  value={form.horario || ""}
-                  onChange={(e) => updateField({ horario: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium shadow-2xs focus:ring-2 focus:ring-[#0095FF]/40"
-                >
-                  <option value="">— Seleccionar horario —</option>
-                  {(horarios || HORARIOS).map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Botón directo para quitar al médico de este puesto */}
-            {form.doctor && (
-              <div className="mt-3 pt-2.5 border-t border-rose-200/80 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] text-rose-800 font-medium truncate max-w-full">
-                  Asignado a este puesto: <strong className="font-bold">{form.doctor}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateField({
-                      doctor: null,
-                      horario: null,
-                      estado: "DISPONIBLE",
-                      marca: (form.marca && form.marca !== "NO PC") ? form.marca : "DELL",
-                      modelo: form.modelo || "OptiPlex 3080",
-                      categoria: Number(form.id) === 1 ? null : form.categoria,
-                      observaciones: form.observaciones ? `${form.observaciones} | Puesto desocupado por Master/Supervisor` : "Turno liberado",
-                    });
-                  }}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-bold text-rose-700 bg-white hover:bg-rose-100 border border-rose-300 shadow-2xs active:scale-95 transition-all cursor-pointer ml-auto"
-                >
-                  <UserX size={14} className="text-rose-600" />
-                  <span>Quitar Médico (Dejar Puesto Disponible)</span>
-                </button>
-              </div>
-            )}
-          </div>
+          ) : null}
 
           {/* Equipment Details */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
