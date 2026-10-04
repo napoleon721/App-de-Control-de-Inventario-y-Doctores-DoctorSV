@@ -4,7 +4,9 @@
  */
 
 // URL del Webhook de Google Apps Script (cuando el usuario la configure en .env o localStorage)
-const DEFAULT_APPS_SCRIPT_URL = import.meta.env.VITE_GOOGLE_SHEETS_API_URL || "";
+const DEFAULT_APPS_SCRIPT_URL =
+  import.meta.env.VITE_GOOGLE_SHEETS_API_URL ||
+  "https://script.google.com/macros/s/AKfycbxUpY1ZWCJTN8ahWDTE7WvwFr-D4x_v8wAIwCBr5rFob4_ls8CjnPpt042U1Q-_vc0oeA/exec";
 
 // Claves de persistencia para configuración dinámica
 const STORAGE_KEY_SHEETS_URL = "DOCTORSV_GOOGLE_SHEETS_URL";

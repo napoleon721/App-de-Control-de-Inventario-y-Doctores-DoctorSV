@@ -460,11 +460,19 @@ function executeUpdateSpace(params) {
 function doPost(e) {
   try {
     var body = {};
+    if (e && e.parameter) {
+      for (var k in e.parameter) {
+        body[k] = e.parameter[k];
+      }
+    }
     if (e && e.postData && e.postData.contents) {
       try {
-        body = JSON.parse(e.postData.contents);
+        var parsed = JSON.parse(e.postData.contents);
+        for (var p in parsed) {
+          body[p] = parsed[p];
+        }
       } catch (errParse) {
-        body = {};
+        // Podría ser texto plano o urlencoded
       }
     }
 
