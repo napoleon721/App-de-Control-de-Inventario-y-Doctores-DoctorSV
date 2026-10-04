@@ -340,7 +340,11 @@ export default function AuthPortal({
     e.preventDefault();
     const sup = supervisores.find((s) => s.id === selectedSupId) || supervisores[0] || SUPERVISORES_OFICIALES[0];
     const cleanPin = supervisorPin.trim().toLowerCase();
-    if (cleanPin && ["2026", "sup2026", "supervisor", "admin", "1234", "doctorsv"].includes(cleanPin)) {
+
+    // Como el campo indica "(Opcional)", permitimos entrar si está vacío o si ingresa el PIN correcto (2026)
+    const isValidPin = !cleanPin || ["2026", "sup2026", "supervisor", "admin", "1234", "doctorsv"].includes(cleanPin);
+
+    if (isValidPin) {
       setSupervisorError("");
       if (onLoginSupervisor) {
         onLoginSupervisor({
@@ -354,12 +358,12 @@ export default function AuthPortal({
           bloqueFin: sup.bloqueFin,
           totalPuestos: sup.totalPuestos,
           email: sup.correo,
-          authProvider: "pin",
+          authProvider: cleanPin ? "pin" : "direct",
           loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
         });
       }
     } else {
-      setSupervisorError("PIN incorrecto o vacío. Por favor ingresa el PIN de supervisor.");
+      setSupervisorError("PIN incorrecto. El PIN predeterminado es: 2026 (o puedes dejarlo en blanco).");
     }
   }
 
