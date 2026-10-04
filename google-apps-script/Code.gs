@@ -80,7 +80,7 @@ function getInventorySheet(ss) {
 }
 
 function getColumnMapping(sheet) {
-  var lastCol = Math.max(15, sheet.getLastColumn());
+  var lastCol = Math.max(16, sheet.getLastColumn());
   var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   var map = {
     idCol: 1,
@@ -88,10 +88,18 @@ function getColumnMapping(sheet) {
     marcaCol: 3,
     modeloCol: 4,
     activoCol: 5,
-    doctorCol: -1,
-    horarioCol: -1,
+    mouseCol: 6,
+    headsetCol: 7,
+    monitorCol: 8,
+    activoMonitorCol: 9,
+    marcaMonitorCol: 10,
+    hubCol: 11,
     obsCol: 12,
-    ultimoMovCol: 13
+    ultimoMovCol: 13,
+    ubicacionAnteriorCol: 14,
+    categoriaCol: 15,
+    doctorCol: -1,
+    horarioCol: -1
   };
 
   for (var i = 0; i < headers.length; i++) {
@@ -100,11 +108,19 @@ function getColumnMapping(sheet) {
     else if (h === "ESTADO") map.estadoCol = i + 1;
     else if (h.indexOf("MARCA") !== -1 && h.indexOf("MONITOR") === -1) map.marcaCol = i + 1;
     else if (h === "MODELO") map.modeloCol = i + 1;
-    else if (h === "ACTIVO") map.activoCol = i + 1;
+    else if (h === "ACTIVO" || h === "ACTIVO PC") map.activoCol = i + 1;
+    else if (h === "MOUSE" || h === "MAUSE") map.mouseCol = i + 1;
+    else if (h === "HEADSET" || h === "AURICULAR") map.headsetCol = i + 1;
+    else if (h === "MONITOR") map.monitorCol = i + 1;
+    else if (h.indexOf("ACTIVO") !== -1 && h.indexOf("MONITOR") !== -1) map.activoMonitorCol = i + 1;
+    else if (h.indexOf("MARCA") !== -1 && h.indexOf("MONITOR") !== -1) map.marcaMonitorCol = i + 1;
+    else if (h === "HUB" || h.indexOf("HUB") !== -1) map.hubCol = i + 1;
     else if (h === "DOCTOR" || h === "MEDICO") map.doctorCol = i + 1;
     else if (h === "HORARIO" || h === "TURNO") map.horarioCol = i + 1;
     else if (h.indexOf("OBSERV") !== -1) map.obsCol = i + 1;
     else if (h.indexOf("ULTIMO") !== -1 || h.indexOf("FECHA") !== -1) map.ultimoMovCol = i + 1;
+    else if (h.indexOf("UBICACION") !== -1) map.ubicacionAnteriorCol = i + 1;
+    else if (h.indexOf("CATEGORIA") !== -1) map.categoriaCol = i + 1;
   }
 
   // Si no existen las columnas DOCTOR o HORARIO, se crean al final de la tabla
@@ -150,6 +166,12 @@ function doGet(e) {
       });
     }
 
+    // 0.1 Actualizar estado y periféricos de un puesto vía GET (Garantiza ejecución instantánea desde navegadores)
+    if (action === "updateSpace") {
+      var updateRes = executeUpdateSpace(e.parameter);
+      return createJsonResponse(updateRes);
+    }
+
     // 1. Obtener puestos / cubículos del inventario (Sistema TM-SM V2)
     if (action === "getSpaces") {
       var ss = getSpacesSpreadsheet();
@@ -166,12 +188,36 @@ function doGet(e) {
         var idNum = Number(rawId);
         if (idNum < 1 || idNum > 200) continue;
 
+        var rawMouse = map.mouseCol > 0 ? row[map.mouseCol - 1] : 0;
+        var hasMouse = (rawMouse == 1 || rawMouse === 1.0 || rawMouse === "1" || rawMouse === true);
+
+        var rawHeadset = map.headsetCol > 0 ? row[map.headsetCol - 1] : 0;
+        var hasHeadset = (rawHeadset == 1 || rawHeadset === 1.0 || rawHeadset === "1" || rawHeadset === true);
+
+        var rawHub = map.hubCol > 0 ? row[map.hubCol - 1] : 0;
+        var hasHub = (rawHub == 1 || rawHub === 1.0 || rawHub === "1" || rawHub === true);
+
+        var rawMonitor = map.monitorCol > 0 ? row[map.monitorCol - 1] : 0;
+        var hasMonitor = (rawMonitor == 1 || rawMonitor === 1.0 || rawMonitor === "1" || rawMonitor === true);
+
+        var monitorObj = null;
+        if (hasMonitor || (map.marcaMonitorCol > 0 && row[map.marcaMonitorCol - 1]) || (map.activoMonitorCol > 0 && row[map.activoMonitorCol - 1])) {
+          monitorObj = {
+            marca: map.marcaMonitorCol > 0 && row[map.marcaMonitorCol - 1] ? String(row[map.marcaMonitorCol - 1]) : "DELL",
+            activo: map.activoMonitorCol > 0 && row[map.activoMonitorCol - 1] ? String(row[map.activoMonitorCol - 1]) : ""
+          };
+        }
+
         spaces.push({
           id: idNum,
           estado: row[map.estadoCol - 1] || "DISPONIBLE",
           marca: row[map.marcaCol - 1] || "DELL",
           modelo: row[map.modeloCol - 1] || "OptiPlex 3080",
           activoPc: row[map.activoCol - 1] || "",
+          mouse: hasMouse,
+          headset: hasHeadset,
+          hub: hasHub,
+          monitor: monitorObj,
           doctor: (map.doctorCol > 0 && row[map.doctorCol - 1]) ? String(row[map.doctorCol - 1]) : null,
           horario: (map.horarioCol > 0 && row[map.horarioCol - 1]) ? String(row[map.horarioCol - 1]) : null,
           observaciones: (map.obsCol > 0 && row[map.obsCol - 1]) ? String(row[map.obsCol - 1]) : "",
@@ -325,57 +371,109 @@ function doGet(e) {
   }
 }
 
+function executeUpdateSpace(params) {
+  try {
+    var ss = getSpacesSpreadsheet();
+    var sheet = getInventorySheet(ss);
+    var map = getColumnMapping(sheet);
+    var data = sheet.getDataRange().getValues();
+    var targetId = Number(params.spaceId || params.id);
+    var rowIndex = -1;
+
+    for (var i = 1; i < data.length; i++) {
+      if (Number(data[i][map.idCol - 1]) === targetId) {
+        rowIndex = i + 1; // 1-indexed
+        break;
+      }
+    }
+
+    if (rowIndex <= 0) {
+      return { success: false, message: "Puesto #" + targetId + " no encontrado" };
+    }
+
+    if (params.estado !== undefined && map.estadoCol > 0) {
+      sheet.getRange(rowIndex, map.estadoCol).setValue(params.estado);
+    }
+    if (params.doctor !== undefined && map.doctorCol > 0) {
+      sheet.getRange(rowIndex, map.doctorCol).setValue(params.doctor);
+    }
+    if (params.horario !== undefined && map.horarioCol > 0) {
+      sheet.getRange(rowIndex, map.horarioCol).setValue(params.horario);
+    }
+    if (params.marca !== undefined && map.marcaCol > 0) {
+      sheet.getRange(rowIndex, map.marcaCol).setValue(params.marca);
+    }
+    if (params.modelo !== undefined && map.modeloCol > 0) {
+      sheet.getRange(rowIndex, map.modeloCol).setValue(params.modelo);
+    }
+    if (params.activoPc !== undefined && map.activoCol > 0) {
+      sheet.getRange(rowIndex, map.activoCol).setValue(params.activoPc);
+    }
+
+    // === PERIFÉRICOS CON FORMATO 1 / 0 (1 = TIENE, 0 = NO TIENE) ===
+    if (params.mouse !== undefined && map.mouseCol > 0) {
+      var m = (params.mouse == 1 || params.mouse === 1 || params.mouse === "1" || params.mouse === true || params.mouse === "true") ? 1 : 0;
+      sheet.getRange(rowIndex, map.mouseCol).setValue(m);
+    }
+    if (params.headset !== undefined && map.headsetCol > 0) {
+      var h = (params.headset == 1 || params.headset === 1 || params.headset === "1" || params.headset === true || params.headset === "true") ? 1 : 0;
+      sheet.getRange(rowIndex, map.headsetCol).setValue(h);
+    }
+    if (params.hub !== undefined && map.hubCol > 0) {
+      var hb = (params.hub == 1 || params.hub === 1 || params.hub === "1" || params.hub === true || params.hub === "true") ? 1 : 0;
+      sheet.getRange(rowIndex, map.hubCol).setValue(hb);
+    }
+    if (params.monitor !== undefined && map.monitorCol > 0) {
+      var mon = (params.monitor == 1 || params.monitor === 1 || params.monitor === "1" || params.monitor === true || params.monitor === "true") ? 1 : 0;
+      sheet.getRange(rowIndex, map.monitorCol).setValue(mon);
+    }
+    if (params.activoMonitor !== undefined && map.activoMonitorCol > 0) {
+      sheet.getRange(rowIndex, map.activoMonitorCol).setValue(params.activoMonitor);
+    }
+    if (params.marcaMonitor !== undefined && map.marcaMonitorCol > 0) {
+      sheet.getRange(rowIndex, map.marcaMonitorCol).setValue(params.marcaMonitor);
+    }
+
+    if (params.observaciones !== undefined && map.obsCol > 0) {
+      sheet.getRange(rowIndex, map.obsCol).setValue(params.observaciones);
+    }
+    if (map.ultimoMovCol > 0) {
+      sheet.getRange(rowIndex, map.ultimoMovCol).setValue(new Date());
+    }
+
+    return {
+      success: true,
+      updatedSpaceId: targetId,
+      mouse: params.mouse !== undefined ? ((params.mouse == 1 || params.mouse === true || params.mouse === "1") ? 1 : 0) : undefined,
+      headset: params.headset !== undefined ? ((params.headset == 1 || params.headset === true || params.headset === "1") ? 1 : 0) : undefined,
+      hub: params.hub !== undefined ? ((params.hub == 1 || params.hub === true || params.hub === "1") ? 1 : 0) : undefined,
+      monitor: params.monitor !== undefined ? ((params.monitor == 1 || params.monitor === true || params.monitor === "1") ? 1 : 0) : undefined,
+      book: ss.getName(),
+      sheet: sheet.getName(),
+      row: rowIndex
+    };
+  } catch (err) {
+    return { success: false, error: err.toString() };
+  }
+}
+
 function doPost(e) {
   try {
     var body = {};
     if (e && e.postData && e.postData.contents) {
-      body = JSON.parse(e.postData.contents);
+      try {
+        body = JSON.parse(e.postData.contents);
+      } catch (errParse) {
+        body = {};
+      }
     }
 
-    var action = body.action || "updateSpace";
+    var action = body.action || (e && e.parameter && e.parameter.action) || "updateSpace";
 
-    // 1. Actualizar estado de puesto / asignación de doctor (En Sistema TM-SM V2)
+    // 1. Actualizar estado de puesto / periféricos 1 y 0 (En Sistema TM-SM V2)
     if (action === "updateSpace") {
-      var ss = getSpacesSpreadsheet();
-      var sheet = getInventorySheet(ss);
-      var map = getColumnMapping(sheet);
-      var data = sheet.getDataRange().getValues();
-      var targetId = Number(body.spaceId);
-      var rowIndex = -1;
-
-      for (var i = 1; i < data.length; i++) {
-        if (Number(data[i][map.idCol - 1]) === targetId) {
-          rowIndex = i + 1; // 1-indexed
-          break;
-        }
-      }
-
-      if (rowIndex > 0) {
-        if (body.estado !== undefined && map.estadoCol > 0) {
-          sheet.getRange(rowIndex, map.estadoCol).setValue(body.estado);
-        }
-        if (body.doctor !== undefined && map.doctorCol > 0) {
-          sheet.getRange(rowIndex, map.doctorCol).setValue(body.doctor);
-        }
-        if (body.horario !== undefined && map.horarioCol > 0) {
-          sheet.getRange(rowIndex, map.horarioCol).setValue(body.horario);
-        }
-        if (body.observaciones !== undefined && map.obsCol > 0) {
-          sheet.getRange(rowIndex, map.obsCol).setValue(body.observaciones);
-        }
-        if (map.ultimoMovCol > 0) {
-          sheet.getRange(rowIndex, map.ultimoMovCol).setValue(new Date());
-        }
-        return createJsonResponse({
-          success: true,
-          updatedSpaceId: targetId,
-          book: ss.getName(),
-          sheet: sheet.getName(),
-          row: rowIndex
-        });
-      } else {
-        return createJsonResponse({ success: false, message: "Puesto #" + targetId + " no encontrado" });
-      }
+      var resObj = executeUpdateSpace(body);
+      return createJsonResponse(resObj);
     }
 
     // 1.1 Actualización por lote (Batch) de múltiples puestos en una sola transacción
@@ -398,7 +496,7 @@ function doPost(e) {
 
       for (var b = 0; b < batchList.length; b++) {
         var item = batchList[b];
-        var sId = Number(item.spaceId);
+        var sId = Number(item.spaceId || item.id);
         var rIdx = rowIndexMap[sId];
         if (rIdx) {
           if (item.estado !== undefined && map.estadoCol > 0) {
@@ -410,6 +508,30 @@ function doPost(e) {
           if (item.horario !== undefined && map.horarioCol > 0) {
             sheet.getRange(rIdx, map.horarioCol).setValue(item.horario);
           }
+          if (item.marca !== undefined && map.marcaCol > 0) {
+            sheet.getRange(rIdx, map.marcaCol).setValue(item.marca);
+          }
+          if (item.modelo !== undefined && map.modeloCol > 0) {
+            sheet.getRange(rIdx, map.modeloCol).setValue(item.modelo);
+          }
+          if (item.activoPc !== undefined && map.activoCol > 0) {
+            sheet.getRange(rIdx, map.activoCol).setValue(item.activoPc);
+          }
+
+          // Periféricos 1 y 0 en batch
+          if (item.mouse !== undefined && map.mouseCol > 0) {
+            sheet.getRange(rIdx, map.mouseCol).setValue((item.mouse == 1 || item.mouse === true || item.mouse === "1") ? 1 : 0);
+          }
+          if (item.headset !== undefined && map.headsetCol > 0) {
+            sheet.getRange(rIdx, map.headsetCol).setValue((item.headset == 1 || item.headset === true || item.headset === "1") ? 1 : 0);
+          }
+          if (item.hub !== undefined && map.hubCol > 0) {
+            sheet.getRange(rIdx, map.hubCol).setValue((item.hub == 1 || item.hub === true || item.hub === "1") ? 1 : 0);
+          }
+          if (item.monitor !== undefined && map.monitorCol > 0) {
+            sheet.getRange(rIdx, map.monitorCol).setValue((item.monitor == 1 || item.monitor === true || item.monitor === "1") ? 1 : 0);
+          }
+
           if (item.observaciones !== undefined && map.obsCol > 0) {
             sheet.getRange(rIdx, map.obsCol).setValue(item.observaciones);
           }

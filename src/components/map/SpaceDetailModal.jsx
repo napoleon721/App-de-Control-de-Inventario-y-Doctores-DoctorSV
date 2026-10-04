@@ -427,8 +427,11 @@ export default function SpaceDetailModal({
 
               <div className="mt-3 pt-2.5 border-t border-slate-200">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                    Periféricos & Accesorios
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                    <span>Periféricos & Accesorios</span>
+                    <span className="text-[9.5px] font-bold font-mono text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded" title="Sincroniza en Google Sheets como 1 (tiene) y 0 (no tiene)">
+                      Sheets 1/0
+                    </span>
                   </p>
                   <span className="text-[10px] text-slate-400 font-medium">1 Clic para alternar</span>
                 </div>
@@ -529,22 +532,28 @@ export default function SpaceDetailModal({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              className="flex items-center gap-1.5 rounded-xl px-5 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 shadow-sm"
-              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-            >
-              <Save size={14} /> Guardar Cambios
-            </button>
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            <span className="text-[11px] text-slate-500 font-medium hidden sm:inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Sincroniza Firestore y Google Sheets</span>
+            </span>
+            <div className="flex items-center gap-2.5 ml-auto">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="flex items-center gap-1.5 rounded-xl px-5 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 shadow-sm active:scale-95 cursor-pointer"
+                style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+              >
+                <Save size={14} /> Guardar Cambios
+              </button>
+            </div>
           </div>
         </div>
       </div>

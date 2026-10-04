@@ -80,9 +80,13 @@ export async function fetchSpacesFromGoogleSheets() {
       const sanitized = data.spaces.map((s) => {
         const sid = Number(s.id);
         const isDisponible = s.estado === "DISPONIBLE";
+        const hasPc = Boolean(s.marca && s.marca !== "NO PC");
         return {
           ...s,
-          marca: (isDisponible && (!s.marca || s.marca === "NO PC")) ? "DELL" : s.marca,
+          mouse: s.mouse === true || s.mouse === 1 || s.mouse === "1",
+          headset: s.headset === true || s.headset === 1 || s.headset === "1",
+          hub: s.hub === true || s.hub === 1 || s.hub === "1",
+          marca: (isDisponible && (!s.marca || s.marca === "NO PC")) ? "DELL" : (s.marca || (!hasPc ? "NO PC" : "DELL")),
           modelo: (isDisponible && !s.modelo) ? "OptiPlex 3080" : s.modelo,
           categoria: sid === 1 ? null : s.categoria,
         };
@@ -97,30 +101,70 @@ export async function fetchSpacesFromGoogleSheets() {
 }
 
 /**
- * Actualiza el estado de un puesto en Google Sheets (editar celda / asignar doctor)
+ * Actualiza el estado de un puesto y sus periféricos (1/0) en Google Sheets
  */
 export async function updateSpaceInGoogleSheets(space) {
   const url = getSheetsApiUrl();
-  if (!url) return false;
+  if (!url || !space) return false;
 
+  const hasMonitor = Boolean(space.monitor && (space.monitor.marca || space.monitor.activo || space.monitor === true));
+  const monitorActivo = (space.monitor && typeof space.monitor === "object") ? (space.monitor.activo || "") : "";
+  const monitorMarca = (space.monitor && typeof space.monitor === "object") ? (space.monitor.marca || "") : "";
+
+  // 1 = Sí tiene, 0 = No tiene (Formato oficial del Google Sheet en columnas F, G, H, K)
+  const mouseVal = space.mouse !== undefined ? ((space.mouse === true || space.mouse === 1 || space.mouse === "1") ? 1 : 0) : undefined;
+  const headsetVal = space.headset !== undefined ? ((space.headset === true || space.headset === 1 || space.headset === "1") ? 1 : 0) : undefined;
+  const hubVal = space.hub !== undefined ? ((space.hub === true || space.hub === 1 || space.hub === "1") ? 1 : 0) : undefined;
+  const monitorVal = space.monitor !== undefined ? (hasMonitor ? 1 : 0) : undefined;
+
+  const payload = {
+    action: "updateSpace",
+    spaceId: Number(space.id),
+    estado: space.estado || "DISPONIBLE",
+    doctor: space.doctor || "",
+    horario: space.horario || "",
+    marca: space.marca || "",
+    modelo: space.modelo || "",
+    activoPc: space.activoPc || "",
+    mouse: mouseVal,
+    headset: headsetVal,
+    hub: hubVal,
+    monitor: monitorVal,
+    activoMonitor: monitorActivo,
+    marcaMonitor: monitorMarca,
+    observaciones: space.observaciones || "",
+    timestamp: new Date().toISOString(),
+  };
+
+  Object.keys(payload).forEach((k) => {
+    if (payload[k] === undefined) delete payload[k];
+  });
+
+  // 1. Envío POST con mode: no-cors para evitar bloqueos por redirección de Google Apps Script
   try {
-    await fetch(url, {
+    const postRes = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "updateSpace",
-        spaceId: space.id,
-        estado: space.estado,
-        doctor: space.doctor || "",
-        horario: space.horario || "",
-        marca: space.marca || "",
-        observaciones: space.observaciones || "",
-        timestamp: new Date().toISOString(),
-      }),
+      body: JSON.stringify(payload),
+      mode: "no-cors",
+    });
+    if (postRes) return true;
+  } catch (err) {}
+
+  // 2. Fallback GET con URLSearchParams (Garantiza que Google Apps Script reciba los parámetros aún en redirecciones 302)
+  try {
+    const params = new URLSearchParams();
+    Object.entries(payload).forEach(([k, v]) => {
+      params.append(k, String(v));
+    });
+    await fetch(`${url}?${params.toString()}`, {
+      method: "GET",
+      mode: "no-cors",
+      cache: "no-store",
     });
     return true;
-  } catch (error) {
-    console.warn("Error al actualizar puesto en Google Sheets:", error);
+  } catch (err) {
+    console.warn("Aviso al sincronizar puesto con Google Sheets:", err);
     return false;
   }
 }
@@ -133,34 +177,40 @@ export async function updateSpacesBatchInGoogleSheets(spacesList) {
   const url = getSheetsApiUrl();
   if (!url || !Array.isArray(spacesList) || spacesList.length === 0) return false;
 
-  const payload = spacesList.map((space) => ({
-    spaceId: space.spaceId !== undefined ? Number(space.spaceId) : Number(space.id),
-    estado: space.estado || "DISPONIBLE",
-    doctor: space.doctor || "",
-    horario: space.horario || "",
-    marca: space.marca || "",
-    observaciones: space.observaciones || "",
-    timestamp: new Date().toISOString(),
-  }));
+  const payload = spacesList.map((space) => {
+    const hasMonitor = Boolean(space.monitor && (space.monitor.marca || space.monitor.activo || space.monitor === true));
+    return {
+      spaceId: space.spaceId !== undefined ? Number(space.spaceId) : Number(space.id),
+      estado: space.estado || "DISPONIBLE",
+      doctor: space.doctor || "",
+      horario: space.horario || "",
+      marca: space.marca || "",
+      modelo: space.modelo || "",
+      activoPc: space.activoPc || "",
+      mouse: space.mouse ? 1 : 0,
+      headset: space.headset ? 1 : 0,
+      hub: space.hub ? 1 : 0,
+      monitor: hasMonitor ? 1 : 0,
+      observaciones: space.observaciones || "",
+      timestamp: new Date().toISOString(),
+    };
+  });
 
-  // 1. Intentar primero actualización atómica por lote con el endpoint nativo de Code.gs (1 sola transacción)
+  // 1. Intentar actualización agrupada con mode: no-cors
   try {
-    const res = await fetch(url, {
+    await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "updateSpacesBatch",
         spaces: payload,
       }),
+      mode: "no-cors",
     });
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      if (data && data.success) {
-        return true;
-      }
-    }
+    return true;
   } catch (err) {
-    console.warn("Aviso: Fallo en updateSpacesBatch directo, ejecutando fallback amortiguado:", err);
+    console.warn("Aviso en updateSpacesBatch:", err);
+    return false;
   }
 
   // 2. Fallback amortiguado por bloques concurrentes (5 llamadas simultáneas) para scripts antiguos

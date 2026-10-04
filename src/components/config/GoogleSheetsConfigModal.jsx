@@ -57,26 +57,100 @@ export default function GoogleSheetsConfigModal({ onClose, onSyncComplete, onCon
   }
 
   function handleCopyScriptInstructions() {
-    const scriptCode = `// Pega este código en Extensiones -> Apps Script de tu Google Sheet
+    const scriptCode = `// DoctorSV — Google Apps Script con Soporte de Periféricos (1 y 0)
+// Pega este código en Extensiones -> Apps Script de tu Google Sheet y publica como Aplicación Web
+
+function getColumnMapping(sheet) {
+  var lastCol = Math.max(16, sheet.getLastColumn());
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var map = {
+    idCol: 1, estadoCol: 2, marcaCol: 3, modeloCol: 4, activoCol: 5,
+    mouseCol: 6, headsetCol: 7, monitorCol: 8, activoMonitorCol: 9,
+    marcaMonitorCol: 10, hubCol: 11, obsCol: 12, ultimoMovCol: 13,
+    doctorCol: -1, horarioCol: -1
+  };
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i] || "").trim().toUpperCase();
+    if (h === "ESPACIO" || h === "ID" || h === "PUESTO") map.idCol = i + 1;
+    else if (h === "ESTADO") map.estadoCol = i + 1;
+    else if (h.indexOf("MARCA") !== -1 && h.indexOf("MONITOR") === -1) map.marcaCol = i + 1;
+    else if (h === "MODELO") map.modeloCol = i + 1;
+    else if (h === "ACTIVO" || h === "ACTIVO PC") map.activoCol = i + 1;
+    else if (h === "MOUSE" || h === "MAUSE") map.mouseCol = i + 1;
+    else if (h === "HEADSET" || h === "AURICULAR") map.headsetCol = i + 1;
+    else if (h === "MONITOR") map.monitorCol = i + 1;
+    else if (h === "HUB" || h.indexOf("HUB") !== -1) map.hubCol = i + 1;
+    else if (h === "DOCTOR" || h === "MEDICO") map.doctorCol = i + 1;
+    else if (h === "HORARIO" || h === "TURNO") map.horarioCol = i + 1;
+    else if (h.indexOf("OBSERV") !== -1) map.obsCol = i + 1;
+    else if (h.indexOf("ULTIMO") !== -1 || h.indexOf("FECHA") !== -1) map.ultimoMovCol = i + 1;
+  }
+  return map;
+}
+
+function executeUpdate(p) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("INVENTARIO ACTUALIZADO") || ss.getSheetByName("Inventario") || ss.getSheets()[0];
+  var map = getColumnMapping(sheet);
+  var data = sheet.getDataRange().getValues();
+  var targetId = Number(p.spaceId || p.id);
+  var r = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (Number(data[i][map.idCol - 1]) === targetId) { r = i + 1; break; }
+  }
+  if (r <= 0) return { success: false, message: "Puesto #" + targetId + " no encontrado" };
+
+  if (p.estado !== undefined && map.estadoCol > 0) sheet.getRange(r, map.estadoCol).setValue(p.estado);
+  if (p.doctor !== undefined && map.doctorCol > 0) sheet.getRange(r, map.doctorCol).setValue(p.doctor);
+  if (p.horario !== undefined && map.horarioCol > 0) sheet.getRange(r, map.horarioCol).setValue(p.horario);
+  if (p.marca !== undefined && map.marcaCol > 0) sheet.getRange(r, map.marcaCol).setValue(p.marca);
+
+  // Periféricos en formato 1 (tiene) y 0 (no tiene)
+  if (p.mouse !== undefined && map.mouseCol > 0) sheet.getRange(r, map.mouseCol).setValue((p.mouse == 1 || p.mouse === true || p.mouse === "1") ? 1 : 0);
+  if (p.headset !== undefined && map.headsetCol > 0) sheet.getRange(r, map.headsetCol).setValue((p.headset == 1 || p.headset === true || p.headset === "1") ? 1 : 0);
+  if (p.hub !== undefined && map.hubCol > 0) sheet.getRange(r, map.hubCol).setValue((p.hub == 1 || p.hub === true || p.hub === "1") ? 1 : 0);
+  if (p.monitor !== undefined && map.monitorCol > 0) sheet.getRange(r, map.monitorCol).setValue((p.monitor == 1 || p.monitor === true || p.monitor === "1") ? 1 : 0);
+
+  if (p.observaciones !== undefined && map.obsCol > 0) sheet.getRange(r, map.obsCol).setValue(p.observaciones);
+  if (map.ultimoMovCol > 0) sheet.getRange(r, map.ultimoMovCol).setValue(new Date());
+
+  return { success: true, updatedSpaceId: targetId };
+}
+
 function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) || "getSpaces";
+  if (action === "updateSpace") {
+    return ContentService.createTextOutput(JSON.stringify(executeUpdate(e.parameter))).setMimeType(ContentService.MimeType.JSON);
+  }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Inventario") || ss.getSheets()[0];
+  var sheet = ss.getSheetByName("INVENTARIO ACTUALIZADO") || ss.getSheetByName("Inventario") || ss.getSheets()[0];
+  var map = getColumnMapping(sheet);
   var data = sheet.getDataRange().getValues();
   var spaces = [];
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    if (!row[0]) continue;
+    if (!row[map.idCol - 1]) continue;
     spaces.push({
-      id: Number(row[0]),
-      estado: row[1] || "DISPONIBLE",
-      marca: row[2] || "DELL",
-      doctor: row[5] || null,
-      horario: row[6] || null
+      id: Number(row[map.idCol - 1]),
+      estado: row[map.estadoCol - 1] || "DISPONIBLE",
+      marca: row[map.marcaCol - 1] || "DELL",
+      mouse: row[map.mouseCol - 1] == 1,
+      headset: row[map.headsetCol - 1] == 1,
+      hub: row[map.hubCol - 1] == 1,
+      doctor: (map.doctorCol > 0 ? row[map.doctorCol - 1] : null) || null,
+      horario: (map.horarioCol > 0 ? row[map.horarioCol - 1] : null) || null
     });
   }
-  return ContentService.createTextOutput(JSON.stringify({ success: true, count: spaces.length, spaces: spaces }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify({ success: true, count: spaces.length, spaces: spaces })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var body = {};
+  if (e && e.postData && e.postData.contents) {
+    try { body = JSON.parse(e.postData.contents); } catch(err) { body = {}; }
+  }
+  var res = executeUpdate(body);
+  return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
 }`;
     navigator.clipboard.writeText(scriptCode);
     setCopiedScript(true);
