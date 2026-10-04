@@ -39,7 +39,8 @@ export function normalizeDocName(name) {
   const result = String(name)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remueve tildes y diacríticos
-    .replace(/^(DR(A)?\.|DOCTOR(A)?)\s*/i, "") // Remueve prefijos Dr. / Dra.
+    .trim()
+    .replace(/^((DR(A)?\.|DOCTOR(A)?|DR\(A\)\.?))\s*/i, "") // Remueve prefijos Dr. / Dra. / Dr(a).
     .replace(/\s*\([^)]*\)/g, "") // Remueve anotaciones entre paréntesis
     .toLowerCase()
     .trim()
@@ -93,6 +94,7 @@ export function normalizeHorario(val) {
   if (!val) return "";
   return String(val)
     .replace(/[\u2013\u2014\u2212]/g, "-") // Normaliza en-dash, em-dash a guion normal "-"
+    .replace(/\b0([1-9]):/g, "$1:") // Normaliza 07:00 a 7:00 para comparación uniforme
     .replace(/\s+/g, " ")
     .toUpperCase()
     .trim();
