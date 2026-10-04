@@ -679,6 +679,32 @@ export default function AttendanceView({
     }
   }
 
+  // Marcar como AUSENTE a todos los médicos que figuran como faltantes / sin puesto
+  function handleMarkUnseatedAsAbsent() {
+    const unseatedDocs = batchDoctors.filter(
+      (d) =>
+        (d.status === "PENDIENTE" && (!d.espacio || !d.enMiLote)) ||
+        (d.status === "PRESENTE" && (!d.espacio || !d.enMiLote))
+    );
+    if (unseatedDocs.length === 0) {
+      alert("No hay médicos faltantes sin puesto para marcar como ausentes.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿Deseas marcar como AUSENTES a los ${unseatedDocs.length} médico(s) faltantes que no tienen cubículo asignado?`
+      )
+    ) {
+      return;
+    }
+    unseatedDocs.forEach((d) => {
+      handleSetAttendance(d.nombre, "AUSENTE");
+      if (onUnassignDoctor && d.espacio) {
+        onUnassignDoctor(d.nombre, d.espacio);
+      }
+    });
+  }
+
   // Estado para el modal de asignación manual de puesto
   const [manualAssignDoc, setManualAssignDoc] = useState(null);
   const [targetSpaceId, setTargetSpaceId] = useState("");
