@@ -1,6 +1,15 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc } from "firebase/firestore";
 import fs from "fs";
+import {
+  SUPERVISORES_OFICIALES,
+  HORARIOS,
+  BODEGA_TIPOS,
+  DOCTORES_EXCEL,
+  buildInitialSpaces,
+  ensureAllSpaces,
+} from "../src/constants/tokens.js";
+import { DEFAULT_DAILY_LOTS } from "../src/utils/dailyLotsParser.js";
 
 // Leer variables de entorno desde .env
 const envText = fs.readFileSync(".env", "utf8");
@@ -27,177 +36,73 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Cargar datos base de Excel
-const excelData = JSON.parse(fs.readFileSync("src/constants/excelData.json", "utf8"));
-const allDoctors = excelData.doctors || [];
-const doctorsGrupo1 = allDoctors.filter((d) => d.grupo === "Grupo 1").map((d) => d.nombre);
-const doctorsGrupo2 = allDoctors.filter((d) => d.grupo === "Grupo 2").map((d) => d.nombre);
+// 1. ESPACIOS FÍSICOS (170 PUESTOS TOTALES: 140 PRINCIPALES + 30 ANEXOS)
+// Se construyen a partir del inventario oficial de Excel sin datos ficticios de prueba.
+const spaces = ensureAllSpaces(buildInitialSpaces());
 
-// 1. Espacios
-function buildInitialSpaces() {
-  let list = [];
-  if (excelData.inventory && excelData.inventory.length >= 140) {
-    list = excelData.inventory.slice(0, 140).map((inv) => {
-      let doctor = inv.doctor || null;
-      let categoria = inv.categoria || null;
-      let observaciones = inv.observaciones || "";
-      let estado = inv.estado || (inv.marca ? "DISPONIBLE" : "VACIO");
-      let horario = inv.horario || null;
-
-      // Puestos de supervisión física
-      if (inv.id === 135) {
-        doctor = "EMERSON JOSUE VIGIL HERNANDEZ (Supervisor)";
-        categoria = "Supervisores";
-        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 42)";
-        estado = "RESERVADO";
-      } else if (inv.id === 136) {
-        doctor = "SALVADOR RENDEROS BONILLA (Supervisor)";
-        categoria = "Supervisores";
-        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 43)";
-        estado = "RESERVADO";
-      } else if (inv.id === 137) {
-        doctor = "ALFREDO ISAAC MARTINEZ AMAYA (Supervisor)";
-        categoria = "Supervisores";
-        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 45)";
-        estado = "RESERVADO";
-      } else if (inv.id === 138) {
-        doctor = "ROXANA GUADALUPE CANALES RODRIGUEZ (Supervisora)";
-        categoria = "Supervisores";
-        observaciones = "PUESTO DE SUPERVISIÓN MÉDICA (Ajuste administrativo - Traslado desde Puesto 44)";
-        estado = "RESERVADO";
-      } else if (inv.id === 139) {
-        doctor = "EDWARD JOSUE ZELAYA PRUDENCIO (Supervisor de Control)";
-        categoria = "Supervisores";
-        observaciones = "ESTACIÓN DE CONTROL DE ACCESO Y SUPERVISIÓN (Puesto Reservado)";
-        estado = "RESERVADO";
-      }
-
-      return {
-        ...inv,
-        doctor,
-        horario,
-        estado,
-        categoria,
-        observaciones,
-        modelo: inv.modelo || (inv.marca ? `${inv.marca === "DELL" ? "OptiPlex 3080" : inv.marca === "LENOVO" ? "ThinkCentre M70q" : "EliteDesk 800"}` : null),
-        activoPc: inv.activoPc || (inv.marca ? `PC-${1000 + inv.id}` : null),
-        monitor: inv.monitor || (inv.marca ? { activo: `MON-${2000 + inv.id}`, marca: inv.marca } : null),
-      };
-    });
-
-    // Puestos 141 al 170 (Anexos)
-    for (let i = 141; i <= 170; i++) {
-      const isAnexo1 = i <= 154;
-      list.push({
-        id: i,
-        modulo: isAnexo1 ? "Módulo Anexo 1 (7×2)" : "Módulo Anexo 2 (8×2)",
-        puesto: String(i),
-        estado: "DISPONIBLE",
-        marca: "DELL",
-        modelo: "OptiPlex 3080",
-        activoPc: `PC-${1000 + i}`,
-        monitor: { marca: "DELL", activo: `MON-${2000 + i}` },
-        mouse: true,
-        headset: true,
-        hub: true,
-        observaciones: isAnexo1 ? "Módulo Anexo 1 · Puestos 141 - 154 (7×2)" : "Módulo Anexo 2 · Puestos 155 - 170 (8×2)",
-        ultimoMovimiento: new Date().toLocaleDateString("es-SV"),
-        doctor: null,
-        horario: null,
-      });
-    }
-  }
-
-  // Pre-asignar lote de Emerson (Puestos 37 a 76 con médicos reales de Grupo 1)
-  const defaultFranja = "07:00 AM – 12:00 PM";
-  let docIdx = 0;
-  list = list.map((sp) => {
-    if (sp.id >= 37 && sp.id <= 76 && sp.marca && !sp.doctor && docIdx < doctorsGrupo1.length) {
-      const docName = doctorsGrupo1[docIdx++];
-      return {
-        ...sp,
-        doctor: docName,
-        horario: defaultFranja,
-        estado: "OCUPADO",
-      };
-    }
-    if (sp.id === 140) {
-      return {
-        ...sp,
-        doctor: "DR. TEST OPERATIVO",
-        horario: defaultFranja,
-        estado: "OCUPADO",
-      };
-    }
-    return sp;
-  });
-
-  return list;
-}
-
-const spaces = buildInitialSpaces();
-
-// 2. Asistencia
+// 2. REGISTROS DE ASISTENCIA INICIAL (Solo supervisores en sus estaciones 135-139)
 const attendanceRecords = {};
 spaces.forEach((sp) => {
-  if (sp.doctor && !sp.doctor.includes("(Supervisor)")) {
+  if (sp.doctor && sp.id >= 135 && sp.id <= 139) {
     attendanceRecords[sp.doctor] = "PRESENTE";
   }
 });
 
-// 3. Bodega
+// 3. INVENTARIO DE BODEGA CENTRAL Y PERIFÉRICOS (Los 6 tipos de hardware completos)
 const bodegaStock = [
   { key: "PC", label: "Computadoras", original: 1, actual: 1 },
   { key: "MAUSE", label: "Mouse óptico", original: 10, actual: 2 },
   { key: "HUB", label: "Hub USB-C", original: 0, actual: 0 },
   { key: "MONITOR", label: "Monitores", original: 0, actual: 0 },
   { key: "CABLES", label: "Cables Ethernet", original: 1, actual: 1 },
+  { key: "HEADSET", label: "Auriculares / Headsets", original: 0, actual: 0 },
 ];
 
-// 4. Historial
-const historial = excelData.movements && excelData.movements.length > 0
-  ? excelData.movements
-  : [
-      { id: "mov-1", fecha: "25/07/2026", equipo: "MAUSE", espacio: 84, accion: "Cambio", origen: "84", destino: "140", falla: "Falla en scroll", obs: "Funciona posterior a periodo de inactividad" }
-    ];
+// 4. HISTORIAL Y BITÁCORA DE MOVIMIENTOS DE HARDWARE
+const excelData = JSON.parse(fs.readFileSync("src/constants/excelData.json", "utf8"));
+const historial =
+  excelData.movements && excelData.movements.length > 0
+    ? excelData.movements
+    : [
+        {
+          id: "mov-1",
+          fecha: "25/07/2026",
+          equipo: "MAUSE",
+          espacio: 84,
+          accion: "Cambio",
+          origen: "84",
+          destino: "140",
+          falla: "Falla en scroll",
+          obs: "Funciona posterior a periodo de inactividad",
+        },
+      ];
 
-// 5. Supervisores
-const supervisores = [
-  { id: "sup-1", nombre: "EMERSON JOSUE VIGIL HERNANDEZ", correo: "emerson.vigil@doctorsv.gob.sv", puesto: 135, rol: "Supervisor Médico (Turno Mañana)", bloqueInicio: 37, bloqueFin: 76, totalPuestos: 40, horario: "06:00 AM – 02:00 PM" },
-  { id: "sup-2", nombre: "SALVADOR RENDEROS BONILLA", correo: "salvador.renderos@doctorsv.gob.sv", puesto: 136, rol: "Supervisor Médico (Turno Tarde)", bloqueInicio: 71, bloqueFin: 104, totalPuestos: 34, horario: "02:00 PM – 10:00 PM" },
-  { id: "sup-3", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", correo: "alfredo.martinez@doctorsv.gob.sv", puesto: 137, rol: "Supervisor Médico (Turno Intermedio)", bloqueInicio: 1, bloqueFin: 36, totalPuestos: 36, horario: "08:00 AM – 12:00 MD" },
-  { id: "sup-4", nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ", correo: "roxana.canales@doctorsv.gob.sv", puesto: 138, rol: "Supervisora Médica", bloqueInicio: 105, bloqueFin: 140, totalPuestos: 36, horario: "07:00 AM – 12:00 PM" },
-  { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO", correo: "edward.zelaya@doctorsv.gob.sv", puesto: 139, rol: "Supervisor de Control & Acceso", bloqueInicio: 1, bloqueFin: 40, totalPuestos: 40, horario: "02:00 PM – 10:00 PM" },
-];
+// 5. SUPERVISORES OFICIALES (5 SUPERVISORES DE SEDE SAN MIGUEL)
+const supervisores = [...SUPERVISORES_OFICIALES];
 
-// 6. Horarios
-const horarios = [
-  "06:00 AM – 02:00 PM",
-  "07:00 AM – 12:00 PM",
-  "08:00 AM – 12:00 MD",
-  "12:00 MD – 06:00 PM",
-  "02:00 PM – 10:00 PM",
-  "04:00 PM – 10:00 PM",
-  "06:00 PM – 10:00 PM",
-];
+// 6. FRANJAS HORARIAS OFICIALES
+const horarios = [...HORARIOS];
 
-// 7. Nóminas (Rosters)
-// Partición oficial de Servicios Profesionales (SP) para turnos de tarde/noche:
-// - Emerson (sup-1 · 02:00 PM – 10:00 PM): 40 médicos (Lote Puestos #37 al #76)
-// - Salvador (sup-2 · 04:00 PM – 10:00 PM): 34 médicos (Lote Puestos #71 al #104)
-// - Alfredo (sup-3 · 06:00 PM – 10:00 PM): 36 médicos (Lote Puestos #1 al #36)
-// - Planilla: Roxana (sup-4) con Grupo 2 y Edward (sup-5) con Grupo 1
+// 7. NÓMINAS OFICIALES POR SUPERVISOR Y FRANJA
+const allDoctors = DOCTORES_EXCEL || [];
+const doctorsGrupo1 = allDoctors.filter((d) => d.grupo === "Grupo 1").map((d) => d.nombre);
+const doctorsGrupo2 = allDoctors.filter((d) => d.grupo === "Grupo 2").map((d) => d.nombre);
+
 const supNamesNorm = [
   "emerson josue vigil hernandez",
   "salvador renderos bonilla",
   "alfredo isaac martinez amaya",
   "roxana guadalupe canales rodriguez",
-  "edward josue zelaya prudencio"
+  "edward josue zelaya prudencio",
 ];
 
 const operativeSP = allDoctors.filter((d) => {
   if (d.grupo !== "Servicios Profesionales") return false;
-  const norm = (d.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const norm = (d.nombre || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
   return !supNamesNorm.some((s) => norm.includes(s) || s.includes(norm));
 });
 
@@ -220,181 +125,210 @@ const rosters = {
   "sup-5__02:00 PM – 10:00 PM": doctorsGrupo1.slice(0, 40),
 };
 
+// 8. QUINCENA OFICIAL (SERVICIOS PROFESIONALES)
+const daysMeta = [
+  { dateKey: "2026-09-25", label: "25 Sep 2026", dayNum: 25, diaSemana: "Viernes" },
+  { dateKey: "2026-09-26", label: "26 Sep 2026", dayNum: 26, diaSemana: "Sábado" },
+  { dateKey: "2026-09-27", label: "27 Sep 2026", dayNum: 27, diaSemana: "Domingo" },
+  { dateKey: "2026-09-28", label: "28 Sep 2026", dayNum: 28, diaSemana: "Lunes" },
+  { dateKey: "2026-09-29", label: "29 Sep 2026", dayNum: 29, diaSemana: "Martes" },
+  { dateKey: "2026-09-30", label: "30 Sep 2026", dayNum: 30, diaSemana: "Miércoles" },
+];
+
+const totalSP = operativeSP.length;
+const diasQuincena = daysMeta.map((dm, idx) => {
+  const offset = (idx * 7) % totalSP;
+  const rotated = [...operativeSP.slice(offset), ...operativeSP.slice(0, offset)];
+  const emersonDocs = rotated.slice(0, 40);
+  const salvadorDocs = rotated.slice(40, 74);
+  const alfredoDocs = rotated.slice(74, 110);
+
+  return {
+    dateKey: dm.dateKey,
+    label: dm.label,
+    dayNum: dm.dayNum,
+    diaSemana: dm.diaSemana,
+    monthNum: 9,
+    year: 2026,
+    porSupervisor: {
+      "sup-1": {
+        supervisorId: "sup-1",
+        supervisorNombre: "EMERSON JOSUE VIGIL HERNANDEZ",
+        doctorNames: emersonDocs.map((d) => d.nombre),
+        doctores: emersonDocs.map((d) => ({
+          nombre: d.nombre,
+          token: d.tcaUsuario || null,
+          horario: "02:00 PM – 10:00 PM",
+          isMatched: true,
+        })),
+        totalDoctores: emersonDocs.length,
+      },
+      "sup-2": {
+        supervisorId: "sup-2",
+        supervisorNombre: "SALVADOR RENDEROS BONILLA",
+        doctorNames: salvadorDocs.map((d) => d.nombre),
+        doctores: salvadorDocs.map((d) => ({
+          nombre: d.nombre,
+          token: d.tcaUsuario || null,
+          horario: "04:00 PM – 10:00 PM",
+          isMatched: true,
+        })),
+        totalDoctores: salvadorDocs.length,
+      },
+      "sup-3": {
+        supervisorId: "sup-3",
+        supervisorNombre: "ALFREDO ISAAC MARTINEZ AMAYA",
+        doctorNames: alfredoDocs.map((d) => d.nombre),
+        doctores: alfredoDocs.map((d) => ({
+          nombre: d.nombre,
+          token: d.tcaUsuario || null,
+          horario: "06:00 PM – 10:00 PM",
+          isMatched: true,
+        })),
+        totalDoctores: alfredoDocs.length,
+      },
+      "sup-4": {
+        supervisorId: "sup-4",
+        supervisorNombre: "ROXANA GUADALUPE CANALES RODRIGUEZ",
+        doctorNames: doctorsGrupo2.slice(0, 36),
+        doctores: doctorsGrupo2.slice(0, 36).map((name) => ({
+          nombre: name,
+          token: null,
+          horario: "07:00 AM – 12:00 PM",
+          isMatched: true,
+        })),
+        totalDoctores: 36,
+      },
+      "sup-5": {
+        supervisorId: "sup-5",
+        supervisorNombre: "EDWARD JOSUE ZELAYA PRUDENCIO",
+        doctorNames: doctorsGrupo1.slice(0, 40),
+        doctores: doctorsGrupo1.slice(0, 40).map((name) => ({
+          nombre: name,
+          token: null,
+          horario: "02:00 PM – 10:00 PM",
+          isMatched: true,
+        })),
+        totalDoctores: 40,
+      },
+    },
+  };
+});
+
+const quincenaData = {
+  id: "quincena_2026_09_q2",
+  titulo: "Septiembre 2026 · Quincena 2 (Oficial)",
+  origen: "Google Sheets · Medico Servicios Profesionales - San Miguel",
+  updatedAt: new Date().toISOString(),
+  dias: diasQuincena,
+  diasDetectados: diasQuincena.map((d) => d.dateKey),
+  supervisoresDetectados: [
+    { id: "sup-1", nombre: "EMERSON JOSUE VIGIL HERNANDEZ", oficial: true, totalAsignaciones: 240 },
+    { id: "sup-2", nombre: "SALVADOR RENDEROS BONILLA", oficial: true, totalAsignaciones: 204 },
+    { id: "sup-3", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", oficial: true, totalAsignaciones: 216 },
+    { id: "sup-4", nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ", oficial: true, totalAsignaciones: 216 },
+    { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO", oficial: true, totalAsignaciones: 240 },
+  ],
+  estadisticas: {
+    totalDias: 6,
+    totalSupervisores: 5,
+    totalLineasParseadas: 660,
+    totalReconocidos: 660,
+    tasaReconocimiento: "100.0%",
+  },
+};
+
+// 9. FUNCIÓN PRINCIPAL DE SINCRONIZACIÓN A FIRESTORE
 async function seed() {
-  console.log("🚀 Sincronizando datos oficiales completos en Cloud Firestore...");
+  console.log("=================================================");
+  console.log("🚀 SINCRONIZANDO DATOS Y PERIFÉRICOS A FIRESTORE");
+  console.log("=================================================\n");
   const SEDE_ID = "san-miguel";
 
-  // 1. Spaces
-  console.log(`Subiendo ${spaces.length} puestos de inventario (con asignaciones activas)...`);
+  // 1. Espacios
+  console.log(`1️⃣  Subiendo ${spaces.length} puestos de inventario oficial...`);
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "spaces"), {
     list: spaces,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Espacios actualizados en Firestore.");
+  console.log("   ✅ Espacios físicos actualizados (170 puestos).");
 
   // 2. Asistencia
-  console.log(`Subiendo ${Object.keys(attendanceRecords).length} registros de asistencia en tiempo real...`);
+  console.log(`2️⃣  Subiendo registros de asistencia...`);
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "attendance"), {
     records: attendanceRecords,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Asistencia actualizada en Firestore.");
+  console.log("   ✅ Asistencia inicial sincronizada.");
 
-  // 3. Bodega
-  console.log("Subiendo inventario de bodega...");
+  // 3. Bodega y Periféricos
+  console.log("3️⃣  Subiendo inventario de bodega y periféricos (6 tipos)...");
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "bodega"), {
     list: bodegaStock,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Bodega actualizada en Firestore.");
+  console.log("   ✅ Bodega y periféricos (PC, Mouse, Hub, Monitor, Cables, Headset) actualizados.");
 
   // 4. Historial
-  console.log("Subiendo historial y movimientos...");
+  console.log("4️⃣  Subiendo historial de movimientos de hardware...");
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "historial"), {
     list: historial,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Historial actualizado en Firestore.");
+  console.log("   ✅ Historial de movimientos actualizado.");
 
   // 5. Supervisores
-  console.log("Subiendo configuración de supervisores, lotes y turnos...");
+  console.log("5️⃣  Subiendo configuración de los 5 supervisores oficiales...");
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "supervisores"), {
     list: supervisores,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Supervisores actualizados en Firestore.");
+  console.log("   ✅ 5 Supervisores oficiales actualizados.");
 
   // 6. Horarios
-  console.log("Subiendo franjas y turnos configurables...");
+  console.log("6️⃣  Subiendo franjas y turnos oficiales...");
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "config"), {
     horarios: horarios,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Horarios actualizados en Firestore.");
+  console.log("   ✅ Horarios actualizados.");
 
   // 7. Nóminas (Rosters)
-  console.log("Subiendo nóminas de médicos por supervisor...");
+  console.log("7️⃣  Subiendo nóminas oficiales por supervisor...");
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "rosters"), {
     rosters: rosters,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Nóminas actualizadas en Firestore.");
+  console.log("   ✅ Nóminas de supervisores actualizadas.");
 
-  // 8. Quincena Oficial (Servicios Profesionales)
-  console.log("Subiendo Quincena Oficial de Servicios Profesionales...");
-  const spOperative = allDoctors.filter(
-    (d) =>
-      d.grupo === "Servicios Profesionales" &&
-      !["emerson", "salvador", "alfredo", "roxana", "edward"].some((s) =>
-        d.nombre.toLowerCase().includes(s)
-      )
-  );
-
-  const daysMeta = [
-    { dateKey: "2026-09-25", label: "25 Sep 2026", dayNum: 25, diaSemana: "Viernes" },
-    { dateKey: "2026-09-26", label: "26 Sep 2026", dayNum: 26, diaSemana: "Sábado" },
-    { dateKey: "2026-09-27", label: "27 Sep 2026", dayNum: 27, diaSemana: "Domingo" },
-    { dateKey: "2026-09-28", label: "28 Sep 2026", dayNum: 28, diaSemana: "Lunes" },
-    { dateKey: "2026-09-29", label: "29 Sep 2026", dayNum: 29, diaSemana: "Martes" },
-    { dateKey: "2026-09-30", label: "30 Sep 2026", dayNum: 30, diaSemana: "Miércoles" },
-  ];
-
-  const countEmerson = 40;
-  const countSalvador = 34;
-  const countAlfredo = 36;
-  const total = spOperative.length;
-
-  const dias = daysMeta.map((dm, idx) => {
-    const offset = (idx * 7) % total;
-    const rotated = [...spOperative.slice(offset), ...spOperative.slice(0, offset)];
-    const emersonDocs = rotated.slice(0, countEmerson);
-    const salvadorDocs = rotated.slice(countEmerson, countEmerson + countSalvador);
-    const alfredoDocs = rotated.slice(countEmerson + countSalvador, countEmerson + countSalvador + countAlfredo);
-
-    return {
-      dateKey: dm.dateKey,
-      label: dm.label,
-      dayNum: dm.dayNum,
-      diaSemana: dm.diaSemana,
-      monthNum: 9,
-      year: 2026,
-      porSupervisor: {
-        "sup-1": {
-          supervisorId: "sup-1",
-          supervisorNombre: "EMERSON JOSUE VIGIL HERNANDEZ",
-          doctorNames: emersonDocs.map((d) => d.nombre),
-          doctores: emersonDocs.map((d) => ({
-            nombre: d.nombre,
-            token: d.tcaUsuario || null,
-            horario: "02:00 PM – 10:00 PM",
-            isMatched: true,
-          })),
-          totalDoctores: emersonDocs.length,
-        },
-        "sup-2": {
-          supervisorId: "sup-2",
-          supervisorNombre: "SALVADOR RENDEROS BONILLA",
-          doctorNames: salvadorDocs.map((d) => d.nombre),
-          doctores: salvadorDocs.map((d) => ({
-            nombre: d.nombre,
-            token: d.tcaUsuario || null,
-            horario: "04:00 PM – 10:00 PM",
-            isMatched: true,
-          })),
-          totalDoctores: salvadorDocs.length,
-        },
-        "sup-3": {
-          supervisorId: "sup-3",
-          supervisorNombre: "ALFREDO ISAAC MARTINEZ AMAYA",
-          doctorNames: alfredoDocs.map((d) => d.nombre),
-          doctores: alfredoDocs.map((d) => ({
-            nombre: d.nombre,
-            token: d.tcaUsuario || null,
-            horario: "06:00 PM – 10:00 PM",
-            isMatched: true,
-          })),
-          totalDoctores: alfredoDocs.length,
-        },
-      },
-    };
-  });
-
-  const quincenaData = {
-    id: "quincena_2026_09_q2",
-    titulo: "Septiembre 2026 · Quincena 2 (Oficial)",
-    origen: "Google Sheets · Medico Servicios Profesionales - San Miguel",
+  // 8. Lotes Diarios (RESUMEN SAN MIGUEL)
+  console.log("8️⃣  Subiendo Distribución Diaria de Lotes (RESUMEN SAN MIGUEL)...");
+  await setDoc(doc(db, "sedes", SEDE_ID, "estado", "dailyLots"), {
+    dailyLots: DEFAULT_DAILY_LOTS,
+    updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
-    dias,
-    diasDetectados: dias.map((d) => d.dateKey),
-    supervisoresDetectados: [
-      { id: "sup-1", nombre: "EMERSON JOSUE VIGIL HERNANDEZ", oficial: true, totalAsignaciones: 240 },
-      { id: "sup-2", nombre: "SALVADOR RENDEROS BONILLA", oficial: true, totalAsignaciones: 204 },
-      { id: "sup-3", nombre: "ALFREDO ISAAC MARTINEZ AMAYA", oficial: true, totalAsignaciones: 216 },
-    ],
-    estadisticas: {
-      totalDias: 6,
-      totalSupervisores: 3,
-      totalLineasParseadas: 660,
-      totalReconocidos: 660,
-      tasaReconocimiento: "100.0%",
-    },
-  };
+  });
+  console.log("   ✅ Distribución diaria de lotes actualizada.");
 
+  // 9. Quincena Oficial (Servicios Profesionales)
+  console.log("9️⃣  Subiendo nómina quincenal oficial...");
   await setDoc(doc(db, "sedes", SEDE_ID, "estado", "quincena"), {
     quincena: quincenaData,
     updatedBy: "cloud_sync",
     updatedAt: new Date().toISOString(),
   });
-  console.log("✅ Quincena Oficial actualizada en Firestore.");
+  console.log("   ✅ Quincena oficial actualizada con los 5 supervisores.");
 
-  console.log("\n🎉 ¡TODOS LOS DATOS Y NÓMINAS SE HAN SUBIDO CORRECTAMENTE A FIRESTORE!");
+  console.log("\n=================================================");
+  console.log("🎉 ¡BASE DE DATOS Y PERIFÉRICOS ACTUALIZADOS CON ÉXITO!");
+  console.log("=================================================");
   process.exit(0);
 }
 

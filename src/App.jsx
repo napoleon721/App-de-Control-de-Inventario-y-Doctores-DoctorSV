@@ -2106,6 +2106,7 @@ export default function App() {
             horarios={horarios}
             supervisores={supervisores}
             rosterBySupervisor={rosters}
+            bodegaStock={bodegaStock}
           />
         )}
 

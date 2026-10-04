@@ -5,7 +5,7 @@ import {
   Clock, RefreshCw, UserCheck, LogOut, Laptop, User, Shield
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
-import { ESTADOS, MARCAS, HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
+import { ESTADOS, MARCAS, HORARIOS, SUPERVISORES_OFICIALES, BODEGA_TIPOS } from "../../constants/tokens";
 import { isSameDoctor, isSameHorario } from "../../utils/safeHelpers";
 
 export default function SpaceMap({
@@ -20,6 +20,7 @@ export default function SpaceMap({
   horarios = HORARIOS,
   supervisores = SUPERVISORES_OFICIALES,
   rosterBySupervisor = {},
+  bodegaStock = BODEGA_TIPOS,
 }) {
   const isDoctorRole = currentUser?.role === "DOCTOR";
   const isMasterRole = currentUser?.role === "MASTER";
@@ -945,26 +946,14 @@ export default function SpaceMap({
                     <span className="text-[11px] font-mono-data text-slate-400 font-bold">Stock de Reserva</span>
                   </div>
                   <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white shadow-2xs">
-                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                      <span className="font-bold text-slate-700">PC (COMPUTADORAS)</span>
-                      <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">1</span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                      <span className="font-bold text-slate-700">MAUSE</span>
-                      <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">2</span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                      <span className="font-bold text-slate-700">HUB USB-C</span>
-                      <span className="font-mono-data font-bold text-slate-400 text-[13px]">0</span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                      <span className="font-bold text-slate-700">MONITOR</span>
-                      <span className="font-mono-data font-bold text-slate-400 text-[13px]">0</span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 bg-blue-50/50">
-                      <span className="font-bold text-slate-700">CABLES ETHERNET</span>
-                      <span className="font-mono-data font-bold text-[#0048B5] text-[13px]">1</span>
-                    </div>
+                    {(bodegaStock && bodegaStock.length > 0 ? bodegaStock : BODEGA_TIPOS).map((item) => (
+                      <div key={item.key} className="flex items-center justify-between p-2.5 bg-blue-50/50">
+                        <span className="font-bold text-slate-700 text-[12px]">{item.label?.toUpperCase() || item.key}</span>
+                        <span className={`font-mono-data font-bold text-[13px] ${(item.actual || 0) > 0 ? "text-[#0048B5]" : "text-slate-400"}`}>
+                          {item.actual ?? 0}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
