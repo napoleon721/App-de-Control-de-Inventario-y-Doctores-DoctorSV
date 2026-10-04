@@ -43,7 +43,7 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement,
         ? spaces.filter(
             (s) =>
               ["OCUPADO", "DISPONIBLE", "INCOMPLETO", "RESERVADO"].includes(s.estado) &&
-              s.marca
+              s.marca && s.marca !== "NO PC"
           ).length
         : t.key === "MONITOR"
         ? spaces.filter((s) => s.monitor && (s.monitor.marca || s.monitor.activo || s.monitor === true)).length
@@ -53,7 +53,7 @@ export default function WarehouseView({ bodegaStock, spaces, onRegisterMovement,
         ? spaces.filter((s) => s.headset).length
         : t.key === "HUB"
         ? spaces.filter((s) => s.hub).length
-        : spaces.filter((s) => s.marca).length;
+        : spaces.filter((s) => s.marca && s.marca !== "NO PC").length;
 
     const reparacion = spaces.filter((s) => s.estado === "REPARACION").length;
     return { ...t, enUso, reparacion, total: enUso + reparacion + t.actual };

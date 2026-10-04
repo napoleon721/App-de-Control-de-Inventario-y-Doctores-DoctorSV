@@ -104,15 +104,18 @@ export function subscribeToCloudBodega(onUpdate, onError, myClientId = "") {
 }
 
 /**
- * Guarda el inventario de bodega en Firestore con debounce
+ * Guarda el inventario de bodega en Firestore con opción inmediata y debounce
  */
-export function saveCloudBodega(bodegaStock, clientId = "") {
+export function saveCloudBodega(bodegaStock, clientId = "", immediate = false) {
   if (!isFirestoreAvailable) return;
   if (!Array.isArray(bodegaStock) || bodegaStock.length === 0) return;
 
-  if (bodegaTimer) clearTimeout(bodegaTimer);
+  if (bodegaTimer) {
+    clearTimeout(bodegaTimer);
+    bodegaTimer = null;
+  }
 
-  bodegaTimer = setTimeout(async () => {
+  const persist = async () => {
     try {
       const docRef = doc(db, "sedes", SEDE_ID, "estado", "bodega");
       await setDoc(docRef, {
@@ -121,7 +124,13 @@ export function saveCloudBodega(bodegaStock, clientId = "") {
         updatedAt: new Date().toISOString(),
       }, { merge: true });
     } catch (error) {}
-  }, 500);
+  };
+
+  if (immediate) {
+    persist();
+  } else {
+    bodegaTimer = setTimeout(persist, 500);
+  }
 }
 
 /**
@@ -154,15 +163,18 @@ export function subscribeToCloudHistorial(onUpdate, onError, myClientId = "") {
 }
 
 /**
- * Guarda el historial en Firestore con debounce
+ * Guarda el historial en Firestore con opción inmediata y debounce
  */
-export function saveCloudHistorial(historial, clientId = "") {
+export function saveCloudHistorial(historial, clientId = "", immediate = false) {
   if (!isFirestoreAvailable) return;
   if (!Array.isArray(historial) || historial.length === 0) return;
 
-  if (historialTimer) clearTimeout(historialTimer);
+  if (historialTimer) {
+    clearTimeout(historialTimer);
+    historialTimer = null;
+  }
 
-  historialTimer = setTimeout(async () => {
+  const persist = async () => {
     try {
       const docRef = doc(db, "sedes", SEDE_ID, "estado", "historial");
       await setDoc(docRef, {
@@ -171,7 +183,13 @@ export function saveCloudHistorial(historial, clientId = "") {
         updatedAt: new Date().toISOString(),
       }, { merge: true });
     } catch (error) {}
-  }, 600);
+  };
+
+  if (immediate) {
+    persist();
+  } else {
+    historialTimer = setTimeout(persist, 600);
+  }
 }
 
 let rostersTimer = null;

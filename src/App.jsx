@@ -947,13 +947,256 @@ export default function App() {
     const cleanId = Number(updatedSpace.id);
     recentlyReleasedRef.current.set(cleanId, Date.now());
 
+    // 1. Obtener estado previo del puesto para cálculo de deltas
+    const prevSpace = spaces.find((s) => Number(s.id) === cleanId) || {};
+
+    // 2. Evaluar equipamiento de periféricos del puesto editado
+    const hasPc = Boolean(updatedSpace.marca && updatedSpace.marca !== "NO PC");
+    const hasMonitor = Boolean(updatedSpace.monitor && (updatedSpace.monitor.marca || updatedSpace.monitor.activo || updatedSpace.monitor === true));
+    const hasMouse = Boolean(updatedSpace.mouse);
+    const hasHeadset = Boolean(updatedSpace.headset);
+    const hasHub = Boolean(updatedSpace.hub);
+
+    // 3. Determinar estado automático del cubículo
+    let finalEstado = updatedSpace.estado;
+    if (updatedSpace.doctor) {
+      finalEstado = "OCUPADO";
+    } else if (
+      finalEstado !== "INHABILITADO" &&
+      finalEstado !== "REPARACION" &&
+      finalEstado !== "RESERVADO"
+    ) {
+      if (!hasPc) {
+        finalEstado = "VACIO";
+      } else if (!hasMouse || !hasHeadset || !hasMonitor) {
+        finalEstado = "INCOMPLETO";
+      } else {
+        finalEstado = "DISPONIBLE";
+      }
+    }
+
+    const nowTimeStr = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+    const nowDateStr = new Date().toLocaleDateString("es-SV");
+
     const normalized = {
       ...updatedSpace,
+      estado: finalEstado,
       categoria: cleanId === 1 ? null : updatedSpace.categoria,
-      marca: (updatedSpace.estado === "DISPONIBLE" && (!updatedSpace.marca || updatedSpace.marca === "NO PC")) ? "DELL" : (updatedSpace.marca || "DELL"),
-      modelo: (updatedSpace.estado === "DISPONIBLE" && !updatedSpace.modelo) ? "OptiPlex 3080" : (updatedSpace.modelo || "OptiPlex 3080"),
+      marca: !hasPc ? "NO PC" : (updatedSpace.marca || "DELL"),
+      modelo: !hasPc ? null : (updatedSpace.modelo || "OptiPlex 3080"),
+      ultimoMovimiento: nowTimeStr,
     };
 
+    // 4. Calcular deltas de periféricos respecto al estado anterior
+    const prevHasPc = Boolean(prevSpace.marca && prevSpace.marca !== "NO PC");
+    const prevHasMonitor = Boolean(prevSpace.monitor && (prevSpace.monitor.marca || prevSpace.monitor.activo || prevSpace.monitor === true));
+    const prevHasMouse = Boolean(prevSpace.mouse);
+    const prevHasHeadset = Boolean(prevSpace.headset);
+    const prevHasHub = Boolean(prevSpace.hub);
+
+    const bodegaDeltas = {};
+    const newLogs = [];
+
+    // MOUSE: Si se quitó del cubículo, suma a bodega (+1). Si se agregó al cubículo, resta de bodega (-1).
+    if (prevHasMouse && !hasMouse) {
+      bodegaDeltas["MAUSE"] = (bodegaDeltas["MAUSE"] || 0) + 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-mouse-del`,
+        fecha: nowDateStr,
+        equipo: "MAUSE",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Retiro a Bodega",
+        origen: `Puesto #${cleanId}`,
+        destino: "BODEGA",
+        falla: "N/A",
+        obs: `Retiro de mouse de Puesto #${cleanId} a Bodega`,
+      });
+    } else if (!prevHasMouse && hasMouse) {
+      bodegaDeltas["MAUSE"] = (bodegaDeltas["MAUSE"] || 0) - 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-mouse-add`,
+        fecha: nowDateStr,
+        equipo: "MAUSE",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Instalación",
+        origen: "BODEGA",
+        destino: `Puesto #${cleanId}`,
+        falla: "N/A",
+        obs: `Instalación de mouse en Puesto #${cleanId} desde Bodega`,
+      });
+    }
+
+    // HEADSET
+    if (prevHasHeadset && !hasHeadset) {
+      bodegaDeltas["HEADSET"] = (bodegaDeltas["HEADSET"] || 0) + 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-headset-del`,
+        fecha: nowDateStr,
+        equipo: "HEADSET",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Retiro a Bodega",
+        origen: `Puesto #${cleanId}`,
+        destino: "BODEGA",
+        falla: "N/A",
+        obs: `Retiro de auricular / headset de Puesto #${cleanId} a Bodega`,
+      });
+    } else if (!prevHasHeadset && hasHeadset) {
+      bodegaDeltas["HEADSET"] = (bodegaDeltas["HEADSET"] || 0) - 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-headset-add`,
+        fecha: nowDateStr,
+        equipo: "HEADSET",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Instalación",
+        origen: "BODEGA",
+        destino: `Puesto #${cleanId}`,
+        falla: "N/A",
+        obs: `Instalación de auricular / headset en Puesto #${cleanId} desde Bodega`,
+      });
+    }
+
+    // HUB
+    if (prevHasHub && !hasHub) {
+      bodegaDeltas["HUB"] = (bodegaDeltas["HUB"] || 0) + 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-hub-del`,
+        fecha: nowDateStr,
+        equipo: "HUB",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Retiro a Bodega",
+        origen: `Puesto #${cleanId}`,
+        destino: "BODEGA",
+        falla: "N/A",
+        obs: `Retiro de hub USB de Puesto #${cleanId} a Bodega`,
+      });
+    } else if (!prevHasHub && hasHub) {
+      bodegaDeltas["HUB"] = (bodegaDeltas["HUB"] || 0) - 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-hub-add`,
+        fecha: nowDateStr,
+        equipo: "HUB",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Instalación",
+        origen: "BODEGA",
+        destino: `Puesto #${cleanId}`,
+        falla: "N/A",
+        obs: `Instalación de hub USB en Puesto #${cleanId} desde Bodega`,
+      });
+    }
+
+    // MONITOR
+    if (prevHasMonitor && !hasMonitor) {
+      bodegaDeltas["MONITOR"] = (bodegaDeltas["MONITOR"] || 0) + 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-mon-del`,
+        fecha: nowDateStr,
+        equipo: "MONITOR",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Retiro a Bodega",
+        origen: `Puesto #${cleanId}`,
+        destino: "BODEGA",
+        falla: "N/A",
+        obs: `Retiro de monitor de Puesto #${cleanId} a Bodega`,
+      });
+    } else if (!prevHasMonitor && hasMonitor) {
+      bodegaDeltas["MONITOR"] = (bodegaDeltas["MONITOR"] || 0) - 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-mon-add`,
+        fecha: nowDateStr,
+        equipo: "MONITOR",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Instalación",
+        origen: "BODEGA",
+        destino: `Puesto #${cleanId}`,
+        falla: "N/A",
+        obs: `Instalación de monitor en Puesto #${cleanId} desde Bodega`,
+      });
+    }
+
+    // PC
+    if (prevHasPc && !hasPc) {
+      bodegaDeltas["PC"] = (bodegaDeltas["PC"] || 0) + 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-pc-del`,
+        fecha: nowDateStr,
+        equipo: "PC",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Retiro a Bodega",
+        origen: `Puesto #${cleanId}`,
+        destino: "BODEGA",
+        falla: "N/A",
+        obs: `Retiro de computadora (PC) de Puesto #${cleanId} a Bodega`,
+      });
+    } else if (!prevHasPc && hasPc) {
+      bodegaDeltas["PC"] = (bodegaDeltas["PC"] || 0) - 1;
+      newLogs.push({
+        id: `mov-${Date.now()}-pc-add`,
+        fecha: nowDateStr,
+        equipo: "PC",
+        cantidad: 1,
+        espacio: cleanId,
+        accion: "Instalación",
+        origen: "BODEGA",
+        destino: `Puesto #${cleanId}`,
+        falla: "N/A",
+        obs: `Instalación de computadora (PC) en Puesto #${cleanId} desde Bodega`,
+      });
+    }
+
+    // 5. Aplicar cambios a Bodega en memoria, Firestore y BroadcastChannel
+    if (Object.keys(bodegaDeltas).length > 0) {
+      setBodegaStock((prev) => {
+        const nextBodega = prev.map((item) => {
+          const delta =
+            bodegaDeltas[item.key] ??
+            (item.key === "MAUSE" ? bodegaDeltas["MOUSE"] : undefined) ??
+            (item.key === "MOUSE" ? bodegaDeltas["MAUSE"] : undefined) ??
+            0;
+          if (delta === 0) return item;
+          return {
+            ...item,
+            actual: Math.max(0, (item.actual || 0) + delta),
+          };
+        });
+        const simplified = nextBodega.map(({ key, original, actual }) => ({ key, original, actual }));
+        saveCloudBodega(simplified, myClientId.current, true);
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("doctorsv_sync_channel");
+            bc.postMessage({ type: "BODEGA_UPDATED", payload: nextBodega, sender: myClientId.current });
+            bc.close();
+          } catch {}
+        }
+        return nextBodega;
+      });
+    }
+
+    // 6. Aplicar cambios al Historial en memoria, Firestore y BroadcastChannel
+    if (newLogs.length > 0) {
+      setHistorial((prev) => {
+        const nextHist = [...newLogs, ...prev];
+        saveCloudHistorial(nextHist, myClientId.current, true);
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("doctorsv_sync_channel");
+            bc.postMessage({ type: "HISTORIAL_UPDATED", payload: nextHist, sender: myClientId.current });
+            bc.close();
+          } catch {}
+        }
+        return nextHist;
+      });
+    }
+
+    // 7. Actualizar lista de espacios
     let previousSpaceId = null;
     const nextSpaces = spaces.map((s) => {
       if (normalized.doctor && Number(s.id) !== cleanId && s.doctor && isSameDoctor(s.doctor, normalized.doctor)) {
@@ -966,7 +1209,7 @@ export default function App() {
           estado: "DISPONIBLE",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
           modelo: s.modelo || "OptiPlex 3080",
-          ultimoMovimiento: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+          ultimoMovimiento: nowTimeStr,
         };
       }
       if (Number(s.id) === cleanId) return normalized;
@@ -975,6 +1218,13 @@ export default function App() {
 
     setSpaces(nextSpaces);
     saveCloudSpaces(nextSpaces, myClientId.current, true);
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        const bc = new BroadcastChannel("doctorsv_sync_channel");
+        bc.postMessage({ type: "SPACES_UPDATED", payload: nextSpaces, sender: myClientId.current });
+        bc.close();
+      } catch {}
+    }
 
     if (normalized.doctor) {
       setAttendanceRecords((prev) => ({

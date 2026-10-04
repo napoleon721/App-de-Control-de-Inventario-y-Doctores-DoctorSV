@@ -26,7 +26,38 @@ export default function SpaceDetailModal({
   if (!space) return null;
 
   function updateField(patch) {
-    setForm((prev) => ({ ...prev, ...patch }));
+    setForm((prev) => {
+      const next = { ...prev, ...patch };
+
+      // Si tiene médico asignado o estados administrativos bloqueados, mantenerlos
+      if (next.doctor) {
+        next.estado = "OCUPADO";
+        return next;
+      }
+      if (
+        next.estado === "INHABILITADO" ||
+        next.estado === "REPARACION" ||
+        next.estado === "RESERVADO"
+      ) {
+        return next;
+      }
+
+      // Evaluar completitud según equipamiento actual
+      const hasPc = Boolean(next.marca && next.marca !== "NO PC");
+      const hasMonitor = Boolean(next.monitor && (next.monitor.marca || next.monitor.activo || next.monitor === true));
+      const hasMouse = Boolean(next.mouse);
+      const hasHeadset = Boolean(next.headset);
+
+      if (!hasPc) {
+        next.estado = "VACIO";
+      } else if (!hasMouse || !hasHeadset || !hasMonitor) {
+        next.estado = "INCOMPLETO";
+      } else {
+        next.estado = "DISPONIBLE";
+      }
+
+      return next;
+    });
   }
 
   function handleSave() {
@@ -41,6 +72,16 @@ export default function SpaceDetailModal({
   const matchedSupervisor = supervisores?.find(
     (s) => Number(s.puesto) === Number(space.id)
   );
+
+  const hasPc = Boolean(form.marca && form.marca !== "NO PC");
+  const hasMonitor = Boolean(form.monitor && (form.monitor.marca || form.monitor.activo || form.monitor === true));
+  const hasMouse = Boolean(form.mouse);
+  const hasHeadset = Boolean(form.headset);
+
+  const missingPeripherals = [];
+  if (!hasMouse) missingPeripherals.push("Mouse óptico");
+  if (!hasHeadset) missingPeripherals.push("Headset");
+  if (!hasMonitor) missingPeripherals.push("Monitor");
 
   const handleBackdropMouseDown = (e) => {
     if (e.target === e.currentTarget) {
@@ -384,25 +425,66 @@ export default function SpaceDetailModal({
                 className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 font-mono-data text-[12px]"
               />
 
-              <p className="mb-1.5 mt-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Accesorios
-              </p>
-              <div className="flex flex-wrap gap-2.5">
-                {[
-                  ["mouse", Mouse, "Mouse"],
-                  ["headset", Headphones, "Headset"],
-                  ["hub", Cable, "Hub USB"],
-                ].map(([key, Icon, label]) => (
-                  <label key={key} className="flex cursor-pointer items-center gap-1 text-[11.5px] font-medium text-slate-700 select-none">
-                    <input
-                      type="checkbox"
-                      checked={!!form[key]}
-                      onChange={(e) => updateField({ [key]: e.target.checked })}
-                      className="accent-[#0048B5] rounded"
-                    />
-                    <Icon size={12} className="text-slate-500" /> {label}
-                  </label>
-                ))}
+              <div className="mt-3 pt-2.5 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    Periféricos & Accesorios
+                  </p>
+                  <span className="text-[10px] text-slate-400 font-medium">1 Clic para alternar</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    ["mouse", Mouse, "Mouse"],
+                    ["headset", Headphones, "Headset"],
+                    ["hub", Cable, "Hub USB"],
+                  ].map(([key, Icon, label]) => {
+                    const isChecked = !!form[key];
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => updateField({ [key]: !isChecked })}
+                        className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all duration-150 cursor-pointer shadow-2xs active:scale-95 ${
+                          isChecked
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-800 ring-1 ring-emerald-400/30"
+                            : "bg-slate-100 border-slate-200 text-slate-400 hover:bg-slate-200/70"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 mb-1">
+                          <Icon size={14} className={isChecked ? "text-emerald-600" : "text-slate-400"} />
+                          <span className="text-[11.5px] font-bold">{label}</span>
+                        </div>
+                        <span
+                          className={`text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full ${
+                            isChecked ? "bg-emerald-200/80 text-emerald-900" : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {isChecked ? "✓ En puesto" : "✗ Falta"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Banner de Estado de Equipamiento */}
+                <div className="mt-2.5">
+                  {missingPeripherals.length > 0 && hasPc ? (
+                    <div className="flex items-center gap-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-medium">
+                      <span className="font-bold text-amber-700">⚠️ Incompleto:</span>
+                      <span>Falta {missingPeripherals.join(", ")}</span>
+                    </div>
+                  ) : !hasPc ? (
+                    <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-[11px] font-medium">
+                      <span className="font-bold text-rose-700">❌ Vacío:</span>
+                      <span>Sin computadora asignada en este puesto</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium">
+                      <span className="font-bold text-emerald-700">✅ Completo:</span>
+                      <span>Puesto 100% equipado y operativo</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
