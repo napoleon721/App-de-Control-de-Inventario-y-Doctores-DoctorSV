@@ -835,13 +835,14 @@ export default function AttendanceView({
   const totalAusentes = batchDoctors.filter((d) => d.status === "AUSENTE").length;
   const totalJustificados = batchDoctors.filter((d) => d.status === "JUSTIFICADO").length;
 
-  // Médicos faltantes pendientes (estrictamente NO PRESENTES, sin cubículo ni registro previo)
-  const faltantesPendientes = useMemo(() => {
+  // Médicos que NO están presentes (excluye estrictamente a PRESENTES, FINALIZADOS, JUSTIFICADOS y AUSENTES)
+  const docsNoPresentes = useMemo(() => {
     return batchDoctors.filter(
-      (d) => d.status === "PENDIENTE" && !d.espacio
+      (d) => d.status !== "PRESENTE" && d.status !== "FINALIZADO" && d.status !== "JUSTIFICADO" && d.status !== "AUSENTE"
     );
   }, [batchDoctors]);
-  const totalFaltantesPendientes = faltantesPendientes.length;
+  const totalNoPresentes = docsNoPresentes.length;
+  const totalFaltantesPendientes = totalNoPresentes;
 
   const totalAsistieron = totalPresentes + totalFinalizados;
   const asistenciaPct = totalProgramados > 0 ? Math.round((totalAsistieron / totalProgramados) * 100) : 0;
@@ -874,52 +875,20 @@ export default function AttendanceView({
     }
   }
 
-  // Marcar como AUSENTE en lote (Faltantes pendientes o Todos los médicos del turno)
-  function handleMarkUnseatedAsAbsent() {
-    const docsToMarkAbsent = batchDoctors.filter(
-      (d) => d.status === "PENDIENTE" && !d.espacio
+  // Marcar como AUSENTES al no más darle ÚNICAMENTE a los médicos que NO están presentes
+  // Los médicos que ya figuran en PRESENTE, FINALIZADO o JUSTIFICADO se mantienen 100% intactos
+  function handleMarkNotPresentAsAbsent() {
+    const toMark = batchDoctors.filter(
+      (d) => d.status !== "PRESENTE" && d.status !== "FINALIZADO" && d.status !== "JUSTIFICADO" && d.status !== "AUSENTE"
     );
 
-    // Caso 1: Hay médicos faltantes pendientes sin cubículo asignado
-    if (docsToMarkAbsent.length > 0) {
-      const presentesCount = batchDoctors.filter((d) => d.status === "PRESENTE").length;
-      if (
-        !window.confirm(
-          `¿Deseas marcar como AUSENTES a los ${docsToMarkAbsent.length} médico(s) faltantes que no se han presentado a su turno?\n\n✓ OMITIR: Los ${presentesCount} médico(s) que ya están PRESENTES se mantendrán como presentes y no serán afectados.`
-        )
-      ) {
-        return;
-      }
-      docsToMarkAbsent.forEach((d) => {
-        handleSetAttendance(d.nombre, "AUSENTE");
-        const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
-        const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (d.espacio || null);
-        if (onUnassignDoctor) {
-          onUnassignDoctor(d.nombre, spaceToFree, "AUSENTE");
-        }
-      });
+    if (toMark.length === 0) {
+      alert("Todos los médicos programados de este turno ya están PRESENTES o gestionados.\n\nNo hay médicos no presentes para marcar.");
       return;
     }
 
-    // Caso 2: No hay faltantes pendientes, pero el supervisor desea marcar como AUSENTES a todos los médicos no ausentes
-    const nonAbsentDocs = batchDoctors.filter(
-      (d) => d.status !== "AUSENTE" && d.status !== "JUSTIFICADO"
-    );
-
-    if (nonAbsentDocs.length === 0) {
-      alert("Todos los médicos de este turno ya están marcados como ausentes o justificados.");
-      return;
-    }
-
-    if (
-      !window.confirm(
-        `No hay médicos pendientes sin asignar.\n\n¿Deseas marcar como AUSENTES a los ${nonAbsentDocs.length} médico(s) de este turno?\n\n⚠️ Aviso: Esto liberará cualquier puesto asignado en el lote.`
-      )
-    ) {
-      return;
-    }
-
-    nonAbsentDocs.forEach((d) => {
+    // Al no más darle: se marcan inmediatamente como AUSENTES solo a los que no están presentes
+    toMark.forEach((d) => {
       handleSetAttendance(d.nombre, "AUSENTE");
       const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
       const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (d.espacio || null);
@@ -1823,27 +1792,23 @@ export default function AttendanceView({
                 </button>
               )}
 
-              {/* Botón para poner ausentes (SIEMPRE VISIBLE para el supervisor) */}
+              {/* Botón para poner ausentes al no más darle solo a los que NO están presentes */}
               <button
                 type="button"
-                onClick={() => typeof handleMarkUnseatedAsAbsent === "function" && handleMarkUnseatedAsAbsent()}
+                onClick={handleMarkNotPresentAsAbsent}
                 className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
-                title={
-                  totalFaltantesPendientes > 0
-                    ? `Marca como ausentes a los ${totalFaltantesPendientes} médicos pendientes que no han llegado (omite a los presentes)`
-                    : "Poner a todos los médicos de esta nómina como ausentes"
-                }
+                title="Pone en ausente al instante ÚNICAMENTE a los médicos que NO están presentes (los que están presentes se mantienen 100% intactos)"
               >
                 <UserX size={13} />
                 <span className="hidden sm:inline">
-                  {totalFaltantesPendientes > 0
-                    ? `Poner Faltantes Ausentes (${totalFaltantesPendientes})`
-                    : `Poner Todos Ausentes`}
+                  {totalNoPresentes > 0
+                    ? `Poner Ausentes a los No Presentes (${totalNoPresentes})`
+                    : `Poner Ausentes a los No Presentes`}
                 </span>
                 <span className="sm:hidden">
-                  {totalFaltantesPendientes > 0
-                    ? `Faltantes Ausentes (${totalFaltantesPendientes})`
-                    : `Todos Ausentes`}
+                  {totalNoPresentes > 0
+                    ? `No Presentes (${totalNoPresentes})`
+                    : `No Presentes`}
                 </span>
               </button>
 
