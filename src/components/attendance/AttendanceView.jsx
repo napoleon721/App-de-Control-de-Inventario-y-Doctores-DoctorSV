@@ -1,16 +1,17 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
-  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar, LogOut
+  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar, LogOut, RotateCcw, Copy
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import { DOCTORES_EXCEL, STAFF_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES, getDefaultSupervisorRosters } from "../../constants/tokens";
 import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
+import PlanillaManagerModal from "./PlanillaManagerModal";
 import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 import { findDailyLotForSupervisor, findDailyLotsForSupervisor } from "../../utils/dailyLotsParser";
-import { syncSupervisorSheets } from "../../services/googleSheetsService";
+import { syncSupervisorSheets, syncPlanillaSupervisorSheets, mergeQuincenas } from "../../services/googleSheetsService";
 
 export default function AttendanceView({
   spaces,
@@ -81,7 +82,21 @@ export default function AttendanceView({
   });
 
   const [quincenaModalOpen, setQuincenaModalOpen] = useState(false);
+  const [planillaModalOpen, setPlanillaModalOpen] = useState(false);
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
+  const [isSyncingPlanillaSheets, setIsSyncingPlanillaSheets] = useState(false);
+  const [nominaCategory, setNominaCategory] = useState(() => {
+    return (selectedSupId === "sup-4" || selectedSupId === "sup-5") ? "PLANILLA" : "SP";
+  });
+  const [copiedReport, setCopiedReport] = useState(false);
+
+  useEffect(() => {
+    if (selectedSupId === "sup-4" || selectedSupId === "sup-5") {
+      setNominaCategory("PLANILLA");
+    } else if (selectedSupId === "sup-1" || selectedSupId === "sup-2" || selectedSupId === "sup-3") {
+      setNominaCategory("SP");
+    }
+  }, [selectedSupId]);
 
   async function handleQuickSyncGoogleSheets() {
     setIsSyncingSheets(true);
@@ -93,21 +108,22 @@ export default function AttendanceView({
       });
 
       if (res.success && res.quincena) {
-        const targetDate = res.quincena.dias?.some((d) => d.dateKey === todayISO)
+        const merged = mergeQuincenas(quincena, res.quincena);
+        const targetDate = merged.dias?.some((d) => d.dateKey === todayISO)
           ? todayISO
-          : res.quincena.dias?.[0]?.dateKey || todayISO;
+          : merged.dias?.[0]?.dateKey || todayISO;
 
         setSelectedDate(targetDate);
 
         if (onSaveQuincena) {
-          onSaveQuincena(res.quincena, targetDate);
+          onSaveQuincena(merged, targetDate);
         }
         if (onSyncQuincenaDate) {
           onSyncQuincenaDate(targetDate);
         }
 
         setSyncFeedback(
-          `✅ Sincronización exitosa desde Google Sheets: ${res.quincena.dias.length} días actualizados y puestos vinculados (${res.quincena.estadisticas.totalLineasParseadas} turnos para Emerson, Alfredo y Salvador).`
+          `✅ Sincronización exitosa desde Google Sheets (SP): ${merged.dias.length} días actualizados y puestos vinculados (${res.quincena.estadisticas.totalLineasParseadas} turnos para Emerson, Alfredo y Salvador).`
         );
         setTimeout(() => setSyncFeedback(null), 8000);
       } else {
@@ -117,6 +133,40 @@ export default function AttendanceView({
       alert("Error al sincronizar con Google Sheets: " + err.message);
     } finally {
       setIsSyncingSheets(false);
+    }
+  }
+
+  async function handleQuickSyncPlanillaSheets() {
+    setIsSyncingPlanillaSheets(true);
+    try {
+      const res = await syncPlanillaSupervisorSheets();
+
+      if (res.success && res.quincena) {
+        const merged = mergeQuincenas(quincena, res.quincena);
+        const targetDate = merged.dias?.some((d) => d.dateKey === todayISO)
+          ? todayISO
+          : merged.dias?.[0]?.dateKey || todayISO;
+
+        setSelectedDate(targetDate);
+
+        if (onSaveQuincena) {
+          onSaveQuincena(merged, targetDate);
+        }
+        if (onSyncQuincenaDate) {
+          onSyncQuincenaDate(targetDate);
+        }
+
+        setSyncFeedback(
+          `✅ Sincronización exitosa de Planilla desde Google Sheets: ${merged.dias.length} días actualizados (${res.quincena.estadisticas.totalLineasParseadas} turnos para Edward Zelaya y Roxana Canales).`
+        );
+        setTimeout(() => setSyncFeedback(null), 8000);
+      } else {
+        alert(res.error || "No se pudo sincronizar la información de Planilla desde Google Sheets.");
+      }
+    } catch (err) {
+      alert("Error al sincronizar Planilla con Google Sheets: " + err.message);
+    } finally {
+      setIsSyncingPlanillaSheets(false);
     }
   }
 
@@ -350,19 +400,27 @@ export default function AttendanceView({
     }
   });
 
-  const effectiveAttendance = propAttendanceRecords || localAttendance;
+  const effectiveAttendance = useMemo(() => {
+    return { ...(localAttendance || {}), ...(propAttendanceRecords || {}) };
+  }, [localAttendance, propAttendanceRecords]);
+
   function handleSetAttendance(docName, status) {
     if (propOnSetAttendance) {
       propOnSetAttendance(docName, status);
-    } else {
-      setLocalAttendance((prev) => {
-        const next = { ...prev, [docName]: status };
-        try {
-          localStorage.setItem("DOCTORSV_ATTENDANCE_V1", JSON.stringify(next));
-        } catch {}
-        return next;
-      });
     }
+    setLocalAttendance((prev) => {
+      const next = { ...prev };
+      if (docName) {
+        Object.keys(next).forEach((k) => {
+          if (isSameDoctor(k, docName)) delete next[k];
+        });
+        next[docName] = status;
+      }
+      try {
+        localStorage.setItem("DOCTORSV_ATTENDANCE_V1", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   }
 
   // Conteo de puestos ocupados en el lote (excluye estaciones reservadas de supervisores 135-139)
@@ -703,6 +761,14 @@ export default function AttendanceView({
   const totalAusentes = batchDoctors.filter((d) => d.status === "AUSENTE").length;
   const totalJustificados = batchDoctors.filter((d) => d.status === "JUSTIFICADO").length;
 
+  // Médicos faltantes pendientes (estrictamente NO PRESENTES, sin cubículo ni registro previo)
+  const faltantesPendientes = useMemo(() => {
+    return batchDoctors.filter(
+      (d) => d.status === "PENDIENTE" && !d.espacio
+    );
+  }, [batchDoctors]);
+  const totalFaltantesPendientes = faltantesPendientes.length;
+
   const totalAsistieron = totalPresentes + totalFinalizados;
   const asistenciaPct = totalProgramados > 0 ? Math.round((totalAsistieron / totalProgramados) * 100) : 0;
   const inasistenciaPct = totalProgramados > 0 ? Math.round((totalAusentes / totalProgramados) * 100) : 0;
@@ -734,29 +800,65 @@ export default function AttendanceView({
     }
   }
 
-  // Marcar como AUSENTE a todos los médicos que figuran como faltantes / sin puesto
+  // Marcar como AUSENTE únicamente a los médicos que NO están presentes (omite estrictamente a los presentes)
   function handleMarkUnseatedAsAbsent() {
-    const unseatedDocs = batchDoctors.filter(
-      (d) =>
-        (d.status === "PENDIENTE" && (!d.espacio || !d.enMiLote)) ||
-        (d.status === "PRESENTE" && (!d.espacio || !d.enMiLote))
+    const docsToMarkAbsent = batchDoctors.filter(
+      (d) => d.status === "PENDIENTE" && !d.espacio
     );
-    if (unseatedDocs.length === 0) {
-      alert("No hay médicos faltantes sin puesto para marcar como ausentes.");
+    if (docsToMarkAbsent.length === 0) {
+      alert("No hay médicos faltantes pendientes para marcar como ausentes.\n\nTodos los médicos de la lista ya están presentes o gestionados.");
       return;
     }
+    const presentesCount = batchDoctors.filter((d) => d.status === "PRESENTE").length;
     if (
       !window.confirm(
-        `¿Deseas marcar como AUSENTES a los ${unseatedDocs.length} médico(s) faltantes que no tienen cubículo asignado?`
+        `¿Deseas marcar como AUSENTES a los ${docsToMarkAbsent.length} médico(s) faltantes que no se han presentado a su turno?\n\n✓ OMITIR: Los ${presentesCount} médico(s) que ya están PRESENTES se mantendrán como presentes y no serán afectados.`
       )
     ) {
       return;
     }
-    unseatedDocs.forEach((d) => {
+    docsToMarkAbsent.forEach((d) => {
       handleSetAttendance(d.nombre, "AUSENTE");
-      if (onUnassignDoctor && d.espacio) {
-        onUnassignDoctor(d.nombre, d.espacio);
+      const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
+      const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (d.espacio || null);
+      if (onUnassignDoctor) {
+        onUnassignDoctor(d.nombre, spaceToFree, "AUSENTE");
       }
+    });
+  }
+
+  // Revertir inasistencia individual a PRESENTE (caso de llegada tardía del médico)
+  function handleRevertToPresent(doc) {
+    if (!doc?.nombre) return;
+    handleSetAttendance(doc.nombre, "PRESENTE");
+    const freeSpaces = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO");
+    if (freeSpaces.length > 0) {
+      if (
+        window.confirm(
+          `Dr(a). ${doc.nombre} marcado(a) como PRESENTE (Llegada tardía).\n\n¿Deseas asignarle un puesto de trabajo en tu lote ahora mismo?`
+        )
+      ) {
+        openManualAssign(doc);
+      }
+    }
+  }
+
+  // Revertir inasistencia de todos los ausentes a PRESENTE en lote
+  function handleRevertAllAusentes() {
+    const absentDocs = batchDoctors.filter((d) => d.status === "AUSENTE");
+    if (absentDocs.length === 0) {
+      alert("No hay médicos marcados como ausentes para revertir.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿Deseas revertir la inasistencia de los ${absentDocs.length} médico(s) ausentes y marcarlos como PRESENTES (Llegada tardía)?`
+      )
+    ) {
+      return;
+    }
+    absentDocs.forEach((d) => {
+      handleSetAttendance(d.nombre, "PRESENTE");
     });
   }
 
@@ -895,8 +997,11 @@ export default function AttendanceView({
       `Puestos Libres en Bloque: ${puestosLibresLote}\n` +
       `Fecha y Hora: ${new Date().toLocaleString("es-SV")}`;
 
-    navigator.clipboard.writeText(reportText);
-    alert("✅ Reporte copiado al portapapeles. Listo para pegar en Google Sheets, correo o WhatsApp.");
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(reportText).catch(() => {});
+    }
+    setCopiedReport(true);
+    setTimeout(() => setCopiedReport(false), 2500);
   }
 
   return (
@@ -960,60 +1065,163 @@ export default function AttendanceView({
         </div>
       )}
 
-      {/* Barra de Nómina Quincenal Oficial (Servicios Profesionales) */}
-      <div className="bg-white p-4.5 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col gap-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-50 text-[#0048B5] border border-blue-200 shrink-0">
-              <Calendar size={18} />
+      {/* Barra de Nómina Quincenal Oficial (Servicios Profesionales / Médicos en Planilla) */}
+      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col gap-3.5">
+        {/* Selector de Categoría Nómina: SP vs Planilla */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10.5px] font-black text-slate-400 uppercase tracking-wider">
+              GRUPO DE NÓMINA:
+            </span>
+            <div className="inline-flex p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setNominaCategory("SP");
+                  if (selectedSupId === "sup-4" || selectedSupId === "sup-5") {
+                    setSelectedSupId("sup-1");
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-[12px] font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  nominaCategory === "SP"
+                    ? "bg-[#0048B5] text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                }`}
+              >
+                <span>💼 Servicios Profesionales</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  nominaCategory === "SP" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
+                }`}>
+                  138 docs
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNominaCategory("PLANILLA");
+                  if (selectedSupId !== "sup-4" && selectedSupId !== "sup-5") {
+                    setSelectedSupId("sup-5");
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-[12px] font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  nominaCategory === "PLANILLA"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                }`}
+              >
+                <span>📋 Médicos en Planilla</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  nominaCategory === "PLANILLA" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
+                }`}>
+                  57 docs
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="text-[11.5px] font-medium text-slate-500">
+            {nominaCategory === "SP" ? (
+              <span className="flex items-center gap-1">
+                Supervisores: <strong className="text-slate-700">Emerson, Alfredo y Salvador</strong>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-indigo-700">
+                Supervisores Planilla: <strong className="text-indigo-900">Edward Zelaya y Roxana Canales</strong>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-3">
+            <span className={`flex h-10 w-10 items-center justify-center rounded-2xl shrink-0 shadow-2xs border ${
+              nominaCategory === "SP"
+                ? "bg-blue-50 text-[#0048B5] border-blue-200"
+                : "bg-indigo-50 text-indigo-600 border-indigo-200"
+            }`}>
+              <Calendar size={19} />
             </span>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-[13.5px] font-black text-slate-900 tracking-tight">
-                  Nómina Quincenal Oficial (Servicios Profesionales)
+                <h3 className="text-[14px] font-black text-slate-900 tracking-tight">
+                  {nominaCategory === "SP"
+                    ? "Nómina Quincenal Oficial (Servicios Profesionales)"
+                    : "Nómina Quincenal Oficial (Médicos en Planilla)"}
                 </h3>
-                <span className="text-[10.5px] font-bold px-2 py-0.2 rounded-full bg-blue-100 text-[#0048B5] font-mono">
-                  {quincena?.titulo || "Septiembre 2026"}
+                <span className={`text-[10.5px] font-bold px-2.5 py-0.5 rounded-full font-mono ${
+                  nominaCategory === "SP"
+                    ? "bg-blue-100 text-[#0048B5]"
+                    : "bg-indigo-100 text-indigo-700"
+                }`}>
+                  {quincena?.titulo || "Octubre 2026"}
                 </span>
                 {selectedDate && (
-                  <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                     Fecha activa: {quincena?.dias?.find((d) => d.dateKey === selectedDate)?.label || selectedDate}
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                La nómina del supervisor cambia automáticamente según el día seleccionado. Puedes ver o importar los 15 días completos.
+              <p className="text-[11.5px] text-slate-500 font-medium mt-0.5">
+                {nominaCategory === "SP"
+                  ? "La nómina cambia automáticamente según el día seleccionado. Puedes sincronizar o importar los 15 días completos."
+                  : "Supervisa turnos rotativos, libres e incapacidades de doctores en planilla de Edward Zelaya y Roxana Canales."}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleQuickSyncGoogleSheets}
-              disabled={isSyncingSheets}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border border-emerald-300 text-[11.5px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
-              title="Sincronizar nómina en vivo desde el Google Sheet Maestro (Emerson, Alfredo y Salvador)"
-            >
-              <RefreshCw size={13} className={isSyncingSheets ? "animate-spin text-emerald-600" : "text-emerald-600"} />
-              <span>{isSyncingSheets ? "Sincronizando Sheets..." : "Sincronizar Google Sheets"}</span>
-            </button>
+          <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+            {nominaCategory === "SP" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleQuickSyncGoogleSheets}
+                  disabled={isSyncingSheets}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border border-emerald-300 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+                  title="Sincronizar nómina en vivo desde el Google Sheet Maestro (Emerson, Alfredo y Salvador)"
+                >
+                  <RefreshCw size={13} className={isSyncingSheets ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+                  <span>{isSyncingSheets ? "Sincronizando Sheets..." : "Sincronizar Google Sheets"}</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setQuincenaModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-[#0048B5] border border-blue-200 text-[11.5px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
-            >
-              <FileSpreadsheet size={14} className="text-blue-600" />
-              <span>Gestor Quincenal / Hojas</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setQuincenaModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-[#0048B5] border border-blue-200 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                >
+                  <FileSpreadsheet size={14} className="text-blue-600" />
+                  <span>Gestor Quincenal SP</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleQuickSyncPlanillaSheets}
+                  disabled={isSyncingPlanillaSheets}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 text-indigo-900 border border-indigo-300 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+                  title="Sincronizar nómina en vivo de Planilla (Edward Zelaya y Roxana Canales)"
+                >
+                  <RefreshCw size={13} className={isSyncingPlanillaSheets ? "animate-spin text-indigo-600" : "text-indigo-600"} />
+                  <span>{isSyncingPlanillaSheets ? "Sincronizando Planilla..." : "Sincronizar Sheets (Planilla)"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPlanillaModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-700 hover:to-blue-800 text-white border border-indigo-600 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                >
+                  <FileSpreadsheet size={14} className="text-white" />
+                  <span>Gestor Planilla & Plantilla</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Tira interactiva de días de la quincena */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin pt-1">
-          <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
-            Días:
+        {/* Tira interactiva de días de la quincena en contenedor estilizado */}
+        <div className="bg-slate-50/80 p-2 rounded-2xl border border-slate-200/60 flex items-center gap-2 overflow-x-auto scrollbar-thin">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider shrink-0 px-1">
+            DÍAS:
           </span>
           {(quincena?.dias || []).map((dia) => {
             const isSelected = dia.dateKey === selectedDate;
@@ -1031,10 +1239,10 @@ export default function AttendanceView({
                     onSyncQuincenaDate(dia.dateKey);
                   }
                 }}
-                className={`shrink-0 px-3 py-1.5 rounded-xl border text-left transition-all relative flex items-center gap-2 ${
+                className={`shrink-0 px-3 py-1.5 rounded-xl border text-left transition-all relative flex items-center gap-2 cursor-pointer ${
                   isSelected
                     ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs ring-2 ring-blue-500/20"
-                    : "bg-slate-50 hover:bg-white text-slate-700 border-slate-200 hover:border-slate-300"
+                    : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300 shadow-2xs"
                 }`}
               >
                 <div className="flex flex-col">
@@ -1042,12 +1250,12 @@ export default function AttendanceView({
                     {dia.label?.split(" ")[0]} {dia.label?.split(" ")[1]}
                     {isToday && <span className="ml-1 text-[8.5px] px-1 py-0.2 rounded bg-amber-400 text-amber-950 font-black">HOY</span>}
                   </span>
-                  <span className={`text-[9.5px] font-medium ${isSelected ? "text-blue-200" : "text-slate-400"}`}>
+                  <span className={`text-[9.5px] font-semibold ${isSelected ? "text-blue-200" : "text-slate-400"}`}>
                     {dia.diaSemana?.slice(0, 3)}
                   </span>
                 </div>
                 <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                  isSelected ? "bg-white/20 text-white" : "bg-slate-200/80 text-slate-700"
+                  isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700 border border-slate-200/80"
                 }`}>
                   {countForCurrentSup}
                 </span>
@@ -1073,205 +1281,264 @@ export default function AttendanceView({
         </div>
       )}
 
-      {/* Selector de Supervisor & Lote + Filtro de Franja Horaria */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-wrap items-start gap-3">
-          {/* Supervisor */}
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Supervisor a Cargo
-            </label>
-            <select
-              value={selectedSupId}
-              onChange={(e) => setSelectedSupId(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-[13px] font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs"
-            >
-              {supervisores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre} · Puesto #{s.puesto} ({s.totalPuestos || (s.bloqueFin - s.bloqueInicio + 1)} médicos)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Franja Horaria */}
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Franja Horaria
-            </label>
-            <select
-              value={filterHorario}
-              onChange={(e) => handleFilterHorarioChange(e.target.value)}
-              className={`rounded-xl border px-3.5 py-2 text-[13px] font-bold outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs transition-all ${
-                filterHorario !== "TODOS"
-                  ? "border-[#0048B5] bg-blue-50 text-[#0048B5]"
-                  : "border-slate-200 bg-slate-50 text-slate-800"
-              }`}
-            >
-              <option value="TODOS">Todas las franjas</option>
-              {(() => {
-                const shiftList = [...(horarios || HORARIOS)];
-                (spaces || []).forEach((s) => {
-                  if (s.doctor && s.horario && !shiftList.some((h) => isSameHorario(h, s.horario))) {
-                    shiftList.push(s.horario);
+      {/* Selector de Supervisor & Lote + Filtro de Franja Horaria (Reacondicionado) */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
+        {/* Nivel 1: Cuadrícula de contexto y selectores */}
+        <div className="p-4 sm:p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3.5 items-stretch">
+            
+            {/* Col 1-4: Supervisor a Cargo */}
+            <div className="xl:col-span-4 flex flex-col justify-between bg-slate-50/70 p-3 rounded-2xl border border-slate-200/60">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Users size={13} className="text-[#0048B5]" />
+                  Supervisor a Cargo
+                </label>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#0048B5]">
+                  {supervisores.length} supervisores
+                </span>
+              </div>
+              <select
+                value={selectedSupId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedSupId(id);
+                  if (id === "sup-4" || id === "sup-5") {
+                    setNominaCategory("PLANILLA");
+                  } else if (id === "sup-1" || id === "sup-2" || id === "sup-3") {
+                    setNominaCategory("SP");
                   }
-                });
-                return shiftList.map((h) => {
-                  const occupiedCount = (spaces || []).filter((s) => s.doctor && isSameHorario(s.horario, h)).length;
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs hover:border-slate-300 transition-colors"
+              >
+                {supervisores.map((s) => {
+                  const isPlanilla = s.id === "sup-4" || s.id === "sup-5" || (s.nombre && (s.nombre.includes("EDWARD") || s.nombre.includes("ROXANA")));
                   return (
-                    <option key={h} value={h}>
-                      {h} {occupiedCount > 0 ? `(${occupiedCount} en turno)` : ""}
+                    <option key={s.id} value={s.id}>
+                      {isPlanilla ? "[PLANILLA] " : "[SP] "}{s.nombre} · Puesto #{s.puesto} ({s.totalPuestos || (s.bloqueFin - s.bloqueInicio + 1)} médicos)
                     </option>
                   );
-                });
-              })()}
-            </select>
-          </div>
-
-          <div className="border-l border-slate-200 pl-3">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-              Estación Física del Supervisor
-            </span>
-            <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-sky-700 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200">
-              {Number(currentSupervisor.puesto) > 0 ? (
-                <span>🔒 Puesto #{currentSupervisor.puesto}</span>
-              ) : (
-                <span className="text-slate-500 font-semibold text-[12px]">⚪ Sin Estación Física</span>
-              )}
+                })}
+              </select>
             </div>
-          </div>
 
-          <div className="border-l border-slate-200 pl-3">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <div className="flex items-center gap-1.5">
-                <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Lote Asignado {dynamicLot ? "del Día" : "por Central"}
-                </span>
-                {dynamicLot && (
-                  <span className="bg-emerald-100 text-emerald-800 text-[9.5px] font-bold px-1.5 py-0.2 rounded-md font-mono" title={`Resumen San Miguel: ${dynamicLot.grupo} · ${dynamicLot.horario}`}>
-                    Resumen SM
+            {/* Col 5-7: Franja Horaria */}
+            <div className="xl:col-span-3 flex flex-col justify-between bg-slate-50/70 p-3 rounded-2xl border border-slate-200/60">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Clock size={13} className="text-[#0048B5]" />
+                  Franja Horaria
+                </label>
+                {filterHorario !== "TODOS" && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                    Filtrado
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1">
-                {onOpenDailyLots && (
-                  <button
-                    type="button"
-                    onClick={onOpenDailyLots}
-                    className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1"
-                    title="Ver y editar la distribución diaria de puestos (Resumen San Miguel)"
-                  >
-                    <FileSpreadsheet size={10} />
-                    <span>Resumen SM</span>
-                  </button>
-                )}
-                {isMaster && onOpenSupervisorConfig && (
-                  <button
-                    type="button"
-                    onClick={onOpenSupervisorConfig}
-                    className="text-[10px] font-bold text-[#0048B5] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-lg border border-blue-200 transition-colors flex items-center gap-1"
-                    title="Configurar puestos, ubicación y turno oficial base de este supervisor"
-                  >
-                    <Settings2 size={10} />
-                    <span>Lote Base</span>
-                  </button>
-                )}
-              </div>
-            </div>
-            {isMultiLot ? (
-              <div className="flex items-center gap-1.5 font-mono-data text-[12.5px] font-bold text-[#0048B5] bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200">
-                <MapPin size={14} className="text-emerald-600" />
-                <span>
-                  {dynamicLots.map((dl) => `#${dl.bloqueInicio}-#${dl.bloqueFin}`).join(" y ")}
-                </span>
-                <span className="text-[10.5px] font-normal text-slate-500">
-                  ({activeTotalPuestos} puestos en {dynamicLots.length} lotes)
-                </span>
-              </div>
-            ) : activeBloqueInicio === 0 ? (
-              <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
-                <MapPin size={14} className="text-amber-600" />
-                <span>Sin Lote Asignado Hoy</span>
-                <span className="text-[10.5px] font-normal text-amber-700">
-                  (0 puestos)
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 font-mono-data text-[13px] font-bold text-[#0048B5] bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-200">
-                <MapPin size={14} className={dynamicLot ? "text-emerald-600" : "text-[#0048B5]"} />
-                <span>Puestos #{activeBloqueInicio} al #{activeBloqueFin}</span>
-                <span className="text-[10.5px] font-normal text-slate-500">
-                  ({activeTotalPuestos} puestos)
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="border-l border-slate-200 pl-3">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Turno Oficial
-              </span>
-              {isMaster && (
-                <span className="text-[9.5px] font-bold text-[#0048B5] bg-blue-50 border border-blue-200 rounded px-1.5 py-0.2">
-                  Editable Master
-                </span>
-              )}
-            </div>
-            {isMaster ? (
-              <div className="relative">
+              <div className="relative flex items-center">
                 <select
-                  value={currentSupervisor.horario || ""}
-                  onChange={(e) => {
-                    if (onUpdateSupervisorOfficialShift) {
-                      onUpdateSupervisorOfficialShift(currentSupervisor.id, e.target.value);
-                    }
-                  }}
-                  className="appearance-none font-mono-data text-[12px] font-bold text-[#0048B5] bg-blue-50/90 hover:bg-blue-100/90 border border-blue-300 rounded-xl pl-8 pr-7 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0048B5] transition-all shadow-sm"
-                  title="Cambiar turno oficial asignado a este supervisor (Doctor Master)"
+                  value={filterHorario}
+                  onChange={(e) => handleFilterHorarioChange(e.target.value)}
+                  className={`w-full rounded-xl border px-3 py-2 text-[12.5px] font-bold outline-none focus:ring-2 focus:ring-[#0095FF]/40 cursor-pointer shadow-2xs transition-all ${
+                    filterHorario !== "TODOS"
+                      ? "border-blue-400 bg-blue-50/90 text-[#0048B5] pr-8"
+                      : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+                  }`}
                 >
-                  {horarios.map((h) => (
-                    <option key={h} value={h} className="text-slate-800 font-sans">
-                      {h}
-                    </option>
-                  ))}
+                  <option value="TODOS">Todas las franjas</option>
+                  {(() => {
+                    const shiftList = [...(horarios || HORARIOS)];
+                    (spaces || []).forEach((s) => {
+                      if (s.doctor && s.horario && !shiftList.some((h) => isSameHorario(h, s.horario))) {
+                        shiftList.push(s.horario);
+                      }
+                    });
+                    return shiftList.map((h) => {
+                      const occupiedCount = (spaces || []).filter((s) => s.doctor && isSameHorario(s.horario, h)).length;
+                      return (
+                        <option key={h} value={h}>
+                          {h} {occupiedCount > 0 ? `(${occupiedCount} en turno)` : ""}
+                        </option>
+                      );
+                    });
+                  })()}
                 </select>
-                <Clock size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#0048B5] pointer-events-none" />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#0048B5] text-[10px]">
-                  ▼
+                {filterHorario !== "TODOS" && (
+                  <button
+                    type="button"
+                    onClick={() => handleFilterHorarioChange("TODOS")}
+                    className="absolute right-2 text-slate-400 hover:text-rose-500 font-black text-sm p-1 leading-none cursor-pointer"
+                    title="Quitar filtro de franja y ver todas"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Col 8-10: Lote Asignado */}
+            <div className="xl:col-span-3 flex flex-col justify-between bg-slate-50/70 p-3 rounded-2xl border border-slate-200/60">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <MapPin size={13} className="text-[#0048B5]" />
+                  Lote Asignado
+                </label>
+                <div className="flex items-center gap-1">
+                  {dynamicLot && (
+                    <span className="bg-emerald-100 text-emerald-800 text-[9.5px] font-bold px-1.5 py-0.2 rounded-md font-mono" title={`Resumen San Miguel: ${dynamicLot.grupo} · ${dynamicLot.horario}`}>
+                      Resumen SM
+                    </span>
+                  )}
+                  {isMaster && onOpenSupervisorConfig && (
+                    <button
+                      type="button"
+                      onClick={onOpenSupervisorConfig}
+                      className="text-[9.5px] font-bold text-[#0048B5] hover:text-blue-800 bg-blue-100/70 hover:bg-blue-200/70 px-1.5 py-0.2 rounded transition-colors cursor-pointer"
+                      title="Configurar puestos, ubicación y turno oficial base"
+                    >
+                      Editar Base
+                    </button>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="flex items-center gap-1.5 font-mono-data text-[12px] font-semibold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl">
-                <Clock size={14} className="text-amber-600" />
-                <span>
-                  {currentSupervisorFranjas.length > 1
-                    ? currentSupervisorFranjas.join(" · ")
-                    : (currentSupervisor.horario || "Sin turno asignado")}
-                </span>
+              <div>
+                {isMultiLot ? (
+                  <div className="flex items-center gap-1.5 font-mono-data text-[12px] font-bold text-[#0048B5] bg-white px-2.5 py-1.5 rounded-xl border border-blue-200">
+                    <MapPin size={13} className="text-emerald-600 shrink-0" />
+                    <span className="truncate">
+                      {dynamicLots.map((dl) => `#${dl.bloqueInicio}-#${dl.bloqueFin}`).join(" y ")}
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-500 shrink-0">
+                      ({activeTotalPuestos} p.)
+                    </span>
+                  </div>
+                ) : activeBloqueInicio === 0 ? (
+                  <div className="flex items-center gap-1.5 font-mono-data text-[12px] font-bold text-amber-800 bg-white px-2.5 py-1.5 rounded-xl border border-amber-200">
+                    <MapPin size={13} className="text-amber-600 shrink-0" />
+                    <span>Sin Lote Asignado Hoy</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 font-mono-data text-[12px] font-bold text-[#0048B5] bg-white px-2.5 py-1.5 rounded-xl border border-blue-200">
+                    <MapPin size={13} className={dynamicLot ? "text-emerald-600 shrink-0" : "text-[#0048B5] shrink-0"} />
+                    <span className="truncate">#{activeBloqueInicio} al #{activeBloqueFin}</span>
+                    <span className="text-[10px] font-normal text-slate-500 shrink-0">
+                      ({activeTotalPuestos} p.)
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Col 11-12: Estación Física y Turno Oficial */}
+            <div className="xl:col-span-2 flex flex-col justify-between bg-slate-50/70 p-3 rounded-2xl border border-slate-200/60">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                  Estación / Turno
+                </label>
+                {Number(currentSupervisor.puesto) > 0 && (
+                  <span className="text-[9.5px] font-black text-sky-800 bg-sky-100 px-1.5 py-0.2 rounded font-mono">
+                    Puesto #{currentSupervisor.puesto}
+                  </span>
+                )}
+              </div>
+              <div>
+                {isMaster ? (
+                  <div className="relative">
+                    <select
+                      value={currentSupervisor.horario || ""}
+                      onChange={(e) => {
+                        if (onUpdateSupervisorOfficialShift) {
+                          onUpdateSupervisorOfficialShift(currentSupervisor.id, e.target.value);
+                        }
+                      }}
+                      className="w-full appearance-none font-mono-data text-[11.5px] font-bold text-[#0048B5] bg-white hover:bg-blue-50/50 border border-slate-200 hover:border-blue-300 rounded-xl pl-6 pr-5 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0048B5] transition-all shadow-2xs"
+                      title="Cambiar turno oficial asignado a este supervisor (Doctor Master)"
+                    >
+                      {horarios.map((h) => (
+                        <option key={h} value={h} className="text-slate-800 font-sans">
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                    <Clock size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#0048B5] pointer-events-none" />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#0048B5] text-[9px]">
+                      ▼
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 font-mono-data text-[11.5px] font-semibold text-slate-700 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200">
+                    <Clock size={12} className="text-amber-600 shrink-0" />
+                    <span className="truncate">
+                      {currentSupervisorFranjas.length > 1
+                        ? currentSupervisorFranjas.join(" · ")
+                        : (currentSupervisor.horario || "Sin turno")}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
-          {/* Badge de filtros activos */}
-          {filterHorario !== "TODOS" && (
-            <div className="flex items-center gap-1.5 rounded-xl bg-blue-50 border border-blue-200 px-3 py-1.5 text-[11.5px] font-bold text-[#0048B5]">
-              <Filter size={12} />
-              <span>Franja: {filterHorario}</span>
-              <button
-                onClick={() => handleFilterHorarioChange("TODOS")}
-                className="ml-1 text-slate-400 hover:text-rose-500 font-black text-[13px] leading-none"
-                title="Limpiar filtro de franja"
+        {/* Nivel 2: Barra de Distribución de Botones */}
+        <div className="px-4 sm:px-5 py-3.5 bg-slate-50/90 border-t border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          
+          {/* Grupo Izquierdo: Operativa del Lote y Cubículos */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Estado / Auto-asignación */}
+            {activeBloqueInicio === 0 ? (
+              <div
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs"
+                title="Supervisor sin lote asignado hoy"
               >
-                ×
+                <AlertCircle size={13} className="text-amber-600" />
+                <span>Sin Lote Hoy</span>
+              </div>
+            ) : totalSinPuesto > 0 && puestosLibresLote > 0 ? (
+              <button
+                type="button"
+                onClick={handleBatchAssignRoster}
+                className="flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-extrabold text-white shadow-xs transition-all active:scale-95 hover:brightness-110 cursor-pointer"
+                style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+                title="Asigna automáticamente a los médicos faltantes a cubículos libres en tu bloque"
+              >
+                <Sparkles size={13} />
+                <span>⚡ Auto-asignar Lote ({Math.min(totalSinPuesto, puestosLibresLote)})</span>
               </button>
-            </div>
-          )}
+            ) : totalSinPuesto === 0 && totalConPuesto > 0 ? (
+              <div
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs"
+                title="Todos los médicos de este lote ya tienen su cubículo asignado"
+              >
+                <CheckCircle2 size={13} className="text-emerald-600" />
+                <span>✓ Lote Asignado ({totalConPuesto})</span>
+              </div>
+            ) : totalSinPuesto > 0 && puestosLibresLote === 0 ? (
+              <div
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs"
+                title={`No hay puestos libres en el lote (#${activeBloqueInicio} al #${activeBloqueFin})`}
+              >
+                <AlertCircle size={13} className="text-amber-600" />
+                <span>Lote Lleno ({totalSinPuesto} sin puesto)</span>
+              </div>
+            ) : null}
 
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {/* Botón Maestro/Supervisor: Liberar Mi Lote y Remanentes */}
+            {/* Sincronización de Lote */}
+            {activeBloqueInicio > 0 && (
+              <button
+                type="button"
+                onClick={handleTriggerSyncLote}
+                disabled={isSyncing || isSyncingLoteLocal}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 shadow-2xs transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                title={`Sincronizar puestos y estados del lote (#${activeBloqueInicio} al #${activeBloqueFin}) con Google Sheets`}
+              >
+                <RefreshCw size={13} className={(isSyncing || isSyncingLoteLocal) ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+                <span>{(isSyncing || isSyncingLoteLocal) ? "Sincronizando..." : `Sync Lote (${supervisorSpaces.length})`}</span>
+              </button>
+            )}
+
+            {/* Liberar Mi Lote */}
             {onReleaseLote && activeBloqueInicio > 0 && (ocupadosEnMiLote > 0 || totalPresentes > 0) && (
               <button
                 type="button"
@@ -1284,14 +1551,14 @@ export default function AttendanceView({
                     batchDoctors.map((d) => d.nombre)
                   )
                 }
-                className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
                 title={
                   ocupadosEnMiLote > 0
                     ? `Liberar todos los ${ocupadosEnMiLote} cubículos ocupados en el lote (#${activeBloqueInicio} al #${activeBloqueFin}) y finalizar asistencia`
                     : `Finalizar jornada de los ${totalPresentes} médicos presentes remanentes en este turno`
                 }
               >
-                <RefreshCw size={13} />
+                <RotateCcw size={13} />
                 <span>
                   {ocupadosEnMiLote > 0
                     ? `Liberar Mi Lote (${ocupadosEnMiLote})`
@@ -1300,7 +1567,7 @@ export default function AttendanceView({
               </button>
             )}
 
-            {/* Botón Liberar Franja */}
+            {/* Liberar Franja */}
             {onReleaseByHorario && (() => {
               const franjaTarget = filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario;
               const isSup = (s) => [135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores";
@@ -1315,94 +1582,64 @@ export default function AttendanceView({
                       onReleaseByHorario(franjaTarget);
                     }
                   }}
-                  className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
                   title={`Liberar totalmente todos los puestos de la franja ${franjaTarget}`}
                 >
-                  <RefreshCw size={13} />
+                  <RotateCcw size={13} />
                   <span>Liberar Franja ({ocupadosEnFranja})</span>
                 </button>
               ) : null;
             })()}
-
-            {/* Botón Sincronizar Lote con Google Sheets */}
-            {activeBloqueInicio > 0 && (
-              <button
-                type="button"
-                onClick={handleTriggerSyncLote}
-                disabled={isSyncing || isSyncingLoteLocal}
-                className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs transition-all active:scale-95 cursor-pointer disabled:opacity-60"
-                title={`Sincronizar puestos y estados del lote (#${activeBloqueInicio} al #${activeBloqueFin}) con Google Sheets`}
-              >
-                <RefreshCw size={13} className={(isSyncing || isSyncingLoteLocal) ? "animate-spin text-emerald-600" : "text-emerald-600"} />
-                <span>{(isSyncing || isSyncingLoteLocal) ? "Sincronizando..." : `Sync Lote (${supervisorSpaces.length})`}</span>
-              </button>
-            )}
           </div>
 
-          {activeBloqueInicio === 0 ? (
-            <div
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs"
-              title="Supervisor sin lote asignado hoy (no asiste o en descanso)"
-            >
-              <AlertCircle size={14} className="text-amber-600" />
-              <span>⚪ Sin Lote Asignado Hoy</span>
-            </div>
-          ) : totalSinPuesto > 0 && puestosLibresLote > 0 ? (
+          {/* Grupo Derecho: Configuración, Nómina y Reporte */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {onOpenDailyLots && (
+              <button
+                type="button"
+                onClick={onOpenDailyLots}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-indigo-700 border border-indigo-200 bg-white hover:bg-indigo-50 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                title="Abre la distribución de puestos diaria de la hoja RESUMEN SAN MIGUEL"
+              >
+                <FileSpreadsheet size={13} className="text-indigo-600" />
+                <span>Resumen San Miguel</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={handleBatchAssignRoster}
-              className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-white shadow-xs transition-all active:scale-95 hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-              title="Asigna automáticamente a los médicos faltantes a cubículos libres en tu bloque"
+              onClick={() => setRosterModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-[#0048B5] border border-blue-200 bg-white hover:bg-blue-50 shadow-2xs transition-all active:scale-95 cursor-pointer"
+              title="Personaliza qué médicos están asignados a este supervisor"
             >
-              <Sparkles size={14} />
-              <span>⚡ Auto-asignar Lote ({Math.min(totalSinPuesto, puestosLibresLote)})</span>
+              <Settings2 size={13} className="text-[#0095FF]" />
+              <span>Configurar Nómina ({currentRosterNames.length})</span>
             </button>
-          ) : totalSinPuesto === 0 && totalConPuesto > 0 ? (
-            <div
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs"
-              title="Todos los médicos de este lote ya tienen su cubículo asignado"
-            >
-              <CheckCircle2 size={14} className="text-emerald-600" />
-              <span>✓ Lote Asignado ({totalConPuesto})</span>
-            </div>
-          ) : totalSinPuesto > 0 && puestosLibresLote === 0 ? (
-            <div
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs"
-              title={`No hay puestos libres en el lote (#${activeBloqueInicio} al #${activeBloqueFin})`}
-            >
-              <AlertCircle size={14} className="text-amber-600" />
-              <span>Lote Lleno ({totalSinPuesto} sin puesto)</span>
-            </div>
-          ) : null}
 
-          {onOpenDailyLots && (
             <button
-              onClick={onOpenDailyLots}
-              className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-indigo-700 border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 shadow-2xs transition-all active:scale-95 cursor-pointer"
-              title="Abre la distribución de puestos diaria de la hoja RESUMEN SAN MIGUEL"
+              type="button"
+              onClick={handleCopyReport}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold shadow-2xs transition-all active:scale-95 cursor-pointer ${
+                copiedReport
+                  ? "bg-emerald-600 text-white border border-emerald-600"
+                  : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+              }`}
+              title="Copiar reporte completo al portapapeles"
             >
-              <FileSpreadsheet size={15} className="text-indigo-600" />
-              <span>Resumen San Miguel</span>
+              {copiedReport ? (
+                <>
+                  <Check size={13} className="text-white" />
+                  <span>¡Reporte Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={13} className="text-slate-600" />
+                  <span>Copiar Reporte</span>
+                </>
+              )}
             </button>
-          )}
+          </div>
 
-          <button
-            onClick={() => setRosterModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-[#0048B5] border border-blue-200 bg-blue-50/80 hover:bg-blue-100 shadow-2xs transition-all active:scale-95"
-            title="Personaliza qué médicos están asignados a este supervisor"
-          >
-            <Settings2 size={15} className="text-[#0095FF]" />
-            <span>Configurar Nómina ({currentRosterNames.length})</span>
-          </button>
-
-          <button
-            onClick={handleCopyReport}
-            className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-all"
-          >
-            <FileSpreadsheet size={15} className="text-emerald-600" />
-            <span>Copiar Reporte</span>
-          </button>
         </div>
       </div>
 
@@ -1462,16 +1699,31 @@ export default function AttendanceView({
                 </button>
               )}
 
-              {totalSinPuesto > 0 && (
+              {/* Botón para marcar Faltantes como Ausentes (OMITE ESTRICTAMENTE A LOS PRESENTES) */}
+              {totalFaltantesPendientes > 0 && (
                 <button
                   type="button"
                   onClick={() => typeof handleMarkUnseatedAsAbsent === "function" && handleMarkUnseatedAsAbsent()}
-                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs cursor-pointer"
-                  title="Marca a todos los médicos que aún no tienen puesto como ausentes"
+                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                  title="Marca como ausentes a los médicos pendientes que no han llegado (omite estrictamente a los presentes)"
                 >
                   <UserX size={13} />
-                  <span className="hidden sm:inline">Marcar Faltantes como Ausentes ({totalSinPuesto})</span>
-                  <span className="sm:hidden">Faltantes Ausentes ({totalSinPuesto})</span>
+                  <span className="hidden sm:inline">Marcar Faltantes como Ausentes ({totalFaltantesPendientes})</span>
+                  <span className="sm:hidden">Faltantes Ausentes ({totalFaltantesPendientes})</span>
+                </button>
+              )}
+
+              {/* Botón para revertir ausencias si hay médicos ausentes */}
+              {totalAusentes > 0 && (
+                <button
+                  type="button"
+                  onClick={() => typeof handleRevertAllAusentes === "function" && handleRevertAllAusentes()}
+                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                  title="Revertir la inasistencia de todos los médicos marcados como ausentes a PRESENTE (Llegada tardía)"
+                >
+                  <RotateCcw size={13} className="text-emerald-600" />
+                  <span className="hidden sm:inline">Revertir Ausentes ({totalAusentes})</span>
+                  <span className="sm:hidden">Revertir ({totalAusentes})</span>
                 </button>
               )}
 
@@ -1752,7 +2004,13 @@ export default function AttendanceView({
                       <td className="px-3.5 py-3 text-center">
                         <div className="inline-flex items-center rounded-xl p-0.5 bg-slate-100 border border-slate-200">
                           <button
-                            onClick={() => handleSetAttendance(doc.nombre, "PRESENTE")}
+                            onClick={() => {
+                              if (isAbsent) {
+                                handleRevertToPresent(doc);
+                              } else {
+                                handleSetAttendance(doc.nombre, "PRESENTE");
+                              }
+                            }}
                             className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
                               isPresent
                                 ? "bg-emerald-600 text-white shadow-xs"
@@ -1764,8 +2022,10 @@ export default function AttendanceView({
                           <button
                             onClick={() => {
                               handleSetAttendance(doc.nombre, "AUSENTE");
+                              const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
+                              const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
                               if (onUnassignDoctor) {
-                                onUnassignDoctor(doc.nombre, doc.espacio);
+                                onUnassignDoctor(doc.nombre, spaceToFree, "AUSENTE");
                               }
                             }}
                             className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
@@ -1779,8 +2039,10 @@ export default function AttendanceView({
                           <button
                             onClick={() => {
                               handleSetAttendance(doc.nombre, "JUSTIFICADO");
+                              const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
+                              const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
                               if (onUnassignDoctor) {
-                                onUnassignDoctor(doc.nombre, doc.espacio);
+                                onUnassignDoctor(doc.nombre, spaceToFree, "JUSTIFICADO");
                               }
                             }}
                             className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
@@ -1794,8 +2056,10 @@ export default function AttendanceView({
                           <button
                             onClick={() => {
                               handleSetAttendance(doc.nombre, "FINALIZADO");
+                              const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
+                              const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
                               if (onUnassignDoctor) {
-                                onUnassignDoctor(doc.nombre, doc.espacio);
+                                onUnassignDoctor(doc.nombre, spaceToFree, "FINALIZADO");
                               }
                             }}
                             className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
@@ -1818,10 +2082,28 @@ export default function AttendanceView({
                             Liberar
                           </button>
                         ) : (
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {isAbsent && (
+                              <button
+                                type="button"
+                                onClick={() => handleRevertToPresent(doc)}
+                                className="inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                                title="Revertir inasistencia: El médico llegó tarde y se marca como PRESENTE"
+                              >
+                                <RotateCcw size={12} className="text-emerald-600" />
+                                <span>Revertir a Presente</span>
+                              </button>
+                            )}
                             {doc.status === "PRESENTE" && (
                               <button
-                                onClick={() => handleSetAttendance(doc.nombre, "FINALIZADO")}
+                                onClick={() => {
+                                  handleSetAttendance(doc.nombre, "FINALIZADO");
+                                  const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
+                                  const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
+                                  if (onUnassignDoctor) {
+                                    onUnassignDoctor(doc.nombre, spaceToFree, "FINALIZADO");
+                                  }
+                                }}
                                 className="inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-all shadow-2xs cursor-pointer"
                                 title="Marcar salida a este médico para limpiar remanente"
                               >
@@ -2176,6 +2458,24 @@ export default function AttendanceView({
             if (onSaveQuincena) onSaveQuincena(newQ);
           }}
           onClose={() => setQuincenaModalOpen(false)}
+          supervisores={supervisores}
+        />
+      )}
+
+      {/* Modal Gestor de Nómina de Médicos en Planilla (Edward Zelaya & Roxana Canales) */}
+      {planillaModalOpen && (
+        <PlanillaManagerModal
+          activeQuincena={quincena}
+          selectedDate={selectedDate}
+          onSelectDate={(newDate) => {
+            setSelectedDate(newDate);
+            setPlanillaModalOpen(false);
+          }}
+          onSaveQuincena={(newQ) => {
+            const merged = mergeQuincenas(quincena, newQ);
+            if (onSaveQuincena) onSaveQuincena(merged, selectedDate);
+          }}
+          onClose={() => setPlanillaModalOpen(false)}
           supervisores={supervisores}
         />
       )}

@@ -23,7 +23,7 @@ const GoogleSheetsConfigModal = lazy(() => import("./components/config/GoogleShe
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces,
-  SUPERVISORES_OFICIALES, DOCTORES_EXCEL, ensureAllSpaces, getDefaultSupervisorRosters
+  SUPERVISORES_OFICIALES, DOCTORES_EXCEL, STAFF_EXCEL, ensureAllSpaces, getDefaultSupervisorRosters
 } from "./constants/tokens";
 
 import {
@@ -656,6 +656,24 @@ export default function App() {
       }
 
       supData.doctores.forEach((doc, idx) => {
+        // Verificar si el médico figura como AUSENTE, FINALIZADO o JUSTIFICADO en el control de asistencias
+        const isAbsentOrFinished = (() => {
+          if (!attendanceRecords || typeof attendanceRecords !== "object") return false;
+          const direct = attendanceRecords[doc.nombre];
+          if (direct === "AUSENTE" || direct === "FINALIZADO" || direct === "JUSTIFICADO") return true;
+          const matchKey = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, doc.nombre));
+          if (matchKey) {
+            const st = attendanceRecords[matchKey];
+            return st === "AUSENTE" || st === "FINALIZADO" || st === "JUSTIFICADO";
+          }
+          return false;
+        })();
+
+        if (isAbsentOrFinished) {
+          // El médico no debe ocupar un puesto en el mapa si está ausente o no está presente
+          return;
+        }
+
         const targetSpaceId = start + idx;
         if (targetSpaceId <= end) {
           assignmentsBySpace.set(targetSpaceId, {
@@ -719,7 +737,7 @@ export default function App() {
       });
       return next;
     });
-  }, [quincena, supervisores, dailyLots]);
+  }, [quincena, supervisores, dailyLots, attendanceRecords]);
 
   // Sincronizar automáticamente con las 3 hojas de Google Sheets al iniciar si no está cargada
   useEffect(() => {
@@ -879,6 +897,54 @@ export default function App() {
     }
   }, [attendanceRecords]);
 
+  // Sincronización reactiva bidireccional entre control de asistencia y mapa de espacios:
+  // Si un médico figura como AUSENTE, FINALIZADO o JUSTIFICADO en attendanceRecords,
+  // asegurar que su cubículo en el mapa quede 100% DISPONIBLE (nunca OCUPADO/trabajando).
+  useEffect(() => {
+    if (!attendanceRecords || typeof attendanceRecords !== "object") return;
+    const notWorkingNames = Object.keys(attendanceRecords).filter((k) => {
+      const st = attendanceRecords[k];
+      return st === "AUSENTE" || st === "FINALIZADO" || st === "JUSTIFICADO";
+    });
+
+    if (notWorkingNames.length === 0) return;
+
+    setSpaces((prevSpaces) => {
+      let hasChanges = false;
+      const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+      const next = prevSpaces.map((s) => {
+        if (!s.doctor) return s;
+        const isNotWorking = notWorkingNames.some((dName) => isSameDoctor(s.doctor, dName));
+        if (isNotWorking) {
+          hasChanges = true;
+          recentlyReleasedRef.current.set(Number(s.id), Date.now());
+          const isSpecial = s.estado === "INHABILITADO" || s.estado === "REPARACION";
+          const isSupStation = [135, 136, 137, 138, 139].includes(Number(s.id));
+          return {
+            ...s,
+            doctor: null,
+            horario: null,
+            supervisorId: isSupStation ? s.supervisorId : null,
+            supervisorNombre: isSupStation ? s.supervisorNombre : null,
+            categoria: Number(s.id) === 1 ? null : s.categoria,
+            estado: isSpecial ? s.estado : "DISPONIBLE",
+            marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+            modelo: s.modelo || "OptiPlex 3080",
+            observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
+            ultimoMovimiento: nowTime,
+          };
+        }
+        return s;
+      });
+
+      if (hasChanges) {
+        saveCloudSpaces(next, myClientId.current, true);
+        return next;
+      }
+      return prevSpaces;
+    });
+  }, [attendanceRecords]);
+
   // Sincronizar dailyLots en localStorage y Firestore
   useEffect(() => {
     if (isInitialMountDailyLots.current) {
@@ -1026,13 +1092,29 @@ export default function App() {
     };
     spaces.forEach((s) => {
       if (s.doctor) {
-        res.OCUPADO++;
+        const isNotWorking = (() => {
+          if (!attendanceRecords || typeof attendanceRecords !== "object") return false;
+          const direct = attendanceRecords[s.doctor];
+          if (direct === "AUSENTE" || direct === "FINALIZADO" || direct === "JUSTIFICADO") return true;
+          const matchKey = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, s.doctor));
+          if (matchKey) {
+            const st = attendanceRecords[matchKey];
+            return st === "AUSENTE" || st === "FINALIZADO" || st === "JUSTIFICADO";
+          }
+          return false;
+        })();
+
+        if (isNotWorking) {
+          res.DISPONIBLE++;
+        } else {
+          res.OCUPADO++;
+        }
       } else if (res[s.estado] !== undefined) {
         res[s.estado]++;
       }
     });
     return res;
-  }, [spaces]);
+  }, [spaces, attendanceRecords]);
 
   // Alertas activas
   const alerts = useMemo(() => {
@@ -1154,6 +1236,28 @@ export default function App() {
 
     const bodegaDeltas = {};
     const newLogs = [];
+
+    // 4.1 Validación estricta de existencias en Bodega: No permitir instalar nuevos periféricos o PCs si el stock es 0
+    const getStockNow = (k) => {
+      const match = (bodegaStock || []).find(
+        (b) => b.key === k || (k === "MAUSE" && (b.key === "MOUSE" || b.key === "MAUSE"))
+      );
+      return match?.actual ?? 0;
+    };
+
+    const outOfStockItems = [];
+    if (!prevHasHeadset && hasHeadset && getStockNow("HEADSET") <= 0) outOfStockItems.push("Headset / Auriculares");
+    if (!prevHasMouse && hasMouse && getStockNow("MAUSE") <= 0) outOfStockItems.push("Mouse óptico");
+    if (!prevHasHub && hasHub && getStockNow("HUB") <= 0) outOfStockItems.push("Hub USB");
+    if (!prevHasMonitor && hasMonitor && getStockNow("MONITOR") <= 0) outOfStockItems.push("Monitor");
+    if (!prevHasPc && hasPc && getStockNow("PC") <= 0) outOfStockItems.push("Computadora (PC)");
+
+    if (outOfStockItems.length > 0) {
+      alert(
+        `⚠️ Stock Agotado en Bodega Central:\n\nNo es posible instalar los siguientes equipos en el Puesto #${cleanId} porque no hay existencias en Bodega:\n• ${outOfStockItems.join("\n• ")}\n\nPor favor ingresa existencias en el módulo de Inventario Bodega antes de asignarlos.`
+      );
+      return;
+    }
 
     // MOUSE: Si se quitó del cubículo, suma a bodega (+1). Si se agregó al cubículo, resta de bodega (-1).
     if (prevHasMouse && !hasMouse) {
@@ -1516,7 +1620,7 @@ export default function App() {
     }
   }
 
-  function handleUnassignDoctor(doctorName, spaceId) {
+  function handleUnassignDoctor(doctorName, spaceId, targetAttendanceStatus = "FINALIZADO") {
     const cleanDoc = doctorName ? safeLower(doctorName).trim() : null;
     const cleanSpaceId = spaceId !== undefined && spaceId !== null ? Number(spaceId) : null;
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
@@ -1560,19 +1664,26 @@ export default function App() {
     setSpaces(nextSpaces);
     saveCloudSpaces(nextSpaces, myClientId.current, true);
 
-    // Al liberar un médico del puesto, marcar su asistencia como FINALIZADO para evitar remanentes sin puesto
-    setAttendanceRecords((prev) => {
-      const next = { ...prev };
-      if (doctorName) {
-        Object.keys(next).forEach((k) => {
-          if (isSameDoctor(k, doctorName)) {
-            next[k] = "FINALIZADO";
-          }
-        });
-        next[doctorName] = "FINALIZADO";
-      }
-      return next;
-    });
+    // Al liberar un médico del puesto, actualizar su asistencia respetando si ya estaba como AUSENTE o JUSTIFICADO
+    if (targetAttendanceStatus !== null) {
+      setAttendanceRecords((prev) => {
+        const next = { ...prev };
+        if (doctorName) {
+          const currentStatus = next[doctorName] || Object.entries(next).find(([k]) => isSameDoctor(k, doctorName))?.[1];
+          const newStatus = (targetAttendanceStatus === "FINALIZADO" && (currentStatus === "AUSENTE" || currentStatus === "JUSTIFICADO"))
+            ? currentStatus
+            : targetAttendanceStatus;
+
+          Object.keys(next).forEach((k) => {
+            if (isSameDoctor(k, doctorName)) {
+              next[k] = newStatus;
+            }
+          });
+          next[doctorName] = newStatus;
+        }
+        return next;
+      });
+    }
 
     if (isGoogleSheetsConfigured() && unassignedSpaceId !== null) {
       const unassignedSpace = spaces.find((s) => Number(s.id) === unassignedSpaceId);
@@ -2706,6 +2817,7 @@ export default function App() {
             supervisores={supervisores}
             rosterBySupervisor={rosters}
             bodegaStock={bodegaStock}
+            attendanceRecords={attendanceRecords}
           />
         )}
 
@@ -2750,10 +2862,56 @@ export default function App() {
               onSaveDailyLots={(newDL) => setDailyLots(newDL)}
               onOpenDailyLots={() => setDailyLotsModalOpen(true)}
               onSetAttendance={(docName, status) => {
-                setAttendanceRecords((prev) => ({
-                  ...prev,
-                  [docName]: status,
-                }));
+                setAttendanceRecords((prev) => {
+                  const next = { ...prev };
+                  if (docName) {
+                    Object.keys(next).forEach((k) => {
+                      if (isSameDoctor(k, docName)) {
+                        delete next[k];
+                      }
+                    });
+                    next[docName] = status;
+                  }
+                  return next;
+                });
+
+                // Si se marca como AUSENTE, FINALIZADO o JUSTIFICADO, liberar inmediatamente su cubículo físico en el mapa
+                if (status === "AUSENTE" || status === "FINALIZADO" || status === "JUSTIFICADO") {
+                  const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+                  setSpaces((prevSpaces) => {
+                    let freedSpaceId = null;
+                    const next = prevSpaces.map((s) => {
+                      if (s.doctor && isSameDoctor(s.doctor, docName)) {
+                        freedSpaceId = Number(s.id);
+                        recentlyReleasedRef.current.set(Number(s.id), Date.now());
+                        const isSpecial = s.estado === "INHABILITADO" || s.estado === "REPARACION";
+                        const isSupStation = [135, 136, 137, 138, 139].includes(Number(s.id));
+                        return {
+                          ...s,
+                          doctor: null,
+                          horario: null,
+                          supervisorId: isSupStation ? s.supervisorId : null,
+                          supervisorNombre: isSupStation ? s.supervisorNombre : null,
+                          categoria: Number(s.id) === 1 ? null : s.categoria,
+                          estado: isSpecial ? s.estado : "DISPONIBLE",
+                          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+                          modelo: s.modelo || "OptiPlex 3080",
+                          observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
+                          ultimoMovimiento: nowTime,
+                        };
+                      }
+                      return s;
+                    });
+                    if (freedSpaceId !== null) {
+                      saveCloudSpaces(next, myClientId.current, true);
+                      if (isGoogleSheetsConfigured()) {
+                        const freedSpace = next.find((s) => Number(s.id) === freedSpaceId);
+                        if (freedSpace) updateSpaceInGoogleSheets(freedSpace);
+                      }
+                    }
+                    return next;
+                  });
+                }
               }}
             />
           )}
@@ -2826,6 +2984,7 @@ export default function App() {
           rosters={rosters}
           spaces={spaces}
           customStaff={customStaff}
+          bodegaStock={bodegaStock}
         />
       )}
 

@@ -70,6 +70,57 @@ export const DEFAULT_SUPERVISOR_SHEETS = {
   },
 };
 
+// =========================================================================
+// HOJAS DE GOOGLE SHEETS PARA SUPERVISORES EN PLANILLA (EDWARD, ROXANA, MARCELA)
+// =========================================================================
+export const DEFAULT_MASTER_PLANILLA_URL =
+  "https://docs.google.com/spreadsheets/d/1kGcU-HtaVW6xjXrCRD6tjJMYNWWhuiPehKW-Hokdl5E/edit?usp=sharing";
+export const DEFAULT_MASTER_PLANILLA_SHEET_ID = "1kGcU-HtaVW6xjXrCRD6tjJMYNWWhuiPehKW-Hokdl5E";
+
+export const DEFAULT_PLANILLA_SUPERVISOR_TABS = {
+  "sup-5": {
+    id: "sup-5",
+    nombre: "EDWARD JOSUE ZELAYA PRUDENCIO",
+    token: "000EZP",
+    tabName: "Edward Zelaya",
+    tabAliases: ["Edward Zelaya", "Edward", "Grupo 1", "Planilla Grupo 1", "GRUPO 1", "GRUPO_1_Edward", "SEDE SAN MIGUEL"],
+    puestosRange: "1 al 40",
+    grupo: "Grupo 1",
+    rol: "Supervisor de Control & Acceso (Planilla)",
+  },
+  "sup-4": {
+    id: "sup-4",
+    nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ",
+    token: "000RCR",
+    tabName: "Roxana Canales",
+    tabAliases: ["Roxana Canales", "Roxana", "Grupo 2", "Planilla Grupo 2", "GRUPO 2", "GRUPO_2_Roxana", "SEDE SAN MIGUEL"],
+    puestosRange: "105 al 140",
+    grupo: "Grupo 2",
+    rol: "Supervisora Médica (Planilla)",
+  },
+};
+
+export const DEFAULT_PLANILLA_SUPERVISOR_SHEETS = {
+  "sup-5": {
+    id: "sup-5",
+    nombre: "EDWARD JOSUE ZELAYA PRUDENCIO",
+    token: "000EZP",
+    sheetId: DEFAULT_MASTER_PLANILLA_SHEET_ID,
+    url: DEFAULT_MASTER_PLANILLA_URL,
+    tabName: "Edward Zelaya",
+    puestosRange: "1 al 40",
+  },
+  "sup-4": {
+    id: "sup-4",
+    nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ",
+    token: "000RCR",
+    sheetId: DEFAULT_MASTER_PLANILLA_SHEET_ID,
+    url: DEFAULT_MASTER_PLANILLA_URL,
+    tabName: "Roxana Canales",
+    puestosRange: "105 al 140",
+  },
+};
+
 // URL del Webhook de Google Apps Script (cuando el usuario la configure en .env o localStorage)
 const DEFAULT_APPS_SCRIPT_URL =
   (typeof import.meta !== "undefined" && import.meta?.env?.VITE_GOOGLE_SHEETS_API_URL) ||
@@ -80,6 +131,74 @@ const STORAGE_KEY_SHEETS_URL = "DOCTORSV_GOOGLE_SHEETS_URL";
 const STORAGE_KEY_SHEET_IDS = "DOCTORSV_GOOGLE_SHEET_IDS";
 const STORAGE_KEY_SUPERVISOR_SHEETS = "DOCTORSV_SUPERVISOR_SHEETS_CONFIG";
 export const STORAGE_KEY_MASTER_QUINCENA_URL = "DOCTORSV_MASTER_QUINCENA_URL";
+export const STORAGE_KEY_MASTER_PLANILLA_URL = "DOCTORSV_MASTER_PLANILLA_URL";
+export const STORAGE_KEY_PLANILLA_SUPERVISOR_SHEETS = "DOCTORSV_PLANILLA_SUPERVISOR_SHEETS_CONFIG";
+
+/**
+ * Obtiene la URL activa de la Google Sheet Maestra de Planilla
+ */
+export function getMasterPlanillaUrl() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_MASTER_PLANILLA_URL);
+    if (saved && saved.trim()) return saved.trim();
+  } catch {}
+  return DEFAULT_MASTER_PLANILLA_URL;
+}
+
+/**
+ * Guarda o actualiza la URL de la Google Sheet Maestra de Planilla
+ */
+export function setMasterPlanillaUrl(url) {
+  try {
+    if (url && url.trim()) {
+      localStorage.setItem(STORAGE_KEY_MASTER_PLANILLA_URL, url.trim());
+    } else {
+      localStorage.removeItem(STORAGE_KEY_MASTER_PLANILLA_URL);
+    }
+  } catch {}
+}
+
+/**
+ * Obtiene la configuración de hojas de Google Sheets para supervisores de Planilla
+ */
+export function getPlanillaSupervisorSheetConfigs() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_PLANILLA_SUPERVISOR_SHEETS);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_PLANILLA_SUPERVISOR_SHEETS, ...parsed };
+    }
+  } catch {}
+  return { ...DEFAULT_PLANILLA_SUPERVISOR_SHEETS };
+}
+
+/**
+ * Guarda la configuración de hojas de supervisores de Planilla
+ */
+export function savePlanillaSupervisorSheetConfigs(configs) {
+  try {
+    localStorage.setItem(STORAGE_KEY_PLANILLA_SUPERVISOR_SHEETS, JSON.stringify(configs));
+  } catch {}
+}
+
+/**
+ * Actualiza la URL o ID de Google Sheets para un supervisor de Planilla
+ */
+export function updatePlanillaSupervisorSheetUrl(supId, newUrlOrId) {
+  const current = getPlanillaSupervisorSheetConfigs();
+  const cleanId = extractGoogleSheetId(newUrlOrId);
+  if (current[supId]) {
+    current[supId] = {
+      ...current[supId],
+      sheetId: cleanId,
+      url: newUrlOrId && newUrlOrId.includes("http")
+        ? newUrlOrId.trim()
+        : `https://docs.google.com/spreadsheets/d/${cleanId}/edit?usp=sharing`,
+    };
+    savePlanillaSupervisorSheetConfigs(current);
+  }
+  return current;
+}
 
 /**
  * Obtiene la URL activa de la Google Sheet Maestra de la Quincena
@@ -596,8 +715,10 @@ export async function syncSupervisorSheets({
             };
           }
 
-          if (dia.porSupervisor && dia.porSupervisor[actualSupId]) {
-            mergedDiasMap[dia.dateKey].porSupervisor[actualSupId] = dia.porSupervisor[actualSupId];
+          if (dia.porSupervisor) {
+            Object.keys(dia.porSupervisor).forEach((sId) => {
+              mergedDiasMap[dia.dateKey].porSupervisor[sId] = dia.porSupervisor[sId];
+            });
           }
         });
 
@@ -663,6 +784,7 @@ export async function syncSupervisorSheets({
     id: `quincena_gs_${Date.now()}`,
     titulo: `Nómina Oficial Google Sheets (${mergedDias[0]?.label || ""} – ${mergedDias[mergedDias.length - 1]?.label || ""})`,
     source: "GOOGLE_SHEETS_LIVE",
+    tipoNomina: "SP",
     masterSheetUrl,
     masterSheetId,
     dias: mergedDias,
@@ -687,5 +809,240 @@ export async function syncSupervisorSheets({
     success: true,
     quincena,
     results,
+  };
+}
+
+/**
+ * Sincroniza la nómina de supervisores con médicos en PLANILLA (Edward Zelaya, Roxana Canales, etc.)
+ * descargando las hojas correspondientes desde Google Sheets.
+ */
+export async function syncPlanillaSupervisorSheets({
+  doctorsList = DOCTORES_EXCEL,
+  staffList = STAFF_EXCEL,
+  supervisoresList = SUPERVISORES_OFICIALES,
+  customConfigs = null,
+  masterUrl = null,
+} = {}) {
+  const masterSheetUrl = masterUrl || getMasterPlanillaUrl();
+  const masterSheetId = extractGoogleSheetId(masterSheetUrl) || DEFAULT_MASTER_PLANILLA_SHEET_ID;
+
+  const configs = customConfigs || getPlanillaSupervisorSheetConfigs();
+  const results = [];
+  const mergedDiasMap = {};
+
+  const supKeys = ["sup-5", "sup-4"];
+  Object.keys(configs).forEach((k) => {
+    if (!supKeys.includes(k)) supKeys.push(k);
+  });
+
+  for (const supKey of supKeys) {
+    const tabInfo = DEFAULT_PLANILLA_SUPERVISOR_TABS[supKey] || {};
+    const conf = configs[supKey] || tabInfo;
+
+    const hasCustomIndividualSheet =
+      conf?.sheetId &&
+      conf.sheetId !== DEFAULT_MASTER_PLANILLA_SHEET_ID &&
+      conf.sheetId !== DEFAULT_MASTER_QUINCENA_SHEET_ID;
+
+    const targetSheetId = hasCustomIndividualSheet
+      ? (extractGoogleSheetId(conf.url || conf.sheetId) || masterSheetId)
+      : masterSheetId;
+
+    const preferredTab = conf?.tabName || tabInfo?.tabName || conf?.nombre;
+    const candidateTabs = [
+      preferredTab,
+      ...(tabInfo?.tabAliases || []),
+      conf?.nombre,
+      conf?.token,
+    ].filter(Boolean);
+
+    let csv = null;
+    let successfulTab = preferredTab;
+    let fetchError = null;
+
+    // 1. Probar descargar las pestañas candidatas
+    for (const tab of [...new Set(candidateTabs)]) {
+      try {
+        const text = await fetchSupervisorSheetCsv(targetSheetId, tab);
+        if (text && text.length > 50 && (text.includes("Supervisor") || text.includes("CONSULTANTE") || text.includes("PLANILLA") || text.includes("SEDE") || text.includes("Oct") || text.includes("Sep"))) {
+          csv = text;
+          successfulTab = tab;
+          break;
+        }
+      } catch (e) {
+        fetchError = e;
+      }
+    }
+
+    // 2. Fallback: descarga directa sin parámetro de pestaña
+    if (!csv) {
+      try {
+        csv = await fetchSupervisorSheetCsv(targetSheetId);
+      } catch (err) {
+        results.push({
+          supId: conf.id || supKey,
+          nombre: conf.nombre || tabInfo.nombre || supKey,
+          tabName: preferredTab,
+          success: false,
+          error: fetchError?.message || err.message,
+        });
+        continue;
+      }
+    }
+
+    try {
+      const parsed = parseQuincenaSpreadsheet(csv, doctorsList, staffList, supervisoresList);
+
+      if (parsed.success && parsed.dias && parsed.dias.length > 0) {
+        const actualSupId = parsed.supervisorId || parsed.supervisoresDetectados?.[0]?.id || conf.id || supKey;
+        const actualSupNombre = parsed.supervisorNombre || parsed.supervisoresDetectados?.[0]?.nombre || conf.nombre || tabInfo.nombre;
+
+        parsed.dias.forEach((dia) => {
+          if (!mergedDiasMap[dia.dateKey]) {
+            mergedDiasMap[dia.dateKey] = {
+              dateKey: dia.dateKey,
+              label: dia.label,
+              dayNum: dia.dayNum,
+              monthNum: dia.monthNum,
+              year: dia.year,
+              diaSemana: dia.diaSemana || "",
+              porSupervisor: {},
+            };
+          }
+
+          if (dia.porSupervisor) {
+            Object.keys(dia.porSupervisor).forEach((sId) => {
+              mergedDiasMap[dia.dateKey].porSupervisor[sId] = dia.porSupervisor[sId];
+            });
+          }
+        });
+
+        results.push({
+          supId: actualSupId,
+          nombre: actualSupNombre,
+          tabName: successfulTab,
+          success: true,
+          dias: parsed.dias.length,
+          estadisticas: parsed.estadisticas,
+        });
+      } else {
+        results.push({
+          supId: conf.id || supKey,
+          nombre: conf.nombre || tabInfo.nombre,
+          tabName: successfulTab,
+          success: false,
+          error: parsed.error || "No se detectaron asignaciones válidas en la hoja.",
+        });
+      }
+    } catch (err) {
+      results.push({
+        supId: conf.id || supKey,
+        nombre: conf.nombre || tabInfo.nombre,
+        tabName: successfulTab,
+        success: false,
+        error: err.message,
+      });
+    }
+  }
+
+  const mergedDias = Object.values(mergedDiasMap).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+  if (mergedDias.length === 0) {
+    return {
+      success: false,
+      error: "No se pudieron obtener datos del Google Sheet de Planilla. Verifica el enlace o los permisos de acceso.",
+      results,
+    };
+  }
+
+  const totalAsignaciones = results.reduce((acc, r) => acc + (r.estadisticas?.totalLineasParseadas || 0), 0);
+  const totalReconocidos = results.reduce((acc, r) => acc + (r.estadisticas?.totalReconocidos || 0), 0);
+  const rate = totalAsignaciones > 0 ? ((totalReconocidos / totalAsignaciones) * 100).toFixed(1) : "100.0";
+
+  const quincena = {
+    id: `quincena_planilla_${Date.now()}`,
+    titulo: `Nómina Oficial Planilla Google Sheets (${mergedDias[0]?.label || ""} – ${mergedDias[mergedDias.length - 1]?.label || ""})`,
+    source: "GOOGLE_SHEETS_LIVE",
+    tipoNomina: "PLANILLA",
+    masterSheetUrl,
+    masterSheetId,
+    dias: mergedDias,
+    diasDetectados: mergedDias.map((d) => d.dateKey),
+    supervisoresDetectados: results.filter((r) => r.success).map((r) => ({
+      id: r.supId,
+      nombre: r.nombre,
+      tabName: r.tabName,
+      totalAsignaciones: r.estadisticas?.totalLineasParseadas || 0,
+    })),
+    estadisticas: {
+      totalDias: mergedDias.length,
+      totalSupervisores: results.filter((r) => r.success).length,
+      totalLineasParseadas: totalAsignaciones,
+      totalReconocidos,
+      tasaReconocimiento: `${rate}%`,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  return {
+    success: true,
+    quincena,
+    results,
+  };
+}
+
+/**
+ * Fusiona de forma inteligente dos Quincenas (ej. Servicios Profesionales y Planilla)
+ * para que todos los supervisores coexistan en cada uno de los 15 días sin perder asignaciones.
+ */
+export function mergeQuincenas(baseQuincena, newQuincena) {
+  if (!baseQuincena || !baseQuincena.dias || baseQuincena.dias.length === 0) return newQuincena;
+  if (!newQuincena || !newQuincena.dias || newQuincena.dias.length === 0) return baseQuincena;
+
+  const mergedDiasMap = {};
+
+  // 1. Copiar base existente
+  baseQuincena.dias.forEach((d) => {
+    mergedDiasMap[d.dateKey] = {
+      ...d,
+      porSupervisor: { ...(d.porSupervisor || {}) },
+    };
+  });
+
+  // 2. Integrar nueva quincena día a día
+  newQuincena.dias.forEach((d) => {
+    if (!mergedDiasMap[d.dateKey]) {
+      mergedDiasMap[d.dateKey] = {
+        ...d,
+        porSupervisor: { ...(d.porSupervisor || {}) },
+      };
+    } else {
+      mergedDiasMap[d.dateKey] = {
+        ...mergedDiasMap[d.dateKey],
+        label: d.label || mergedDiasMap[d.dateKey].label,
+        porSupervisor: {
+          ...mergedDiasMap[d.dateKey].porSupervisor,
+          ...(d.porSupervisor || {}),
+        },
+      };
+    }
+  });
+
+  const mergedDias = Object.values(mergedDiasMap).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+  // 3. Unir metadatos de supervisores detectados sin duplicados
+  const supsMap = new Map();
+  (baseQuincena.supervisoresDetectados || []).forEach((s) => supsMap.set(s.id, s));
+  (newQuincena.supervisoresDetectados || []).forEach((s) => supsMap.set(s.id, s));
+
+  return {
+    ...baseQuincena,
+    id: `quincena_unified_${Date.now()}`,
+    titulo: `Nómina Unificada DoctorSV (${mergedDias[0]?.label || ""} – ${mergedDias[mergedDias.length - 1]?.label || ""})`,
+    source: "GOOGLE_SHEETS_LIVE",
+    dias: mergedDias,
+    diasDetectados: mergedDias.map((d) => d.dateKey),
+    supervisoresDetectados: Array.from(supsMap.values()),
+    updatedAt: new Date().toISOString(),
   };
 }

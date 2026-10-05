@@ -66,7 +66,8 @@ export function parseCSVorTSV(text) {
  */
 export function normalizeDateHeader(rawHeader, defaultYear = 2026) {
   if (!rawHeader) return null;
-  const clean = rawHeader.trim().toLowerCase();
+  // Limpiar marcas de tiempo añadidas por Excel o Google Sheets (ej: "2026-10-01 00:00:00")
+  const clean = rawHeader.trim().toLowerCase().replace(/\s+\d{1,2}:\d{2}(:\d{2})?.*$/, "");
 
   // Caso 1: ISO "2026-09-25"
   const isoMatch = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -587,65 +588,122 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
   }
 
   if (isMatrixDoctorFormat) {
-    // MODO MATRIZ: Cada fila es un médico y las celdas son sus turnos diarios
-    const supId = detectedGlobalSupervisor ? detectedGlobalSupervisor.id : "sup-1";
-    const supNombre = detectedGlobalSupervisor ? detectedGlobalSupervisor.nombre : "SUPERVISOR OFICIAL";
+    // MODO MATRIZ DE PLANILLA: Cada fila es un médico y las columnas de fechas contienen los turnos o "LIBRE"
+    // Identificar índices de columnas clave de metadatos (NOMBRE, FUNCION, GRUPO)
+    let nameColIdx = -1;
+    let funcColIdx = -1;
+    let groupColIdx = -1;
 
-    supervisoresDetectados.set(supId, {
-      id: supId,
-      nombre: supNombre,
-      oficial: !!detectedGlobalSupervisor,
-      totalAsignaciones: 0,
-    });
+    const headerRow = rows[headerRowIndex] || [];
+    const firstDateColIdx = dateColumns[0]?.colIndex || 6;
+
+    for (let c = 0; c < firstDateColIdx; c++) {
+      const hText = (headerRow[c] || "").toUpperCase().trim();
+      if (hText.includes("NOMBRE") || hText.includes("MÉDICO") || hText.includes("MEDICO")) nameColIdx = c;
+      else if (hText.includes("FUNCION") || hText.includes("FUNCIÓN") || hText.includes("ROL")) funcColIdx = c;
+      else if (hText.includes("GRUPO")) groupColIdx = c;
+    }
+    if (nameColIdx === -1) nameColIdx = Math.min(3, Math.max(0, firstDateColIdx - 3));
+
+    const NON_WORKING_STATUSES = ["LIBRE", "VACACION", "VACACIONES", "INCAPACIDAD", "PERMISO", "DESCANSO", "BAJA", "SUSPENSION"];
+    let currentSup = detectedGlobalSupervisor || null;
+    const supsList = lookups.supervisores?.list || [];
 
     for (let r = headerRowIndex + 1; r < rows.length; r++) {
       const row = rows[r];
       if (!row || row.length === 0) continue;
 
-      // Buscar cuál celda contiene el nombre del médico (generalmente col 1, col 0 o col 3)
-      let docObj = null;
+      const rawName = (row[nameColIdx] || "").trim();
+      const rawFunc = funcColIdx >= 0 ? (row[funcColIdx] || "").toUpperCase().trim() : "";
+      const rawGroup = groupColIdx >= 0 ? (row[groupColIdx] || "").toUpperCase().trim() : "";
 
-      for (let c = 0; c < Math.min(row.length, dateColumns[0]?.colIndex || 4); c++) {
-        const candidate = row[c] || "";
-        if (candidate.length >= 3 && !candidate.toUpperCase().includes("TOTAL") && !candidate.toUpperCase().includes("HORARIO") && isNaN(Number(candidate))) {
-          const parsed = parseDoctorLine(candidate, lookups.doctors);
-          if (parsed && (parsed.isMatched || parsed.nombre.split(" ").length >= 2)) {
-            docObj = parsed;
-            break;
-          }
+      if (!rawName || rawName.length < 3) continue;
+
+      // 1. Detectar si esta fila es de un Supervisor o Cabecera de Grupo
+      const isSupRole = rawFunc.includes("SUPERVISOR") || rawFunc.includes("SUPERVISORA") || rawFunc.includes("JEFE");
+      let matchedOfficialSup = null;
+      const upperName = rawName.toUpperCase();
+
+      for (const s of supsList) {
+        const sUpper = (s.nombre || "").toUpperCase();
+        if (upperName.includes(sUpper) || sUpper.includes(upperName) ||
+            (upperName.includes("EDWARD") && s.id === "sup-5") ||
+            (upperName.includes("ROXANA") && s.id === "sup-4") ||
+            (upperName.includes("MARCELA") && s.id === "sup-6")) {
+          matchedOfficialSup = s;
+          break;
         }
       }
 
-      if (!docObj) continue;
+      if (isSupRole || matchedOfficialSup) {
+        currentSup = matchedOfficialSup || {
+          id: upperName.includes("EDWARD") ? "sup-5" : (upperName.includes("ROXANA") ? "sup-4" : `sup_${rawName.slice(0, 8)}`),
+          nombre: rawName,
+          rol: rawFunc || "Supervisor Planilla",
+        };
+        if (!supervisoresDetectados.has(currentSup.id)) {
+          supervisoresDetectados.set(currentSup.id, {
+            id: currentSup.id,
+            nombre: currentSup.nombre,
+            oficial: !!matchedOfficialSup,
+            totalAsignaciones: 0,
+          });
+        }
+        continue;
+      }
+
+      // Si aún no hay supervisor asignado en esta sección, inferir por grupo
+      if (!currentSup) {
+        if (rawGroup.includes("GRUPO 1") || rawGroup.includes("G1")) {
+          currentSup = supsList.find((s) => s.id === "sup-5") || { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO" };
+        } else if (rawGroup.includes("GRUPO 2") || rawGroup.includes("G2")) {
+          currentSup = supsList.find((s) => s.id === "sup-4") || { id: "sup-4", nombre: "ROXANA GUADALUPE CANALES RODRIGUEZ" };
+        } else {
+          currentSup = detectedGlobalSupervisor || supsList[4] || { id: "sup-5", nombre: "EDWARD JOSUE ZELAYA PRUDENCIO" };
+        }
+        if (!supervisoresDetectados.has(currentSup.id)) {
+          supervisoresDetectados.set(currentSup.id, {
+            id: currentSup.id,
+            nombre: currentSup.nombre,
+            oficial: true,
+            totalAsignaciones: 0,
+          });
+        }
+      }
+
+      // 2. Procesar médico consultante de la fila
+      const parsedDoc = parseDoctorLine(rawName, lookups.doctors);
 
       dateColumns.forEach((col) => {
         const shiftCell = (row[col.colIndex] || "").trim();
-        if (!shiftCell || shiftCell.toUpperCase().includes("LIBRE") || shiftCell.toUpperCase().includes("DESCANSO") || shiftCell.toUpperCase().includes("PERMISO")) {
-          return;
+        if (!shiftCell) return;
+        const shiftUpper = shiftCell.toUpperCase();
+        if (NON_WORKING_STATUSES.some((kw) => shiftUpper.includes(kw))) {
+          return; // El médico no labora este día
         }
 
         totalLineasParseadas++;
-        if (docObj.isMatched) totalReconocidos++;
+        if (parsedDoc.isMatched) totalReconocidos++;
 
-        if (!diasMap[col.dateKey].porSupervisor[supId]) {
-          diasMap[col.dateKey].porSupervisor[supId] = {
-            supervisorId: supId,
-            supervisorNombre: supNombre,
+        if (!diasMap[col.dateKey].porSupervisor[currentSup.id]) {
+          diasMap[col.dateKey].porSupervisor[currentSup.id] = {
+            supervisorId: currentSup.id,
+            supervisorNombre: currentSup.nombre,
             doctorNames: [],
             doctores: [],
             totalDoctores: 0,
           };
         }
 
-        const supEntry = diasMap[col.dateKey].porSupervisor[supId];
-        supEntry.doctorNames.push(docObj.nombre);
+        const supEntry = diasMap[col.dateKey].porSupervisor[currentSup.id];
+        supEntry.doctorNames.push(parsedDoc.nombre);
         supEntry.doctores.push({
-          ...docObj,
+          ...parsedDoc,
           horario: normalizeHorarioString(shiftCell),
         });
         supEntry.totalDoctores = supEntry.doctores.length;
 
-        const supInfo = supervisoresDetectados.get(supId);
+        const supInfo = supervisoresDetectados.get(currentSup.id);
         if (supInfo) supInfo.totalAsignaciones++;
       });
     }
