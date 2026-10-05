@@ -42,7 +42,15 @@ export default function QuincenaManagerModal({
   // Lookup maps para el analizador
   const lookupMaps = useMemo(() => buildLookupMaps(DOCTORES_EXCEL, STAFF_EXCEL, supervisores), [supervisores]);
 
-  // Manejar análisis de la tabla pegada
+  // Fechas de la quincena activa para asignar a filas sin encabezado
+  const fallbackDates = useMemo(() => {
+    if (activeQuincena?.dias && activeQuincena.dias.length > 0) {
+      return activeQuincena.dias.map((d) => d.dateKey);
+    }
+    return [];
+  }, [activeQuincena]);
+
+  // Manejar análisis de la tabla o fila pegada
   function handleAnalyzeTable(text) {
     setPastedTableText(text);
     setParseError("");
@@ -52,15 +60,15 @@ export default function QuincenaManagerModal({
     }
 
     try {
-      const res = parseQuincenaSpreadsheet(text, DOCTORES_EXCEL, STAFF_EXCEL, supervisores);
+      const res = parseQuincenaSpreadsheet(text, DOCTORES_EXCEL, STAFF_EXCEL, supervisores, fallbackDates);
       if (res.success && res.type === "TABLE") {
         setParsedPreview(res);
         setParseError("");
       } else if (res.success && res.type === "SINGLE_LIST") {
-        setParseError("El texto pegado corresponde a una sola celda o lista de médicos. Por favor usa la pestaña '📋 Pegar Celda Individual' o incluye la fila de encabezados con las fechas de la hoja.");
+        setParseError("El texto pegado corresponde a una sola celda o lista de médicos. Para subir una quincena, copia la fila completa de tu supervisor con las fechas.");
         setParsedPreview(null);
       } else {
-        setParseError(res.error || "No se pudo interpretar el formato de la tabla.");
+        setParseError(res.error || "No se pudo interpretar el formato de la fila o tabla.");
         setParsedPreview(null);
       }
     } catch (err) {
@@ -81,9 +89,63 @@ export default function QuincenaManagerModal({
     }
   }
 
-  // Guardar la quincena importada
+  // Guardar la quincena importada (con FUSIÓN INTELIGENTE si es una sola fila de supervisor)
   function handleConfirmSaveQuincena() {
     if (!parsedPreview) return;
+
+    const isSingleSup = parsedPreview.isSingleSupervisorRow || (parsedPreview.supervisoresDetectados && parsedPreview.supervisoresDetectados.length === 1);
+
+    // Si es una sola fila de supervisor y ya hay una quincena activa con otros supervisores, FUSIONAR sin borrar a los demás
+    if (isSingleSup && activeQuincena && Array.isArray(activeQuincena.dias) && activeQuincena.dias.length > 0) {
+      const supObj = parsedPreview.supervisoresDetectados[0];
+      const supId = supObj.id;
+
+      // Clonar días base de la quincena activa
+      const baseDiasMap = {};
+      activeQuincena.dias.forEach((d) => {
+        baseDiasMap[d.dateKey] = {
+          ...d,
+          porSupervisor: { ...(d.porSupervisor || {}) },
+        };
+      });
+
+      // Fusionar los días de la fila pegada de este supervisor
+      (parsedPreview.dias || []).forEach((importDia) => {
+        const dKey = importDia.dateKey;
+        if (!baseDiasMap[dKey]) {
+          baseDiasMap[dKey] = {
+            dateKey: dKey,
+            label: importDia.label,
+            dayNum: importDia.dayNum,
+            monthNum: importDia.monthNum,
+            year: importDia.year,
+            diaSemana: importDia.diaSemana || "",
+            porSupervisor: {},
+          };
+        }
+
+        if (importDia.porSupervisor && importDia.porSupervisor[supId]) {
+          baseDiasMap[dKey].porSupervisor[supId] = importDia.porSupervisor[supId];
+        }
+      });
+
+      const mergedDias = Object.values(baseDiasMap).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+      const updatedQuincena = {
+        ...activeQuincena,
+        id: activeQuincena.id || `quincena_${Date.now()}`,
+        dias: mergedDias,
+        diasDetectados: mergedDias.map((d) => d.dateKey),
+        updatedAt: new Date().toISOString(),
+      };
+
+      onSaveQuincena(updatedQuincena);
+      setActiveTab("CALENDARIO");
+      setSelectedDayKey(parsedPreview.dias[0]?.dateKey || selectedDayKey);
+      return;
+    }
+
+    // Si es tabla general con todos los supervisores
     const finalQuincena = {
       ...parsedPreview,
       id: `quincena_${Date.now()}`,
@@ -91,7 +153,7 @@ export default function QuincenaManagerModal({
     };
     onSaveQuincena(finalQuincena);
     setActiveTab("CALENDARIO");
-    setSelectedDayKey(finalQuincena.dias[0]?.dateKey || "2026-09-29");
+    setSelectedDayKey(finalQuincena.dias[0]?.dateKey || "2026-10-01");
   }
 
   // Restaurar semilla por defecto
@@ -221,7 +283,7 @@ export default function QuincenaManagerModal({
               }`}
             >
               <FileSpreadsheet size={15} />
-              📥 Pegar Tabla Completa (Google Sheets)
+              📥 Subir Fila de Supervisor (o Tabla)
             </button>
 
             <button
@@ -440,12 +502,12 @@ export default function QuincenaManagerModal({
                 </div>
                 <div className="text-[12px] text-blue-900 leading-relaxed">
                   <p className="font-black text-[13px] text-blue-950">
-                    ¿Cómo copiar la tabla desde Google Sheets?
+                    ¿Cómo subir la nómina de cada supervisor?
                   </p>
                   <ol className="list-decimal pl-4 mt-1 space-y-0.5 font-medium text-blue-800">
-                    <li>En tu Google Sheets (<span className="font-mono font-bold">SEPTIEMBRE OFICIAL 2026</span>), selecciona la tabla que incluye la fila de encabezados con las fechas (<span className="font-mono">sep 25, sep 26...</span>) y las filas de los supervisores (<span className="font-mono">000AMB, 000SRB...</span>).</li>
+                    <li>En Google Sheets (<strong>Hoja 77 / Nómina Quincenal</strong>), cada supervisor solo debe copiar <strong>su propia fila</strong> (ej: Fila 7 para Alfredo, Fila 8 para Emerson, Fila 9 para Salvador) con todas sus fechas.</li>
                     <li>Presiona <kbd className="px-1.5 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold">Ctrl+C</kbd> (o Cmd+C en Mac).</li>
-                    <li>Haz clic en el área inferior o presiona el botón "Pegar desde Portapapeles".</li>
+                    <li>Pégala en el área de abajo y haz clic en <strong>"Actualizar Fila de Supervisor"</strong>. El sistema fusionará sus médicos de forma inteligente <strong>sin borrar a los demás supervisores</strong>.</li>
                   </ol>
                 </div>
               </div>
@@ -454,7 +516,7 @@ export default function QuincenaManagerModal({
               <div className="flex items-center justify-between">
                 <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5">
                   <Clipboard size={14} className="text-[#0048B5]" />
-                  Contenido copiado de Google Sheets (TSV / CSV):
+                  Fila del Supervisor o Tabla copiada de Google Sheets:
                 </label>
                 <button
                   type="button"
@@ -470,7 +532,7 @@ export default function QuincenaManagerModal({
                 value={pastedTableText}
                 onChange={(e) => handleAnalyzeTable(e.target.value)}
                 rows={7}
-                placeholder="Pega aquí la tabla copiada de Google Sheets..."
+                placeholder="Pega aquí la fila de tu supervisor copiada de Google Sheets (ej: 000EV3 - EMERSON JOSUE VIGIL HERNANDEZ...)..."
                 className="w-full p-3.5 text-[11.5px] font-mono rounded-2xl border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0095FF] focus:border-transparent transition-all"
               />
 
@@ -495,6 +557,16 @@ export default function QuincenaManagerModal({
                       Tasa de Reconocimiento: {parsedPreview.estadisticas.tasaReconocimiento}
                     </span>
                   </div>
+
+                  {/* Banner descriptivo si es fila individual */}
+                  {(parsedPreview.isSingleSupervisorRow || parsedPreview.supervisoresDetectados?.length === 1) && (
+                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11.5px] flex items-center gap-2 font-medium">
+                      <CheckCircle2 size={16} className="text-blue-600 shrink-0" />
+                      <span>
+                        <strong>Modo Fila Individual:</strong> Se actualizará únicamente la nómina de <strong>{parsedPreview.supervisoresDetectados[0]?.nombre}</strong> para los {parsedPreview.estadisticas.totalDias} días. Las asignaciones de los demás supervisores se conservarán intactas.
+                      </span>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                     <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
@@ -525,13 +597,13 @@ export default function QuincenaManagerModal({
 
                   {/* Resumen por supervisor detectado */}
                   <div className="space-y-1.5 pt-1">
-                    <p className="text-[11px] font-bold text-slate-600">Supervisores detectados:</p>
+                    <p className="text-[11px] font-bold text-slate-600">Supervisor(es) a sincronizar:</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {parsedPreview.supervisoresDetectados.map((s) => (
                         <div key={s.id} className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-[11px] flex items-center justify-between">
                           <span className="font-bold text-slate-800 truncate mr-1">{s.nombre}</span>
                           <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-bold shrink-0">
-                            {s.totalAsignaciones}
+                            {s.totalAsignaciones} médicos
                           </span>
                         </div>
                       ))}
@@ -545,7 +617,9 @@ export default function QuincenaManagerModal({
                       className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[13px] flex items-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                     >
                       <ShieldCheck size={16} />
-                      Guardar y Activar Quincena Oficial
+                      {(parsedPreview.isSingleSupervisorRow || parsedPreview.supervisoresDetectados?.length === 1)
+                        ? `Actualizar Fila de ${parsedPreview.supervisoresDetectados[0]?.nombre.split(" ")[0]} (Sin tocar a los demás)`
+                        : "Guardar y Activar Quincena Oficial"}
                     </button>
                   </div>
                 </div>

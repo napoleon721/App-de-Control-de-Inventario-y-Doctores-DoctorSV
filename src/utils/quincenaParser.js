@@ -98,6 +98,21 @@ export function normalizeDateHeader(rawHeader, defaultYear = 2026) {
     };
   }
 
+  // Caso 2b: "01/10" o "1/10" (día/mes sin año explícito)
+  const dmMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+  if (dmMatch) {
+    const d = dmMatch[1].padStart(2, "0");
+    const m = dmMatch[2].padStart(2, "0");
+    const y = String(defaultYear);
+    return {
+      dateKey: `${y}-${m}-${d}`,
+      label: `${d} ${getMonthName(parseInt(m, 10))} ${y}`,
+      dayNum: parseInt(d, 10),
+      monthNum: parseInt(m, 10),
+      year: parseInt(y, 10),
+    };
+  }
+
   // Caso 3: Formato estilo Google Sheets: "sep 25, 2026", "sep 25", "25 sep 2026", "septiembre 25"
   const monthsMap = {
     ene: 1, jan: 1, enero: 1, january: 1,
@@ -298,6 +313,7 @@ export function buildLookupMaps(doctorsList = [], staffList = [], supervisoresLi
   const sup2 = (supervisoresList || []).find((s) => s.id === "sup-2" || s.nombre?.includes("SALVADOR"));
   if (sup2) {
     bySupToken.set("000SRB", sup2);
+    bySupToken.set("000SR0", sup2);
     bySupNorm.set("salvador", sup2);
     bySupNorm.set("salvador renderos bonilla", sup2);
   }
@@ -306,6 +322,7 @@ export function buildLookupMaps(doctorsList = [], staffList = [], supervisoresLi
   if (sup1) {
     bySupToken.set("000ECP", sup1);
     bySupToken.set("000EVH", sup1);
+    bySupToken.set("000EV3", sup1);
     bySupNorm.set("emerson", sup1);
     bySupNorm.set("emerson josue vigil hernandez", sup1);
   }
@@ -318,8 +335,9 @@ export function buildLookupMaps(doctorsList = [], staffList = [], supervisoresLi
 
 /**
  * Parsea el texto copiado de Google Sheets que representa la distribución quincenal completa
+ * o una sola fila correspondiente a un supervisor individual.
  */
-export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = [], supervisoresList = []) {
+export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = [], supervisoresList = [], fallbackDates = []) {
   if (!rawText || typeof rawText !== "string") {
     return { success: false, error: "El texto está vacío." };
   }
@@ -347,6 +365,118 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
         reconocidos: parsedDoctors.filter((d) => d.isMatched).length,
       };
     }
+  }
+
+  // 1b. DETECTAR FILA INDIVIDUAL DE SUPERVISOR (1 fila con múltiples columnas de días)
+  // Ej: Col A = "000EV3 - EMERSON JOSUE VIGIL HERNANDEZ", Col B..P = celdas multilínea con doctores de cada día
+  if (rows.length === 1 && rows[0].length >= 2) {
+    const firstCell = (rows[0][0] || "").trim();
+    let matchedSupervisor = null;
+    const supNorm = normalizeDocName(firstCell);
+
+    const supCodeMatch = firstCell.match(/^([A-Za-z0-9_-]{4,10})/);
+    if (supCodeMatch) {
+      const code = supCodeMatch[1].toUpperCase();
+      if (lookups.supervisores.bySupToken.has(code)) {
+        matchedSupervisor = lookups.supervisores.bySupToken.get(code);
+      }
+    }
+
+    if (!matchedSupervisor) {
+      for (const [key, sObj] of lookups.supervisores.bySupNorm.entries()) {
+        if (supNorm.includes(key) || key.includes(supNorm)) {
+          matchedSupervisor = sObj;
+          break;
+        }
+      }
+    }
+
+    const hasSupervisorInCol0 = !!matchedSupervisor || firstCell.length > 5;
+    const colStart = hasSupervisorInCol0 ? 1 : 0;
+    const totalDayCols = rows[0].length - colStart;
+
+    const supId = matchedSupervisor ? matchedSupervisor.id : "sup-1";
+    const supNombre = matchedSupervisor ? matchedSupervisor.nombre : (firstCell || "SUPERVISOR OFICIAL");
+
+    // Construir columnas de fecha a partir de fallbackDates o consecutivas de Octubre
+    const generatedDateCols = [];
+    for (let i = 0; i < totalDayCols; i++) {
+      const colIdx = colStart + i;
+      let dateObj = null;
+      if (fallbackDates && fallbackDates[i]) {
+        dateObj = normalizeDateHeader(fallbackDates[i]);
+      }
+      if (!dateObj) {
+        const dNum = i + 1;
+        const dStr = String(dNum).padStart(2, "0");
+        dateObj = {
+          dateKey: `2026-10-${dStr}`,
+          label: `${dStr} Oct 2026`,
+          dayNum: dNum,
+          monthNum: 10,
+          year: 2026,
+        };
+      }
+      generatedDateCols.push({ colIndex: colIdx, ...dateObj });
+    }
+
+    const diasMapSingle = {};
+    let totalLineas = 0;
+    let totalRec = 0;
+
+    generatedDateCols.forEach((col) => {
+      const cellContent = rows[0][col.colIndex] || "";
+      const lines = cellContent.split("\n").filter((l) => l.trim().length > 0);
+      const parsedDocs = [];
+
+      lines.forEach((line) => {
+        totalLineas++;
+        const parsed = parseDoctorLine(line, lookups.doctors);
+        if (parsed) {
+          parsedDocs.push(parsed);
+          if (parsed.isMatched) totalRec++;
+        }
+      });
+
+      diasMapSingle[col.dateKey] = {
+        dateKey: col.dateKey,
+        label: col.label,
+        dayNum: col.dayNum,
+        monthNum: col.monthNum,
+        year: col.year,
+        porSupervisor: {
+          [supId]: {
+            supervisorId: supId,
+            supervisorNombre: supNombre,
+            doctorNames: parsedDocs.map((d) => d.nombre),
+            doctores: parsedDocs,
+            totalDoctores: parsedDocs.length,
+          },
+        },
+      };
+    });
+
+    const diasArr = Object.values(diasMapSingle).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+    const rate = totalLineas > 0 ? ((totalRec / totalLineas) * 100).toFixed(1) : "100.0";
+
+    return {
+      success: true,
+      type: "TABLE",
+      isSingleSupervisorRow: true,
+      supervisorId: supId,
+      supervisorNombre: supNombre,
+      supervisoresDetectados: [{ id: supId, nombre: supNombre, oficial: !!matchedSupervisor, totalAsignaciones: totalLineas }],
+      titulo: `Fila de Nómina: ${supNombre} (${diasArr[0]?.label || ""} – ${diasArr[diasArr.length - 1]?.label || ""})`,
+      dias: diasArr,
+      diasDetectados: diasArr.map((d) => d.dateKey),
+      estadisticas: {
+        totalDias: diasArr.length,
+        totalSupervisores: 1,
+        totalLineasParseadas: totalLineas,
+        totalReconocidos: totalRec,
+        tasaReconocimiento: `${rate}%`,
+      },
+    };
   }
 
   // 2. Buscar la fila de encabezados con las fechas
@@ -388,7 +518,7 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
 
     return {
       success: false,
-      error: "No se identificaron las columnas de fechas (ej: 'sep 25, 2026', '25/09/2026'). Asegúrate de incluir la fila de encabezados al copiar la tabla.",
+      error: "No se identificaron las columnas de fechas (ej: 'Oct 1, 2026', '01/10/2026'). Puedes copiar la fila de encabezados junto a la de tu supervisor o copiar la fila completa de tu supervisor con el código al inicio.",
     };
   }
 
@@ -409,81 +539,184 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
   let totalLineasParseadas = 0;
   let totalReconocidos = 0;
 
-  for (let r = headerRowIndex + 1; r < rows.length; r++) {
+  // 3b. Detectar si el formato es una Matriz Médico x Día (cada fila es un médico y las columnas de fecha tienen turnos como "02:00pm-10:00pm", "LIBRE", etc.)
+  let isMatrixDoctorFormat = false;
+  let detectedGlobalSupervisor = null;
+
+  // Buscar si en las primeras filas o encabezados se menciona al supervisor
+  for (let r = 0; r < Math.min(rows.length, 6); r++) {
+    const fullRowText = rows[r].join(" ");
+    const fullNorm = normalizeDocName(fullRowText);
+    for (const [key, sObj] of lookups.supervisores.bySupNorm.entries()) {
+      if (fullNorm.includes(key)) {
+        detectedGlobalSupervisor = sObj;
+        break;
+      }
+    }
+    if (detectedGlobalSupervisor) break;
+  }
+
+  // Comprobar si las celdas en dateColumns contienen turnos cortos (ej. "02:00pm-10:00pm", "LIBRE") y no listas multilínea
+  let shiftSampleCount = 0;
+  let multilineSampleCount = 0;
+
+  for (let r = headerRowIndex + 1; r < Math.min(rows.length, headerRowIndex + 6); r++) {
     const row = rows[r];
-    if (!row || row.length === 0) continue;
-
-    const supCell = row[0] || "";
-    if (!supCell || supCell.length < 3) continue;
-
-    // Identificar supervisor
-    let matchedSupervisor = null;
-    const supNorm = normalizeDocName(supCell);
-
-    // Búsqueda por token (e.g. "000AMB", "000SRB")
-    const supCodeMatch = supCell.match(/^([A-Za-z0-9_-]{4,10})/);
-    if (supCodeMatch) {
-      const code = supCodeMatch[1].toUpperCase();
-      if (lookups.supervisores.bySupToken.has(code)) {
-        matchedSupervisor = lookups.supervisores.bySupToken.get(code);
+    if (!row) continue;
+    for (const col of dateColumns) {
+      const cell = row[col.colIndex] || "";
+      if (cell.includes("\n")) multilineSampleCount++;
+      else if (cell.length > 0 && (cell.toLowerCase().includes("pm") || cell.toLowerCase().includes("am") || cell.toLowerCase().includes("libre"))) {
+        shiftSampleCount++;
       }
     }
+  }
 
-    // Búsqueda por nombre de supervisor
-    if (!matchedSupervisor) {
-      for (const [key, sObj] of lookups.supervisores.bySupNorm.entries()) {
-        if (supNorm.includes(key) || key.includes(supNorm)) {
-          matchedSupervisor = sObj;
-          break;
-        }
-      }
-    }
+  if (shiftSampleCount > multilineSampleCount && shiftSampleCount >= 2) {
+    isMatrixDoctorFormat = true;
+  }
 
-    // Fallback si no coincide exactamente: asignar un ID descriptivo
-    const supervisorId = matchedSupervisor ? matchedSupervisor.id : `sup-${supNorm.slice(0, 15)}`;
-    const supervisorNombre = matchedSupervisor ? matchedSupervisor.nombre : supCell.trim();
+  if (isMatrixDoctorFormat) {
+    // MODO MATRIZ: Cada fila es un médico y las celdas son sus turnos diarios
+    const supId = detectedGlobalSupervisor ? detectedGlobalSupervisor.id : "sup-1";
+    const supNombre = detectedGlobalSupervisor ? detectedGlobalSupervisor.nombre : "SUPERVISOR OFICIAL";
 
-    if (!supervisoresDetectados.has(supervisorId)) {
-      supervisoresDetectados.set(supervisorId, {
-        id: supervisorId,
-        nombre: supervisorNombre,
-        oficial: !!matchedSupervisor,
-        totalAsignaciones: 0,
-      });
-    }
-
-    // Procesar cada columna de fecha para este supervisor
-    dateColumns.forEach((col) => {
-      const cellContent = row[col.colIndex] || "";
-      if (!cellContent || cellContent.trim().length === 0) return;
-
-      const lines = cellContent.split("\n").filter((l) => l.trim().length > 0);
-      const parsedDocs = [];
-
-      lines.forEach((line) => {
-        totalLineasParseadas++;
-        const parsed = parseDoctorLine(line, lookups.doctors);
-        if (parsed) {
-          parsedDocs.push(parsed);
-          if (parsed.isMatched) totalReconocidos++;
-        }
-      });
-
-      if (parsedDocs.length > 0) {
-        diasMap[col.dateKey].porSupervisor[supervisorId] = {
-          supervisorId,
-          supervisorNombre,
-          doctorNames: parsedDocs.map((d) => d.nombre),
-          doctores: parsedDocs,
-          totalDoctores: parsedDocs.length,
-        };
-
-        const supInfo = supervisoresDetectados.get(supervisorId);
-        if (supInfo) {
-          supInfo.totalAsignaciones += parsedDocs.length;
-        }
-      }
+    supervisoresDetectados.set(supId, {
+      id: supId,
+      nombre: supNombre,
+      oficial: !!detectedGlobalSupervisor,
+      totalAsignaciones: 0,
     });
+
+    for (let r = headerRowIndex + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.length === 0) continue;
+
+      // Buscar cuál celda contiene el nombre del médico (generalmente col 1, col 0 o col 3)
+      let docObj = null;
+
+      for (let c = 0; c < Math.min(row.length, dateColumns[0]?.colIndex || 4); c++) {
+        const candidate = row[c] || "";
+        if (candidate.length >= 3 && !candidate.toUpperCase().includes("TOTAL") && !candidate.toUpperCase().includes("HORARIO") && isNaN(Number(candidate))) {
+          const parsed = parseDoctorLine(candidate, lookups.doctors);
+          if (parsed && (parsed.isMatched || parsed.nombre.split(" ").length >= 2)) {
+            docObj = parsed;
+            break;
+          }
+        }
+      }
+
+      if (!docObj) continue;
+
+      dateColumns.forEach((col) => {
+        const shiftCell = (row[col.colIndex] || "").trim();
+        if (!shiftCell || shiftCell.toUpperCase().includes("LIBRE") || shiftCell.toUpperCase().includes("DESCANSO") || shiftCell.toUpperCase().includes("PERMISO")) {
+          return;
+        }
+
+        totalLineasParseadas++;
+        if (docObj.isMatched) totalReconocidos++;
+
+        if (!diasMap[col.dateKey].porSupervisor[supId]) {
+          diasMap[col.dateKey].porSupervisor[supId] = {
+            supervisorId: supId,
+            supervisorNombre: supNombre,
+            doctorNames: [],
+            doctores: [],
+            totalDoctores: 0,
+          };
+        }
+
+        const supEntry = diasMap[col.dateKey].porSupervisor[supId];
+        supEntry.doctorNames.push(docObj.nombre);
+        supEntry.doctores.push({
+          ...docObj,
+          horario: normalizeHorarioString(shiftCell),
+        });
+        supEntry.totalDoctores = supEntry.doctores.length;
+
+        const supInfo = supervisoresDetectados.get(supId);
+        if (supInfo) supInfo.totalAsignaciones++;
+      });
+    }
+  } else {
+    // MODO ESTÁNDAR: Cada fila es un Supervisor y las celdas contienen la lista de médicos
+    for (let r = headerRowIndex + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.length === 0) continue;
+
+      const supCell = row[0] || "";
+      if (!supCell || supCell.length < 3) continue;
+
+      // Identificar supervisor
+      let matchedSupervisor = null;
+      const supNorm = normalizeDocName(supCell);
+
+      // Búsqueda por token (e.g. "000AMB", "000SRB")
+      const supCodeMatch = supCell.match(/^([A-Za-z0-9_-]{4,10})/);
+      if (supCodeMatch) {
+        const code = supCodeMatch[1].toUpperCase();
+        if (lookups.supervisores.bySupToken.has(code)) {
+          matchedSupervisor = lookups.supervisores.bySupToken.get(code);
+        }
+      }
+
+      // Búsqueda por nombre de supervisor
+      if (!matchedSupervisor) {
+        for (const [key, sObj] of lookups.supervisores.bySupNorm.entries()) {
+          if (supNorm.includes(key) || key.includes(supNorm)) {
+            matchedSupervisor = sObj;
+            break;
+          }
+        }
+      }
+
+      // Fallback si no coincide exactamente: asignar un ID descriptivo
+      const supervisorId = matchedSupervisor ? matchedSupervisor.id : `sup-${supNorm.slice(0, 15)}`;
+      const supervisorNombre = matchedSupervisor ? matchedSupervisor.nombre : supCell.trim();
+
+      if (!supervisoresDetectados.has(supervisorId)) {
+        supervisoresDetectados.set(supervisorId, {
+          id: supervisorId,
+          nombre: supervisorNombre,
+          oficial: !!matchedSupervisor,
+          totalAsignaciones: 0,
+        });
+      }
+
+      // Procesar cada columna de fecha para este supervisor
+      dateColumns.forEach((col) => {
+        const cellContent = row[col.colIndex] || "";
+        if (!cellContent || cellContent.trim().length === 0) return;
+
+        const lines = cellContent.split("\n").filter((l) => l.trim().length > 0);
+        const parsedDocs = [];
+
+        lines.forEach((line) => {
+          totalLineasParseadas++;
+          const parsed = parseDoctorLine(line, lookups.doctors);
+          if (parsed) {
+            parsedDocs.push(parsed);
+            if (parsed.isMatched) totalReconocidos++;
+          }
+        });
+
+        if (parsedDocs.length > 0) {
+          diasMap[col.dateKey].porSupervisor[supervisorId] = {
+            supervisorId,
+            supervisorNombre,
+            doctorNames: parsedDocs.map((d) => d.nombre),
+            doctores: parsedDocs,
+            totalDoctores: parsedDocs.length,
+          };
+
+          const supInfo = supervisoresDetectados.get(supervisorId);
+          if (supInfo) {
+            supInfo.totalAsignaciones += parsedDocs.length;
+          }
+        }
+      });
+    }
   }
 
   const diasArray = Object.values(diasMap).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
