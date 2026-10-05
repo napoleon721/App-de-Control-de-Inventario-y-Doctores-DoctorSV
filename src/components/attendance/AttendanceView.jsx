@@ -874,24 +874,52 @@ export default function AttendanceView({
     }
   }
 
-  // Marcar como AUSENTE únicamente a los médicos que NO están presentes (omite estrictamente a los presentes)
+  // Marcar como AUSENTE en lote (Faltantes pendientes o Todos los médicos del turno)
   function handleMarkUnseatedAsAbsent() {
     const docsToMarkAbsent = batchDoctors.filter(
       (d) => d.status === "PENDIENTE" && !d.espacio
     );
-    if (docsToMarkAbsent.length === 0) {
-      alert("No hay médicos faltantes pendientes para marcar como ausentes.\n\nTodos los médicos de la lista ya están presentes o gestionados.");
+
+    // Caso 1: Hay médicos faltantes pendientes sin cubículo asignado
+    if (docsToMarkAbsent.length > 0) {
+      const presentesCount = batchDoctors.filter((d) => d.status === "PRESENTE").length;
+      if (
+        !window.confirm(
+          `¿Deseas marcar como AUSENTES a los ${docsToMarkAbsent.length} médico(s) faltantes que no se han presentado a su turno?\n\n✓ OMITIR: Los ${presentesCount} médico(s) que ya están PRESENTES se mantendrán como presentes y no serán afectados.`
+        )
+      ) {
+        return;
+      }
+      docsToMarkAbsent.forEach((d) => {
+        handleSetAttendance(d.nombre, "AUSENTE");
+        const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
+        const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (d.espacio || null);
+        if (onUnassignDoctor) {
+          onUnassignDoctor(d.nombre, spaceToFree, "AUSENTE");
+        }
+      });
       return;
     }
-    const presentesCount = batchDoctors.filter((d) => d.status === "PRESENTE").length;
+
+    // Caso 2: No hay faltantes pendientes, pero el supervisor desea marcar como AUSENTES a todos los médicos no ausentes
+    const nonAbsentDocs = batchDoctors.filter(
+      (d) => d.status !== "AUSENTE" && d.status !== "JUSTIFICADO"
+    );
+
+    if (nonAbsentDocs.length === 0) {
+      alert("Todos los médicos de este turno ya están marcados como ausentes o justificados.");
+      return;
+    }
+
     if (
       !window.confirm(
-        `¿Deseas marcar como AUSENTES a los ${docsToMarkAbsent.length} médico(s) faltantes que no se han presentado a su turno?\n\n✓ OMITIR: Los ${presentesCount} médico(s) que ya están PRESENTES se mantendrán como presentes y no serán afectados.`
+        `No hay médicos pendientes sin asignar.\n\n¿Deseas marcar como AUSENTES a los ${nonAbsentDocs.length} médico(s) de este turno?\n\n⚠️ Aviso: Esto liberará cualquier puesto asignado en el lote.`
       )
     ) {
       return;
     }
-    docsToMarkAbsent.forEach((d) => {
+
+    nonAbsentDocs.forEach((d) => {
       handleSetAttendance(d.nombre, "AUSENTE");
       const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, d.nombre));
       const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (d.espacio || null);
@@ -1795,31 +1823,41 @@ export default function AttendanceView({
                 </button>
               )}
 
-              {/* Botón para marcar Faltantes como Ausentes (OMITE ESTRICTAMENTE A LOS PRESENTES) */}
-              {totalFaltantesPendientes > 0 && (
-                <button
-                  type="button"
-                  onClick={() => typeof handleMarkUnseatedAsAbsent === "function" && handleMarkUnseatedAsAbsent()}
-                  className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
-                  title="Marca como ausentes a los médicos pendientes que no han llegado (omite estrictamente a los presentes)"
-                >
-                  <UserX size={13} />
-                  <span className="hidden sm:inline">Marcar Faltantes como Ausentes ({totalFaltantesPendientes})</span>
-                  <span className="sm:hidden">Faltantes Ausentes ({totalFaltantesPendientes})</span>
-                </button>
-              )}
+              {/* Botón para poner ausentes (SIEMPRE VISIBLE para el supervisor) */}
+              <button
+                type="button"
+                onClick={() => typeof handleMarkUnseatedAsAbsent === "function" && handleMarkUnseatedAsAbsent()}
+                className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                title={
+                  totalFaltantesPendientes > 0
+                    ? `Marca como ausentes a los ${totalFaltantesPendientes} médicos pendientes que no han llegado (omite a los presentes)`
+                    : "Poner a todos los médicos de esta nómina como ausentes"
+                }
+              >
+                <UserX size={13} />
+                <span className="hidden sm:inline">
+                  {totalFaltantesPendientes > 0
+                    ? `Poner Faltantes Ausentes (${totalFaltantesPendientes})`
+                    : `Poner Todos Ausentes`}
+                </span>
+                <span className="sm:hidden">
+                  {totalFaltantesPendientes > 0
+                    ? `Faltantes Ausentes (${totalFaltantesPendientes})`
+                    : `Todos Ausentes`}
+                </span>
+              </button>
 
-              {/* Botón para revertir ausencias si hay médicos ausentes */}
-              {totalAusentes > 0 && (
+              {/* Botón para revertir ausencias si hay médicos ausentes o justificados */}
+              {(totalAusentes > 0 || totalJustificados > 0) && (
                 <button
                   type="button"
                   onClick={() => typeof handleRevertAllAusentes === "function" && handleRevertAllAusentes()}
                   className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
-                  title="Revertir la inasistencia de todos los médicos marcados como ausentes a PRESENTE (Llegada tardía)"
+                  title="Revertir la inasistencia de todos los médicos a PRESENTE (Llegada tardía)"
                 >
                   <RotateCcw size={13} className="text-emerald-600" />
-                  <span className="hidden sm:inline">Revertir Ausentes ({totalAusentes})</span>
-                  <span className="sm:hidden">Revertir ({totalAusentes})</span>
+                  <span className="hidden sm:inline">Revertir Ausentes ({totalAusentes + totalJustificados})</span>
+                  <span className="sm:hidden">Revertir ({totalAusentes + totalJustificados})</span>
                 </button>
               )}
 
