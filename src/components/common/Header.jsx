@@ -39,11 +39,11 @@ export default function Header({
   }, []);
 
   const allTabs = [
-    { id: "mapa", label: "Mapa de Espacios", shortLabel: "Mapa", icon: LayoutGrid, desc: "Visualización interactiva de cubículos y hardware" },
-    { id: "asistencia", label: "Control de Asistencia", shortLabel: "Asistencia", icon: UserCheck, desc: "Nómina quincenal y control de turnos en vivo" },
-    { id: "medicos", label: "Padrón de Médicos", shortLabel: "Médicos", icon: Stethoscope, desc: "Directorio del personal médico asignado" },
-    { id: "bodega", label: "Inventario Bodega", shortLabel: "Bodega", icon: Warehouse, desc: "Stock de repuestos y equipos en almacén" },
-    { id: "historial", label: "Auditoría & Historial", shortLabel: "Historial", icon: FileClock, desc: "Registro cronológico de movimientos" },
+    { id: "mapa", label: "Mapa de Espacios", shortLabel: "Mapa", icon: LayoutGrid },
+    { id: "asistencia", label: "Control de Asistencia", shortLabel: "Asistencia", icon: UserCheck },
+    { id: "medicos", label: "Padrón de Médicos", shortLabel: "Médicos", icon: Stethoscope },
+    { id: "bodega", label: "Inventario Bodega", shortLabel: "Bodega", icon: Warehouse },
+    { id: "historial", label: "Auditoría & Historial", shortLabel: "Historial", icon: FileClock },
   ];
 
   const isDoctorRole = currentUser?.role === "DOCTOR";
@@ -69,238 +69,224 @@ export default function Header({
         }}
       />
 
-      {/* Contenedor principal con CSS Grid equilibrado: Col 1 (Izquierda), Col 2 (Centro), Col 3 (Derecha) */}
-      <div className="mx-auto max-w-[1440px] px-3 sm:px-6 py-2">
-        <div className="grid grid-cols-[auto_1fr] lg:grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-4">
-          
-          {/* ============================================================== */}
-          {/* COLUMNA 1 (IZQUIERDA): LOGO + IDENTIDAD DE SEDE                */}
-          {/* ============================================================== */}
-          <div className="flex items-center gap-2.5 justify-start min-w-0">
-            <div
-              className="flex items-center cursor-pointer select-none shrink-0"
-              onClick={() => setTab("mapa")}
-              title="Ir al Mapa de Espacios"
-            >
-              <DoctorSVLogo className="h-7.5 sm:h-8.5" showSubtext={false} />
-            </div>
+      {/* Contenedor principal con distribución armónica */}
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-2">
+        
+        {/* ============================================================== */}
+        {/* 1. LOGOTIPO A UN LADO, PEQUEÑO COMO ANTES                      */}
+        {/* ============================================================== */}
+        <div
+          className="flex items-center gap-2.5 cursor-pointer select-none shrink-0"
+          onClick={() => setTab("mapa")}
+          title="Ir al Mapa Principal"
+        >
+          <DoctorSVLogo className="h-7 sm:h-8" showSubtext={true} />
+          {isDoctorRole && (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Estación
+            </span>
+          )}
+          {isSupervisorRole && (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-[10.5px] font-bold text-cyan-800 border border-cyan-200">
+              <UserCheck size={11} className="text-cyan-700" />
+              Supervisor
+            </span>
+          )}
+          {isMasterRole && (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10.5px] font-bold text-indigo-700 border border-indigo-200">
+              <Shield size={11} className="text-indigo-600" />
+              Master
+            </span>
+          )}
+        </div>
 
-            {/* Badge de Rol o Sede */}
-            <div className="hidden sm:flex items-center shrink-0">
-              {isDoctorRole ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-800 border border-emerald-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Estación Médica</span>
-                </span>
-              ) : isSupervisorRole ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-2 py-0.5 text-[10.5px] font-bold text-cyan-900 border border-cyan-200">
-                  <UserCheck size={11} className="text-cyan-700" />
-                  <span>Supervisor</span>
-                </span>
-              ) : isMasterRole ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2 py-0.5 text-[10.5px] font-bold text-indigo-900 border border-indigo-200">
-                  <Shield size={11} className="text-indigo-600" />
-                  <span>Master</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-700 border border-slate-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>San Miguel</span>
-                </span>
-              )}
-            </div>
+        {/* ============================================================== */}
+        {/* 2. PESTAÑAS CENTRADAS                                          */}
+        {/* ============================================================== */}
+        {!isDoctorRole ? (
+          <nav className="hidden lg:flex items-center gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70 shadow-inner">
+            {tabs.map((t) => {
+              const isActive = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-bold transition-all duration-150 cursor-pointer ${
+                    isActive
+                      ? "bg-white text-[#0048B5] shadow-xs font-black ring-1 ring-slate-200/90 scale-[1.01]"
+                      : "text-slate-600 hover:text-[#0048B5] hover:bg-white/60"
+                  }`}
+                >
+                  <t.icon
+                    size={13.5}
+                    className={`shrink-0 ${isActive ? "text-[#0095FF]" : "text-slate-400"}`}
+                  />
+                  <span className="whitespace-nowrap hidden xl:inline">{t.label}</span>
+                  <span className="whitespace-nowrap xl:hidden">{t.shortLabel}</span>
+                </button>
+              );
+            })}
+          </nav>
+        ) : (
+          <div className="hidden md:flex items-center gap-2 text-[12.5px] font-semibold text-slate-700">
+            <span className="font-heading font-extrabold text-slate-900">
+              Plano de Cubículos
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-slate-500 text-[12px]">
+              Turno: <strong className="text-slate-800">{currentUser.shift || "General"}</strong>
+            </span>
           </div>
+        )}
 
-          {/* ============================================================== */}
-          {/* COLUMNA 2 (CENTRO): PESTAÑAS MATEMÁTICAMENTE CENTRADAS         */}
-          {/* ============================================================== */}
-          <div className="hidden lg:flex items-center justify-center min-w-0">
-            {!isDoctorRole ? (
-              <nav className="flex items-center gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70 shadow-inner">
-                {tabs.map((t) => {
-                  const isActive = tab === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => setTab(t.id)}
-                      className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] transition-all duration-200 cursor-pointer ${
-                        isActive
-                          ? "bg-white text-[#0048B5] shadow-xs font-black ring-1 ring-slate-200/90 scale-[1.01]"
-                          : "text-slate-600 font-bold hover:text-[#0048B5] hover:bg-white/60"
-                      }`}
-                    >
-                      <t.icon
-                        size={13.5}
-                        className={`transition-colors shrink-0 ${isActive ? "text-[#0095FF]" : "text-slate-400"}`}
-                      />
-                      <span className="whitespace-nowrap hidden xl:inline">{t.label}</span>
-                      <span className="whitespace-nowrap xl:hidden">{t.shortLabel}</span>
-                    </button>
-                  );
-                })}
-              </nav>
-            ) : (
-              <div className="flex items-center gap-2 text-[12px] font-semibold text-slate-700">
-                <span className="font-heading font-extrabold text-slate-900">
-                  Plano de Cubículos
+        {/* ============================================================== */}
+        {/* 3. SOLO LOS BOTONES IMPORTANTES + BOTÓN CAJA A LA DERECHA      */}
+        {/* ============================================================== */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Botón Importante: Auto Check-In */}
+          {!isDoctorRole && onOpenCheckIn && (
+            <button
+              type="button"
+              onClick={onOpenCheckIn}
+              className="flex items-center gap-1.5 rounded-xl px-3 sm:px-3.5 py-1.5 text-[12px] font-black text-white transition-all hover:brightness-110 active:scale-95 shadow-xs cursor-pointer"
+              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+              title="Abrir Auto Check-In de Médicos"
+            >
+              <CheckCircle2 size={13.5} className="shrink-0" />
+              <span className="hidden sm:inline">Auto Check-In</span>
+              <span className="sm:hidden">Check-In</span>
+            </button>
+          )}
+
+          {/* Botón Importante: Sync en Vivo */}
+          {!isDoctorRole && onSync && (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-2.5 sm:px-3 py-1.5 text-[12px] font-bold text-slate-700 transition hover:bg-slate-50 shadow-2xs disabled:opacity-75 cursor-pointer"
+              title={
+                lastSyncTime
+                  ? `Sincronización en vivo activa · Última: ${lastSyncTime.toLocaleTimeString("es-SV")}`
+                  : "Sincronizar puestos y nómina en tiempo real"
+              }
+            >
+              <RefreshCw
+                size={12.5}
+                className={isSyncing ? "animate-spin text-[#0095FF]" : "text-emerald-500"}
+              />
+              <span className="hidden md:inline">{isSyncing ? "Sync..." : "Sync"}</span>
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"
+                title="Conexión en vivo activa"
+              />
+            </button>
+          )}
+
+          {/* EL BOTÓN CAJA (Guarda todas las herramientas secundarias en un cajón limpio) */}
+          {!isDoctorRole && (
+            <button
+              type="button"
+              onClick={() => setBoxDrawerOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 px-2.5 sm:px-3 py-1.5 text-[12px] font-extrabold text-slate-700 transition-all shadow-2xs active:scale-95 cursor-pointer"
+              title="Abrir Caja de Herramientas y Opciones"
+            >
+              <Package size={14} className="text-[#0048B5]" />
+              <span className="hidden sm:inline">Caja</span>
+              {alerts?.length > 0 && (
+                <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+              )}
+            </button>
+          )}
+
+          {/* Sesión de Usuario / Salida */}
+          {isDoctorRole ? (
+            /* SESIÓN DEL DOCTOR */
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200 px-2 py-1 text-[11px]">
+                <span className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
+                  <User size={12} />
                 </span>
-                <span className="text-slate-300">·</span>
-                <span className="text-slate-600">
-                  Turno: <strong className="text-[#0048B5]">{currentUser.shift || "General"}</strong>
+                <span className="font-extrabold text-slate-900 max-w-[90px] sm:max-w-[130px] truncate">
+                  {currentUser.name}
                 </span>
               </div>
-            )}
-          </div>
 
-          {/* ============================================================== */}
-          {/* COLUMNA 3 (DERECHA): SOLO LOS BOTONES IMPORTANTES + BOTÓN CAJA */}
-          {/* ============================================================== */}
-          <div className="flex items-center gap-2 justify-end shrink-0">
-            {/* 1. Botón Importante: Auto Check-In */}
-            {!isDoctorRole && onOpenCheckIn && (
-              <button
-                type="button"
-                onClick={onOpenCheckIn}
-                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-black text-white transition-all hover:brightness-110 active:scale-95 shadow-xs cursor-pointer"
-                style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-                title="Abrir Auto Check-In de Médicos"
-              >
-                <CheckCircle2 size={13.5} className="shrink-0" />
-                <span className="hidden sm:inline">Auto Check-In</span>
-                <span className="sm:hidden">Check-In</span>
-              </button>
-            )}
-
-            {/* 2. Botón Importante: Sync en Vivo */}
-            {!isDoctorRole && onSync && (
-              <button
-                type="button"
-                onClick={onSync}
-                disabled={isSyncing}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-700 transition hover:bg-slate-50 hover:border-slate-300 shadow-2xs disabled:opacity-75 cursor-pointer"
-                title={
-                  lastSyncTime
-                    ? `Sincronización en vivo activa · Última: ${lastSyncTime.toLocaleTimeString("es-SV")}`
-                    : "Sincronizar puestos y nómina en tiempo real"
-                }
-              >
-                <RefreshCw
-                  size={12.5}
-                  className={isSyncing ? "animate-spin text-[#0095FF]" : "text-emerald-500"}
-                />
-                <span className="hidden md:inline">{isSyncing ? "Sync..." : "Sync"}</span>
-                <span
-                  className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"
-                  title="Conexión en vivo activa"
-                />
-              </button>
-            )}
-
-            {/* 3. BOTÓN CAJA (Abre el cajón con todas las herramientas secundarias) */}
-            {!isDoctorRole && (
-              <button
-                type="button"
-                onClick={() => setBoxDrawerOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 px-2.5 sm:px-3 py-1.5 text-[12px] font-extrabold text-slate-700 transition-all shadow-2xs active:scale-95 cursor-pointer"
-                title="Abrir Caja de Herramientas, Ajustes y Módulos"
-              >
-                <Package size={14} className="text-[#0048B5]" />
-                <span className="hidden sm:inline">Caja de Herramientas</span>
-                <span className="sm:hidden">Caja</span>
-                {alerts?.length > 0 && (
-                  <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                )}
-              </button>
-            )}
-
-            {/* 4. Sesión / Perfil */}
-            {isDoctorRole ? (
-              /* SESIÓN DEL DOCTOR */
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200 px-2 py-1 text-[11px]">
-                  <span className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
-                    <User size={12} />
-                  </span>
-                  <span className="font-extrabold text-slate-900 max-w-[90px] sm:max-w-[130px] truncate">
-                    {currentUser.name}
-                  </span>
-                </div>
-
-                {currentUser.spaceId && onReleaseMySpace && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm(`¿Deseas quitarte del Puesto #${currentUser.spaceId}?`)) {
-                        onReleaseMySpace();
-                      }
-                    }}
-                    className="p-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer"
-                    title={`Quitar puesto #${currentUser.spaceId}`}
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-
+              {currentUser.spaceId && onReleaseMySpace && (
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm("¿Deseas finalizar tu jornada y salir?")) {
-                      onLogout();
+                    if (window.confirm(`¿Deseas quitarte del Puesto #${currentUser.spaceId}?`)) {
+                      onReleaseMySpace();
                     }
                   }}
-                  className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-extrabold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-xs transition-all cursor-pointer"
-                  title="Salir"
+                  className="p-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer"
+                  title={`Quitar puesto #${currentUser.spaceId}`}
                 >
-                  <LogOut size={12} />
-                  <span className="hidden sm:inline">Salir</span>
+                  <X size={12} />
                 </button>
-              </div>
-            ) : isSupervisorRole ? (
-              /* SESIÓN DE SUPERVISOR */
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 rounded-xl bg-cyan-50 border border-cyan-200 px-2 py-1 text-[11px]">
-                  <span className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
-                    <UserCheck size={12} />
-                  </span>
-                  <span className="font-extrabold text-slate-900 max-w-[80px] sm:max-w-[120px] truncate">
-                    {currentUser.name}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="p-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 transition-colors shadow-2xs cursor-pointer"
-                  title="Cerrar sesión"
-                >
-                  <LogOut size={13} />
-                </button>
-              </div>
-            ) : isMasterRole ? (
-              /* SESIÓN DE MASTER */
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 px-2 py-1.5 text-[11px] font-bold text-slate-700 transition-colors shadow-2xs cursor-pointer"
-                  title="Cerrar sesión de Doctor Master"
-                >
-                  <LogOut size={12} />
-                  <span className="hidden sm:inline">Salir</span>
-                </button>
-              </div>
-            ) : (
-              /* BOTÓN DE ACCESO */
+              )}
+
               <button
                 type="button"
-                onClick={onOpenAuthPortal}
-                className="flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-[12px] font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 cursor-pointer"
-                style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+                onClick={() => {
+                  if (window.confirm("¿Deseas finalizar tu jornada y salir?")) {
+                    onLogout();
+                  }
+                }}
+                className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-extrabold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-xs transition-all cursor-pointer"
+                title="Salir"
               >
-                <LogIn size={13} />
-                <span>Acceso</span>
+                <LogOut size={12} />
+                <span className="hidden sm:inline">Salir</span>
               </button>
-            )}
-          </div>
+            </div>
+          ) : isSupervisorRole ? (
+            /* SESIÓN DE SUPERVISOR */
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 rounded-xl bg-cyan-50 border border-cyan-200 px-2 py-1 text-[11px]">
+                <span className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
+                  <UserCheck size={12} />
+                </span>
+                <span className="font-extrabold text-slate-900 max-w-[80px] sm:max-w-[120px] truncate">
+                  {currentUser.name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="p-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 transition-colors shadow-2xs cursor-pointer"
+                title="Cerrar sesión"
+              >
+                <LogOut size={13} />
+              </button>
+            </div>
+          ) : isMasterRole ? (
+            /* SESIÓN DE MASTER */
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onLogout}
+                className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 px-2 py-1.5 text-[11px] font-bold text-slate-700 transition-colors shadow-2xs cursor-pointer"
+                title="Cerrar sesión de Doctor Master"
+              >
+                <LogOut size={12} />
+                <span className="hidden sm:inline">Salir</span>
+              </button>
+            </div>
+          ) : (
+            /* BOTÓN DE ACCESO */
+            <button
+              type="button"
+              onClick={onOpenAuthPortal}
+              className="flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-[12px] font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 cursor-pointer"
+              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+            >
+              <LogIn size={13} />
+              <span>Acceso</span>
+            </button>
+          )}
         </div>
       </div>
 
