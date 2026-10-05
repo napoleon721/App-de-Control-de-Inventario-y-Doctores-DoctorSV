@@ -1295,20 +1295,34 @@ export default function App() {
     }));
 
     if (isGoogleSheetsConfigured()) {
+      const curSpace = spaces.find((s) => Number(s.id) === cleanSpaceId);
       updateSpaceInGoogleSheets({
         id: cleanSpaceId,
         doctor: cleanDoc,
         horario: assignedHorario,
         estado: "OCUPADO",
-        marca: "DELL",
+        marca: (curSpace?.marca && curSpace.marca !== "NO PC") ? curSpace.marca : "DELL",
+        modelo: curSpace?.modelo || "OptiPlex 3080",
+        activoPc: curSpace?.activoPc || "",
+        mouse: curSpace?.mouse,
+        headset: curSpace?.headset,
+        hub: curSpace?.hub,
+        monitor: curSpace?.monitor,
       });
       if (previousSpaceId !== null) {
+        const prevSpace = spaces.find((s) => Number(s.id) === previousSpaceId);
         updateSpaceInGoogleSheets({
           id: previousSpaceId,
           doctor: "",
           horario: "",
           estado: "DISPONIBLE",
-          marca: "DELL",
+          marca: (prevSpace?.marca && prevSpace.marca !== "NO PC") ? prevSpace.marca : "DELL",
+          modelo: prevSpace?.modelo || "OptiPlex 3080",
+          activoPc: prevSpace?.activoPc || "",
+          mouse: prevSpace?.mouse,
+          headset: prevSpace?.headset,
+          hub: prevSpace?.hub,
+          monitor: prevSpace?.monitor,
         });
       }
     }
@@ -1370,12 +1384,19 @@ export default function App() {
     });
 
     if (isGoogleSheetsConfigured() && unassignedSpaceId !== null) {
+      const unassignedSpace = spaces.find((s) => Number(s.id) === unassignedSpaceId);
       updateSpaceInGoogleSheets({
         id: unassignedSpaceId,
         doctor: "",
         horario: "",
         estado: "DISPONIBLE",
-        marca: "DELL",
+        marca: (unassignedSpace?.marca && unassignedSpace.marca !== "NO PC") ? unassignedSpace.marca : "DELL",
+        modelo: unassignedSpace?.modelo || "OptiPlex 3080",
+        activoPc: unassignedSpace?.activoPc || "",
+        mouse: unassignedSpace?.mouse,
+        headset: unassignedSpace?.headset,
+        hub: unassignedSpace?.hub,
+        monitor: unassignedSpace?.monitor,
       });
     }
   }
@@ -1442,19 +1463,38 @@ export default function App() {
 
     if (isGoogleSheetsConfigured() && updateSpacesBatchInGoogleSheets) {
       const updates = [
-        ...assignments.map((a) => ({
-          spaceId: Number(a.spaceId),
-          doctor: a.doctor,
-          horario: assignedHorario,
-          estado: "OCUPADO",
-        })),
-        ...freedOldSpaces.map((sid) => ({
-          spaceId: sid,
-          doctor: "",
-          horario: "",
-          estado: "DISPONIBLE",
-          marca: "DELL",
-        })),
+        ...assignments.map((a) => {
+          const targetSpace = spaces.find((s) => Number(s.id) === Number(a.spaceId));
+          return {
+            spaceId: Number(a.spaceId),
+            doctor: a.doctor,
+            horario: assignedHorario,
+            estado: "OCUPADO",
+            marca: (targetSpace?.marca && targetSpace.marca !== "NO PC") ? targetSpace.marca : "DELL",
+            modelo: targetSpace?.modelo || "OptiPlex 3080",
+            activoPc: targetSpace?.activoPc || "",
+            mouse: targetSpace?.mouse,
+            headset: targetSpace?.headset,
+            hub: targetSpace?.hub,
+            monitor: targetSpace?.monitor,
+          };
+        }),
+        ...freedOldSpaces.map((sid) => {
+          const targetSpace = spaces.find((s) => Number(s.id) === Number(sid));
+          return {
+            spaceId: sid,
+            doctor: "",
+            horario: "",
+            estado: "DISPONIBLE",
+            marca: (targetSpace?.marca && targetSpace.marca !== "NO PC") ? targetSpace.marca : "DELL",
+            modelo: targetSpace?.modelo || "OptiPlex 3080",
+            activoPc: targetSpace?.activoPc || "",
+            mouse: targetSpace?.mouse,
+            headset: targetSpace?.headset,
+            hub: targetSpace?.hub,
+            monitor: targetSpace?.monitor,
+          };
+        }),
       ];
       updateSpacesBatchInGoogleSheets(updates).catch((err) => {
         console.warn("Error sync batch a Google Sheets:", err);
@@ -1908,6 +1948,12 @@ export default function App() {
         horario: "",
         estado: "DISPONIBLE",
         marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+        modelo: s.modelo || "OptiPlex 3080",
+        activoPc: s.activoPc || "",
+        mouse: s.mouse,
+        headset: s.headset,
+        hub: s.hub,
+        monitor: s.monitor,
         observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
       }));
       updateSpacesBatchInGoogleSheets(batchPayload);
@@ -2049,6 +2095,12 @@ export default function App() {
         horario: "",
         estado: "DISPONIBLE",
         marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+        modelo: s.modelo || "OptiPlex 3080",
+        activoPc: s.activoPc || "",
+        mouse: s.mouse,
+        headset: s.headset,
+        hub: s.hub,
+        monitor: s.monitor,
         observaciones: s.observaciones ? s.observaciones.replace(/\|\s*Turno activo.*?$/i, "").trim() : "",
       }));
       updateSpacesBatchInGoogleSheets(batchPayload);
@@ -2286,6 +2338,52 @@ export default function App() {
     setTimeout(() => setIsSyncing(false), 700);
   }
 
+  // Sincronización bidireccional y empuje en vivo del lote de puestos con Google Sheets
+  async function handleSyncLote(supervisorId, bInicio, bFin) {
+    setIsSyncing(true);
+    try {
+      const bIni = Number(bInicio);
+      const bFinNum = Number(bFin);
+
+      // 1. Obtener los espacios actuales del lote
+      const lotSpaces = (bIni > 0 && bFinNum >= bIni)
+        ? spaces.filter((s) => {
+            const sid = Number(s.id);
+            return sid >= bIni && sid <= bFinNum;
+          })
+        : [];
+
+      // 2. Si hay puestos en el lote, empujarlos a Google Sheets para asegurar persistencia
+      if (lotSpaces.length > 0 && isGoogleSheetsConfigured()) {
+        const payload = lotSpaces.map((s) => ({
+          spaceId: Number(s.id),
+          doctor: s.doctor || "",
+          horario: s.horario || "",
+          estado: s.estado || "DISPONIBLE",
+          marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+          modelo: s.modelo || "OptiPlex 3080",
+          activoPc: s.activoPc || "",
+          mouse: s.mouse,
+          headset: s.headset,
+          hub: s.hub,
+          monitor: s.monitor,
+          observaciones: s.observaciones || "",
+        }));
+        await updateSpacesBatchInGoogleSheets(payload);
+      }
+
+      // 3. Ejecutar sincronización general de Google Sheets para traer lo más reciente
+      await handleSync();
+
+      return { success: true, count: lotSpaces.length };
+    } catch (err) {
+      console.warn("Error al sincronizar lote:", err);
+      return { success: false, error: err.message };
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   const isDoctorRole = currentUser?.role === "DOCTOR";
   const isSupervisorRole = currentUser?.role === "SUPERVISOR";
 
@@ -2379,6 +2477,9 @@ export default function App() {
               initialSupId={currentUser?.supervisorId || null}
               onReleaseByHorario={handleReleaseByHorario}
               onReleaseLote={handleReleaseLote}
+              onSyncLote={handleSyncLote}
+              onSync={handleSync}
+              isSyncing={isSyncing}
               rosterBySupervisor={rosters}
               onSaveRoster={handleSaveSupervisorRoster}
               horarios={horarios}

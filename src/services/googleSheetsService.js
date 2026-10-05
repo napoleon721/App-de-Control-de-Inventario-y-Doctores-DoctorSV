@@ -121,20 +121,20 @@ export async function updateSpaceInGoogleSheets(space) {
 
   const payload = {
     action: "updateSpace",
-    spaceId: Number(space.id),
+    spaceId: Number(space.id || space.spaceId),
     estado: space.estado || "DISPONIBLE",
-    doctor: space.doctor || "",
-    horario: space.horario || "",
-    marca: space.marca || "",
-    modelo: space.modelo || "",
-    activoPc: space.activoPc || "",
+    doctor: space.doctor !== undefined ? space.doctor : undefined,
+    horario: space.horario !== undefined ? space.horario : undefined,
+    marca: space.marca !== undefined ? space.marca : undefined,
+    modelo: space.modelo !== undefined ? space.modelo : undefined,
+    activoPc: space.activoPc !== undefined ? space.activoPc : undefined,
     mouse: mouseVal,
     headset: headsetVal,
     hub: hubVal,
     monitor: monitorVal,
-    activoMonitor: monitorActivo,
-    marcaMonitor: monitorMarca,
-    observaciones: space.observaciones || "",
+    activoMonitor: monitorActivo || undefined,
+    marcaMonitor: monitorMarca || undefined,
+    observaciones: space.observaciones !== undefined ? space.observaciones : undefined,
     timestamp: new Date().toISOString(),
   };
 
@@ -173,34 +173,55 @@ export async function updateSpaceInGoogleSheets(space) {
 
 /**
  * Actualiza una lista de puestos en Google Sheets de forma agrupada (batch)
- * o secuencial sin bloquear el hilo principal de la interfaz.
+ * preservando periféricos y datos de hardware que no se hayan modificado.
  */
 export async function updateSpacesBatchInGoogleSheets(spacesList) {
   const url = getSheetsApiUrl();
   if (!url || !Array.isArray(spacesList) || spacesList.length === 0) return false;
 
   const payload = spacesList.map((space) => {
-    const hasMonitor = Boolean(space.monitor && (space.monitor.marca || space.monitor.activo || space.monitor === true));
-    return {
-      spaceId: space.spaceId !== undefined ? Number(space.spaceId) : Number(space.id),
-      estado: space.estado || "DISPONIBLE",
-      doctor: space.doctor || "",
-      horario: space.horario || "",
-      marca: space.marca || "",
-      modelo: space.modelo || "",
-      activoPc: space.activoPc || "",
-      mouse: space.mouse ? 1 : 0,
-      headset: space.headset ? 1 : 0,
-      hub: space.hub ? 1 : 0,
-      monitor: hasMonitor ? 1 : 0,
-      observaciones: space.observaciones || "",
+    const sid = space.spaceId !== undefined ? Number(space.spaceId) : Number(space.id);
+    const hasMonitor = space.monitor !== undefined
+      ? Boolean(space.monitor && (space.monitor.marca || space.monitor.activo || space.monitor === true || space.monitor === 1 || space.monitor === "1"))
+      : undefined;
+
+    const item = {
+      spaceId: sid,
+      id: sid,
       timestamp: new Date().toISOString(),
     };
+
+    if (space.estado !== undefined) item.estado = space.estado;
+    if (space.doctor !== undefined) item.doctor = space.doctor;
+    if (space.horario !== undefined) item.horario = space.horario;
+    if (space.marca !== undefined) item.marca = space.marca;
+    if (space.modelo !== undefined) item.modelo = space.modelo;
+    if (space.activoPc !== undefined) item.activoPc = space.activoPc;
+
+    if (space.mouse !== undefined) {
+      item.mouse = (space.mouse === true || space.mouse === 1 || space.mouse === "1") ? 1 : 0;
+    }
+    if (space.headset !== undefined) {
+      item.headset = (space.headset === true || space.headset === 1 || space.headset === "1") ? 1 : 0;
+    }
+    if (space.hub !== undefined) {
+      item.hub = (space.hub === true || space.hub === 1 || space.hub === "1") ? 1 : 0;
+    }
+    if (hasMonitor !== undefined) {
+      item.monitor = hasMonitor ? 1 : 0;
+    }
+    if (space.monitor && typeof space.monitor === "object") {
+      if (space.monitor.activo !== undefined) item.activoMonitor = space.monitor.activo;
+      if (space.monitor.marca !== undefined) item.marcaMonitor = space.monitor.marca;
+    }
+    if (space.observaciones !== undefined) item.observaciones = space.observaciones;
+
+    return item;
   });
 
-  // 1. Intentar actualización agrupada con mode: no-cors
+  // 1. Envío de lote atómico con acción updateSpacesBatch vía POST
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
@@ -209,38 +230,24 @@ export async function updateSpacesBatchInGoogleSheets(spacesList) {
       }),
       mode: "no-cors",
     });
-    return true;
+    if (res) return true;
   } catch (err) {
-    console.warn("Aviso en updateSpacesBatch:", err);
-    return false;
+    console.warn("Aviso en updateSpacesBatch POST:", err);
   }
 
-  // 2. Fallback amortiguado por bloques concurrentes (5 llamadas simultáneas) para scripts antiguos
-  setTimeout(async () => {
-    const CONCURRENCY = 5;
-    for (let i = 0; i < payload.length; i += CONCURRENCY) {
-      const chunk = payload.slice(i, i + CONCURRENCY);
-      await Promise.all(
-        chunk.map((item) =>
-          fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({
-              action: "updateSpace",
-              ...item,
-            }),
-          }).catch((err) => {
-            console.warn("Aviso: Fallo individual al sincronizar celda en Sheets:", err);
-          })
-        )
-      );
-      if (i + CONCURRENCY < payload.length) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-    }
-  }, 10);
-
-  return true;
+  // 2. Fallback GET con payload serializado
+  try {
+    const encoded = encodeURIComponent(JSON.stringify(payload));
+    await fetch(`${url}?action=updateSpacesBatch&spaces=${encoded}&_t=${Date.now()}`, {
+      method: "GET",
+      mode: "no-cors",
+      cache: "no-store",
+    });
+    return true;
+  } catch (err2) {
+    console.warn("Aviso en updateSpacesBatch GET fallback:", err2);
+    return false;
+  }
 }
 
 /**

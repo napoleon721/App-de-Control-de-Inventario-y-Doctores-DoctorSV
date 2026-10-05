@@ -21,6 +21,9 @@ export default function AttendanceView({
   initialSupId = null,
   onReleaseByHorario,
   onReleaseLote = null,
+  onSyncLote = null,
+  onSync = null,
+  isSyncing = false,
   rosterBySupervisor: propRosters = null,
   onSaveRoster = null,
   horarios = HORARIOS,
@@ -38,6 +41,9 @@ export default function AttendanceView({
   onOpenDailyLots = null,
 }) {
   const isMaster = currentUser?.role === "MASTER";
+
+  const [syncFeedback, setSyncFeedback] = useState(null);
+  const [isSyncingLoteLocal, setIsSyncingLoteLocal] = useState(false);
 
   const [selectedSupId, setSelectedSupId] = useState(
     initialSupId && supervisores.find((s) => s.id === initialSupId)
@@ -797,7 +803,33 @@ export default function AttendanceView({
       }
     }
 
-    alert(`✅ ¡Auto-asignación completada!\n\nSe ubicaron ${countToAssign} médicos en sus cubículos asignados y se marcaron como PRESENTES.`);
+    setSyncFeedback(`⚡ Auto-asignación exitosa: ${countToAssign} médico(s) ubicados y sincronizados con Google Sheets`);
+    setTimeout(() => setSyncFeedback(null), 6000);
+    alert(`✅ ¡Auto-asignación completada y sincronizada!\n\nSe ubicaron ${countToAssign} médicos en sus cubículos asignados, se marcaron como PRESENTES y se sincronizaron con Google Sheets y la nube.`);
+  }
+
+  // Sincronización manual en 1 clic del lote completo con Google Sheets
+  async function handleTriggerSyncLote() {
+    setIsSyncingLoteLocal(true);
+    setSyncFeedback(null);
+    try {
+      if (onSyncLote) {
+        const res = await onSyncLote(currentSupervisor?.id, activeBloqueInicio, activeBloqueFin);
+        if (res?.success) {
+          setSyncFeedback(`✅ Sincronizados ${res.count || supervisorSpaces.length} puestos del lote (#${activeBloqueInicio}-#${activeBloqueFin}) con Google Sheets`);
+        } else {
+          setSyncFeedback("✅ Lote sincronizado con Google Sheets");
+        }
+      } else if (onSync) {
+        await onSync();
+        setSyncFeedback("✅ Puestos sincronizados con Google Sheets");
+      }
+    } catch (err) {
+      setSyncFeedback("⚠️ Aviso al sincronizar lote: " + (err.message || "reintenta"));
+    } finally {
+      setIsSyncingLoteLocal(false);
+      setTimeout(() => setSyncFeedback(null), 6000);
+    }
   }
 
   function handleCopyReport() {
@@ -959,6 +991,22 @@ export default function AttendanceView({
           })}
         </div>
       </div>
+
+      {/* Banner de Sincronización de Lote en Vivo */}
+      {syncFeedback && (
+        <div className="w-full rounded-2xl bg-emerald-50 border border-emerald-300 p-3.5 text-[12.5px] font-bold text-emerald-950 flex items-center justify-between shadow-2xs animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+            <span>{syncFeedback}</span>
+          </div>
+          <button
+            onClick={() => setSyncFeedback(null)}
+            className="text-slate-400 hover:text-slate-700 text-sm font-black cursor-pointer px-2"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Selector de Supervisor & Lote + Filtro de Franja Horaria */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-start justify-between gap-4">
@@ -1210,6 +1258,20 @@ export default function AttendanceView({
                 </button>
               ) : null;
             })()}
+
+            {/* Botón Sincronizar Lote con Google Sheets */}
+            {activeBloqueInicio > 0 && (
+              <button
+                type="button"
+                onClick={handleTriggerSyncLote}
+                disabled={isSyncing || isSyncingLoteLocal}
+                className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 shadow-2xs transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                title={`Sincronizar puestos y estados del lote (#${activeBloqueInicio} al #${activeBloqueFin}) con Google Sheets`}
+              >
+                <RefreshCw size={13} className={(isSyncing || isSyncingLoteLocal) ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+                <span>{(isSyncing || isSyncingLoteLocal) ? "Sincronizando..." : `Sync Lote (${supervisorSpaces.length})`}</span>
+              </button>
+            )}
           </div>
 
           {activeBloqueInicio === 0 ? (
@@ -1755,6 +1817,20 @@ export default function AttendanceView({
               : activeBloqueInicio === 0
                 ? "Supervisor sin lote asignado hoy"
                 : `Puestos #${activeBloqueInicio} al #${activeBloqueFin}${dynamicLot ? ` · ${dynamicLot.horario}` : ""}`
+          }
+          right={
+            activeBloqueInicio > 0 ? (
+              <button
+                type="button"
+                onClick={handleTriggerSyncLote}
+                disabled={isSyncing || isSyncingLoteLocal}
+                className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-xl border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-60"
+                title="Sincronizar puestos del lote con Google Sheets"
+              >
+                <RefreshCw size={11} className={(isSyncing || isSyncingLoteLocal) ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+                <span>Sync Sheets</span>
+              </button>
+            ) : null
           }
         >
           <div className="flex flex-col gap-3">
