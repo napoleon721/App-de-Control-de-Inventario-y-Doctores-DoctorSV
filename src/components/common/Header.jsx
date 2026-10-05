@@ -141,63 +141,29 @@ export default function Header({
         )}
 
         {/* ============================================================== */}
-        {/* 3. SOLO LOS BOTONES IMPORTANTES + BOTÓN CAJA A LA DERECHA      */}
+        {/* 3. BOTÓN CAJA + SESIÓN A LA DERECHA                            */}
         {/* ============================================================== */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Botón Importante: Auto Check-In */}
-          {!isDoctorRole && onOpenCheckIn && (
-            <button
-              type="button"
-              onClick={onOpenCheckIn}
-              className="flex items-center gap-1.5 rounded-xl px-3 sm:px-3.5 py-1.5 text-[12px] font-black text-white transition-all hover:brightness-110 active:scale-95 shadow-xs cursor-pointer"
-              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-              title="Abrir Auto Check-In de Médicos"
-            >
-              <CheckCircle2 size={13.5} className="shrink-0" />
-              <span className="hidden sm:inline">Auto Check-In</span>
-              <span className="sm:hidden">Check-In</span>
-            </button>
-          )}
-
-          {/* Botón Importante: Sync en Vivo */}
-          {!isDoctorRole && onSync && (
-            <button
-              type="button"
-              onClick={onSync}
-              disabled={isSyncing}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-2.5 sm:px-3 py-1.5 text-[12px] font-bold text-slate-700 transition hover:bg-slate-50 shadow-2xs disabled:opacity-75 cursor-pointer"
-              title={
-                lastSyncTime
-                  ? `Sincronización en vivo activa · Última: ${lastSyncTime.toLocaleTimeString("es-SV")}`
-                  : "Sincronizar puestos y nómina en tiempo real"
-              }
-            >
-              <RefreshCw
-                size={12.5}
-                className={isSyncing ? "animate-spin text-[#0095FF]" : "text-emerald-500"}
-              />
-              <span className="hidden md:inline">{isSyncing ? "Sync..." : "Sync"}</span>
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"
-                title="Conexión en vivo activa"
-              />
-            </button>
-          )}
-
-          {/* EL BOTÓN CAJA (Abre la ventana desplegable superpuesta) */}
+          {/* EL BOTÓN CAJA (Abre la ventana desplegable superpuesta con todas las herramientas) */}
           {!isDoctorRole && (
             <button
               type="button"
               onClick={() => setBoxDrawerOpen((prev) => !prev)}
-              className={`flex items-center gap-1.5 rounded-xl border px-2.5 sm:px-3 py-1.5 text-[12px] font-extrabold transition-all shadow-2xs active:scale-95 cursor-pointer ${
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[12px] font-extrabold transition-all shadow-2xs active:scale-95 cursor-pointer ${
                 boxDrawerOpen
                   ? "bg-blue-50 border-[#0048B5] text-[#0048B5] shadow-xs ring-2 ring-blue-100"
                   : "border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700"
               }`}
               title="Abrir Caja de Herramientas y Opciones"
             >
-              <Package size={14} className={boxDrawerOpen ? "text-[#0048B5]" : "text-[#0048B5]"} />
-              <span className="hidden sm:inline">Caja</span>
+              <Package size={14} className="text-[#0048B5]" />
+              <span className="hidden sm:inline">Caja de Herramientas</span>
+              <span className="sm:hidden">Caja</span>
+              {isSyncing ? (
+                <RefreshCw size={11} className="animate-spin text-[#0095FF]" />
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" title="Sincronización en vivo activa" />
+              )}
               {alerts?.length > 0 && (
                 <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               )}
@@ -321,7 +287,7 @@ export default function Header({
                       Caja de Herramientas
                     </h3>
                     <p className="text-[11px] text-slate-500 font-medium leading-none mt-0.5">
-                      Configuraciones, accesos y módulos
+                      Acciones rápidas, módulos y configuración
                     </p>
                   </div>
                 </div>
@@ -338,7 +304,82 @@ export default function Header({
               {/* Contenido con scroll independiente */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/20 text-left">
                 
-                {/* Herramientas de Configuración */}
+                {/* 1. ACCIONES RÁPIDAS PRINCIPALES: AUTO CHECK-IN & SYNC */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-400">
+                      Acciones Principales
+                    </span>
+                    <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800">
+                      En Vivo
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {/* Botón Auto Check-In */}
+                    {onOpenCheckIn && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBoxDrawerOpen(false);
+                          onOpenCheckIn();
+                        }}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-[#0048B5] to-[#0095FF] hover:brightness-110 text-white text-left transition-all shadow-xs group cursor-pointer active:scale-98"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <CheckCircle2 size={17} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[13px] font-black tracking-tight truncate">
+                              Auto Check-In de Médicos
+                            </span>
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-white/25 text-white shrink-0">
+                              Directo
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-white/80 truncate mt-0.5">
+                            Portal para asignar cubículos y firmar jornada
+                          </p>
+                        </div>
+                      </button>
+                    )}
+
+                    {/* Botón Sync en Vivo */}
+                    {onSync && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSync();
+                        }}
+                        disabled={isSyncing}
+                        className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-emerald-300 hover:bg-emerald-50/50 text-left transition-all shadow-2xs group cursor-pointer disabled:opacity-75"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                          <RefreshCw size={15} className={isSyncing ? "animate-spin text-[#0095FF]" : "text-emerald-600"} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[12.5px] font-extrabold text-slate-900 group-hover:text-emerald-900 truncate">
+                              {isSyncing ? "Sincronizando datos..." : "Sincronizar en Vivo"}
+                            </span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 shrink-0 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Sync
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                            {lastSyncTime
+                              ? `Última sincronización: ${lastSyncTime.toLocaleTimeString("es-SV")}`
+                              : "Actualizar mapa y nóminas con la nube"}
+                          </p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Herramientas de Sede */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between px-0.5">
                     <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-400">
