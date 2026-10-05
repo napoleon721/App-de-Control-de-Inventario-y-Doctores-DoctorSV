@@ -959,15 +959,55 @@ export default function AttendanceView({
   const [manualAssignDoc, setManualAssignDoc] = useState(null);
   const [targetSpaceId, setTargetSpaceId] = useState("");
   const [targetHorario, setTargetHorario] = useState("");
+  const [assignFilterStatus, setAssignFilterStatus] = useState("TODOS"); // "TODOS" | "DISPONIBLE" | "OCUPADO"
+  const [assignScope, setAssignScope] = useState("LOTE"); // "LOTE" | "SEDE"
+  const [assignSearch, setAssignSearch] = useState("");
 
   function openManualAssign(doc) {
     setManualAssignDoc(doc);
+    setAssignFilterStatus("TODOS");
+    setAssignScope("LOTE");
+    setAssignSearch("");
     const freeSpaces = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO");
     setTargetSpaceId(freeSpaces.length > 0 ? String(freeSpaces[0].id) : "");
     setTargetHorario(
       filterHorario !== "TODOS" ? filterHorario : (currentSupervisor.activeFranja || currentSupervisor.horario)
     );
   }
+
+  // Cubículos base para el modal según el alcance (Mi Lote vs Toda la Sede)
+  const baseModalSpaces = useMemo(() => {
+    return assignScope === "SEDE"
+      ? (spaces || [])
+      : (supervisorSpaces.length > 0 ? supervisorSpaces : (spaces || []));
+  }, [assignScope, spaces, supervisorSpaces]);
+
+  const modalTotalDisponibles = useMemo(() => {
+    return baseModalSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO").length;
+  }, [baseModalSpaces]);
+
+  const modalTotalOcupados = useMemo(() => {
+    return baseModalSpaces.filter((s) => Boolean(s.doctor) || s.estado === "OCUPADO").length;
+  }, [baseModalSpaces]);
+
+  const modalSpaces = useMemo(() => {
+    if (!manualAssignDoc) return [];
+    return baseModalSpaces.filter((s) => {
+      const isOccupied = Boolean(s.doctor) || s.estado === "OCUPADO";
+      const isFree = !s.doctor && s.estado !== "INHABILITADO";
+      if (assignFilterStatus === "DISPONIBLE" && !isFree) return false;
+      if (assignFilterStatus === "OCUPADO" && !isOccupied) return false;
+
+      if (assignSearch.trim()) {
+        const q = assignSearch.toLowerCase().trim();
+        const idMatch = String(s.id).includes(q);
+        const docMatch = s.doctor && String(s.doctor).toLowerCase().includes(q);
+        const marcaMatch = s.marca && String(s.marca).toLowerCase().includes(q);
+        return idMatch || docMatch || marcaMatch;
+      }
+      return true;
+    });
+  }, [manualAssignDoc, baseModalSpaces, assignFilterStatus, assignSearch]);
 
   function handleConfirmManualAssign(e) {
     if (e) e.preventDefault();
@@ -2409,30 +2449,33 @@ export default function AttendanceView({
         </SectionCard>
       </div>
 
-      {/* Modal para Asignar Puesto Manualmente con Selección Específica */}
+      {/* Modal para Asignar Puesto Manualmente con Visualización de Todos los Cubículos (Disponibles y Ocupados) */}
       {manualAssignDoc && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200"
           onClick={() => setManualAssignDoc(null)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{ animation: "popIn .2s cubic-bezier(0.16, 1, 0.3, 1) both" }}
-            className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200"
+            className="w-full max-w-2xl max-h-[92vh] overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200 flex flex-col"
           >
             {/* Header del Modal */}
             <div
-              className="flex items-center justify-between px-6 py-4 text-white"
+              className="flex items-center justify-between px-6 py-4 text-white shrink-0"
               style={{ background: "linear-gradient(135deg, #002868 0%, #0048B5 60%, #0095FF 100%)" }}
             >
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-md shadow-inner">
-                  <MapPin size={20} />
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-md shadow-inner">
+                  <MapPin size={22} />
                 </span>
                 <div>
-                  <h3 className="font-heading text-base font-bold">Asignar Puesto a Médico</h3>
-                  <p className="text-[12px] text-cyan-100 font-semibold truncate max-w-xs">
-                    {manualAssignDoc.nombre}
+                  <h3 className="font-heading text-base font-extrabold leading-tight">
+                    Asignar Cubículo a Médico
+                  </h3>
+                  <p className="text-[12px] text-cyan-100 font-semibold truncate max-w-md">
+                    Médico: <span className="underline decoration-cyan-300 font-extrabold text-white">{manualAssignDoc.nombre}</span>
+                    {manualAssignDoc.horario && ` · ${manualAssignDoc.horario}`}
                   </p>
                 </div>
               </div>
@@ -2446,52 +2489,178 @@ export default function AttendanceView({
             </div>
 
             {/* Formulario */}
-            <form onSubmit={handleConfirmManualAssign} className="p-6 space-y-4">
-              {/* Sección 1: Puestos Libres en el Lote */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                    1. Elige un cubículo libre de tu lote (#{currentSupervisor.bloqueInicio} - #{currentSupervisor.bloqueFin})
+            <form onSubmit={handleConfirmManualAssign} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 bg-slate-50/40">
+              {/* Barra de Filtros y Control de Alcance */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-[11.5px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Laptop size={14} className="text-[#0048B5]" />
+                    <span>Selecciona un Cubículo (Disponibles y Ocupados)</span>
                   </label>
-                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    {supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO").length} libres
-                  </span>
+
+                  {/* Toggle de Alcance: Mi Lote vs Toda la Sede */}
+                  <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-200/80 border border-slate-300/60 text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setAssignScope("LOTE")}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        assignScope === "LOTE"
+                          ? "bg-white text-[#0048B5] shadow-xs font-black"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Mi Lote ({activeBloqueInicio > 0 ? `#${activeBloqueInicio}-#${activeBloqueFin}` : "Lote"})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssignScope("SEDE")}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        assignScope === "SEDE"
+                          ? "bg-white text-[#0048B5] shadow-xs font-black"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Toda la Sede (1-170)
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-44 overflow-y-auto p-1 bg-slate-50/70 rounded-2xl border border-slate-200">
-                  {supervisorSpaces
-                    .filter((s) => !s.doctor && s.estado !== "INHABILITADO")
-                    .map((s) => {
-                      const isSelected = String(s.id) === String(targetSpaceId);
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => setTargetSpaceId(String(s.id))}
-                          className={`p-2 rounded-xl border text-center transition-all flex flex-col justify-between items-center cursor-pointer ${
-                            isSelected
-                              ? "border-[#0048B5] bg-blue-50 text-[#0048B5] font-extrabold ring-2 ring-[#0048B5] shadow-xs scale-105"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50"
-                          }`}
-                        >
-                          <span className="font-heading text-[13px] font-bold">#{s.id}</span>
-                          <span className="text-[9px] font-mono-data opacity-70 font-semibold">{s.marca || "PC"}</span>
-                        </button>
-                      );
-                    })}
-                  {supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO").length === 0 && (
-                    <div className="col-span-full py-4 text-center text-[12px] text-amber-700">
-                      No hay cubículos libres en tu lote oficial. Puedes escribir un número de puesto abajo.
+                {/* Fila de Filtros de Estado y Buscador */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  {/* Píldoras de Filtro: Todos, Disponibles, Ocupados */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setAssignFilterStatus("TODOS")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                        assignFilterStatus === "TODOS"
+                          ? "bg-slate-800 text-white shadow-xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      Todos ({baseModalSpaces.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssignFilterStatus("DISPONIBLE")}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                        assignFilterStatus === "DISPONIBLE"
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                      }`}
+                    >
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span>Disponibles ({modalTotalDisponibles})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssignFilterStatus("OCUPADO")}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                        assignFilterStatus === "OCUPADO"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
+                      }`}
+                    >
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      <span>Ocupados ({modalTotalOcupados})</span>
+                    </button>
+                  </div>
+
+                  {/* Input de Búsqueda Rápida */}
+                  <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 shadow-2xs focus-within:border-[#0095FF] focus-within:ring-2 focus-within:ring-[#0095FF]/20">
+                    <Search size={12} className="text-slate-400" />
+                    <input
+                      type="text"
+                      value={assignSearch}
+                      onChange={(e) => setAssignSearch(e.target.value)}
+                      placeholder="Filtrar # o médico..."
+                      className="w-28 sm:w-36 bg-transparent text-[11.5px] font-medium outline-none placeholder:text-slate-400 text-slate-800"
+                    />
+                    {assignSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignSearch("")}
+                        className="text-slate-400 hover:text-slate-600"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cuadrícula de Cubículos Disponibles y Ocupados */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-56 overflow-y-auto p-2 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+                  {modalSpaces.map((s) => {
+                    const isSelected = String(s.id) === String(targetSpaceId);
+                    const isOccupied = Boolean(s.doctor) || s.estado === "OCUPADO";
+                    const isDisabled = s.estado === "INHABILITADO";
+
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setTargetSpaceId(String(s.id))}
+                        className={`relative p-2 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer min-h-[68px] ${
+                          isSelected
+                            ? "border-[#0048B5] bg-blue-50/90 text-[#0048B5] font-extrabold ring-2 ring-[#0048B5] shadow-xs scale-102 z-10"
+                            : isOccupied
+                            ? "border-amber-200/90 bg-amber-50/40 text-slate-800 hover:border-amber-400 hover:bg-amber-50"
+                            : isDisabled
+                            ? "border-slate-200 bg-slate-100/70 text-slate-400 opacity-60"
+                            : "border-emerald-200/90 bg-emerald-50/30 text-slate-800 hover:border-emerald-400 hover:bg-emerald-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="font-heading text-[13px] font-black leading-none">
+                            #{s.id}
+                          </span>
+                          {isOccupied ? (
+                            <span className="h-2 w-2 rounded-full bg-amber-500 shadow-xs" title="Ocupado" />
+                          ) : isDisabled ? (
+                            <span className="h-2 w-2 rounded-full bg-slate-400" title="Inhabilitado" />
+                          ) : (
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-xs animate-pulse" title="Disponible" />
+                          )}
+                        </div>
+
+                        <div className="mt-1 w-full overflow-hidden">
+                          {isOccupied ? (
+                            <div className="text-[10px] leading-tight">
+                              <span className="font-bold text-amber-900 block truncate" title={s.doctor}>
+                                {s.doctor}
+                              </span>
+                              <span className="text-[9px] text-amber-700 font-semibold flex items-center gap-0.5">
+                                🟡 Ocupado
+                              </span>
+                            </div>
+                          ) : isDisabled ? (
+                            <span className="text-[9.5px] font-medium text-slate-400">Inhabilitado</span>
+                          ) : (
+                            <div className="text-[10px] leading-tight">
+                              <span className="font-bold text-emerald-800 block flex items-center gap-0.5">
+                                🟢 Libre
+                              </span>
+                              <span className="text-[9px] text-slate-400 truncate block font-mono">{s.marca || "PC"}</span>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {modalSpaces.length === 0 && (
+                    <div className="col-span-full py-8 text-center text-[12px] text-slate-500">
+                      No se encontraron cubículos con los filtros aplicados.
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Sección 2: O ingresar número manual */}
+              {/* Sección 2: Input manual de número y selección de franja */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                    2. O escribe el número de puesto
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    Número de Puesto Manual
                   </label>
                   <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF]/40">
                     <MapPin size={15} className="text-[#0048B5]" />
@@ -2501,16 +2670,16 @@ export default function AttendanceView({
                       max="170"
                       value={targetSpaceId}
                       onChange={(e) => setTargetSpaceId(e.target.value)}
-                      placeholder="Ej. 40"
+                      placeholder="Escribe # de puesto..."
                       required
-                      className="w-full bg-transparent text-[14px] font-extrabold font-mono-data text-slate-800 outline-none placeholder:text-slate-300"
+                      className="w-full bg-transparent text-[13.5px] font-extrabold font-mono-data text-slate-800 outline-none placeholder:text-slate-300"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                    3. Franja / Turno
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    Franja Horaria / Turno
                   </label>
                   <select
                     value={targetHorario}
@@ -2528,29 +2697,52 @@ export default function AttendanceView({
 
               {/* Preview del Puesto Seleccionado */}
               {targetSpaceId && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-[12px] flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <Laptop size={16} className="text-[#0048B5]" />
-                    <div>
-                      <span className="font-bold text-slate-800">
-                        Puesto #{targetSpaceId}
-                      </span>
-                      {(() => {
-                        const sp = (spaces || []).find((s) => Number(s.id) === Number(targetSpaceId));
-                        if (!sp) return <span className="ml-1 text-slate-500">(Fuera de rango)</span>;
-                        if (sp.doctor) return <span className="ml-1 text-amber-700 font-bold">(Ocupado por {sp.doctor})</span>;
-                        return <span className="ml-1 text-emerald-700 font-bold">({sp.marca || "Disponible"})</span>;
-                      })()}
-                    </div>
-                  </div>
-                  <span className="font-mono-data text-[11px] text-[#0048B5] font-bold bg-white px-2 py-0.5 rounded-lg border border-blue-200">
-                    Seleccionado
-                  </span>
+                <div className="rounded-2xl border p-3.5 text-[12px] shadow-2xs transition-all animate-in fade-in duration-150">
+                  {(() => {
+                    const sp = (spaces || []).find((s) => Number(s.id) === Number(targetSpaceId));
+                    if (!sp) {
+                      return (
+                        <div className="flex items-center gap-2 text-rose-700 bg-rose-50 border-rose-200">
+                          <AlertTriangle size={16} />
+                          <span>El puesto #{targetSpaceId} está fuera del rango de la sede (1 a 170).</span>
+                        </div>
+                      );
+                    }
+                    if (sp.doctor && !isSameDoctor(sp.doctor, manualAssignDoc.nombre)) {
+                      return (
+                        <div className="flex items-start gap-2.5 text-amber-900 bg-amber-50/80 border-amber-300">
+                          <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold">
+                              Puesto #{targetSpaceId} · Actualmente Ocupado por <span className="underline">{sp.doctor}</span>
+                            </p>
+                            <p className="text-[11px] text-amber-700 mt-0.5">
+                              Al confirmar, el puesto será reasignado a {manualAssignDoc.nombre}.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="flex items-center justify-between gap-2 text-emerald-900 bg-emerald-50/80 border-emerald-300">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                          <div>
+                            <span className="font-extrabold">Puesto #{targetSpaceId} · Disponible</span>
+                            <span className="text-[11px] text-emerald-700 ml-1.5 font-mono">({sp.marca || "PC Lista"})</span>
+                          </div>
+                        </div>
+                        <span className="text-[10.5px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-lg border border-emerald-200">
+                          Listo para asignar
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
               {/* Botones de Acción */}
-              <div className="flex items-center justify-end gap-2.5 pt-2">
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200/80">
                 <button
                   type="button"
                   onClick={() => setManualAssignDoc(null)}
