@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import {
-  LayoutGrid, Warehouse, Stethoscope, FileClock, Bell,
+  LayoutGrid, Warehouse, Stethoscope, FileClock,
   RefreshCw, LogIn, Sparkles, UserCheck, CheckCircle2,
   Shield, LogOut, Laptop, User, FileSpreadsheet, Clock,
-  Package, ChevronRight, X, Check, Database
+  Package, X, Check
 } from "lucide-react";
 import DoctorSVLogo from "./DoctorSVLogo";
 
@@ -27,7 +27,7 @@ export default function Header({
 }) {
   const [boxDrawerOpen, setBoxDrawerOpen] = useState(false);
 
-  // Cerrar el cajón de herramientas con tecla Escape
+  // Cerrar el cajón de herramientas con la tecla Escape
   useEffect(() => {
     function handleKeyDown(e) {
       if (e.key === "Escape") {
@@ -69,253 +69,238 @@ export default function Header({
         }}
       />
 
-      {/* Contenedor relativo para permitir centrado matemático de la navegación */}
-      <div className="relative mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 py-2.5">
-        
-        {/* ============================================================== */}
-        {/* ZONA IZQUIERDA: LOGO + BADGE LIMPIO                             */}
-        {/* ============================================================== */}
-        <div className="flex items-center gap-3 shrink-0 z-10">
-          <div
-            className="flex items-center cursor-pointer select-none"
-            onClick={() => setTab("mapa")}
-            title="Ir al Mapa Principal"
-          >
-            <DoctorSVLogo className="h-8 sm:h-9" showSubtext={false} />
+      {/* Contenedor principal con CSS Grid equilibrado: Col 1 (Izquierda), Col 2 (Centro), Col 3 (Derecha) */}
+      <div className="mx-auto max-w-[1440px] px-3 sm:px-6 py-2">
+        <div className="grid grid-cols-[auto_1fr] lg:grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-4">
+          
+          {/* ============================================================== */}
+          {/* COLUMNA 1 (IZQUIERDA): LOGO + IDENTIDAD DE SEDE                */}
+          {/* ============================================================== */}
+          <div className="flex items-center gap-2.5 justify-start min-w-0">
+            <div
+              className="flex items-center cursor-pointer select-none shrink-0"
+              onClick={() => setTab("mapa")}
+              title="Ir al Mapa de Espacios"
+            >
+              <DoctorSVLogo className="h-7.5 sm:h-8.5" showSubtext={false} />
+            </div>
+
+            {/* Badge de Rol o Sede */}
+            <div className="hidden sm:flex items-center shrink-0">
+              {isDoctorRole ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-800 border border-emerald-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Estación Médica</span>
+                </span>
+              ) : isSupervisorRole ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-2 py-0.5 text-[10.5px] font-bold text-cyan-900 border border-cyan-200">
+                  <UserCheck size={11} className="text-cyan-700" />
+                  <span>Supervisor</span>
+                </span>
+              ) : isMasterRole ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2 py-0.5 text-[10.5px] font-bold text-indigo-900 border border-indigo-200">
+                  <Shield size={11} className="text-indigo-600" />
+                  <span>Master</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-700 border border-slate-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>San Miguel</span>
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Badge de Rol o Sede */}
-          <div className="hidden sm:flex items-center">
-            {isDoctorRole ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200 shadow-2xs">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Estación Médica</span>
-              </span>
-            ) : isSupervisorRole ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-2.5 py-0.5 text-[11px] font-bold text-cyan-900 border border-cyan-200 shadow-2xs">
-                <UserCheck size={11} className="text-cyan-700" />
-                <span>Supervisor · San Miguel</span>
-              </span>
-            ) : isMasterRole ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-900 border border-indigo-200 shadow-2xs">
-                <Shield size={11} className="text-indigo-600" />
-                <span>Doctor Master</span>
-              </span>
+          {/* ============================================================== */}
+          {/* COLUMNA 2 (CENTRO): PESTAÑAS MATEMÁTICAMENTE CENTRADAS         */}
+          {/* ============================================================== */}
+          <div className="hidden lg:flex items-center justify-center min-w-0">
+            {!isDoctorRole ? (
+              <nav className="flex items-center gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70 shadow-inner">
+                {tabs.map((t) => {
+                  const isActive = tab === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setTab(t.id)}
+                      className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] transition-all duration-200 cursor-pointer ${
+                        isActive
+                          ? "bg-white text-[#0048B5] shadow-xs font-black ring-1 ring-slate-200/90 scale-[1.01]"
+                          : "text-slate-600 font-bold hover:text-[#0048B5] hover:bg-white/60"
+                      }`}
+                    >
+                      <t.icon
+                        size={13.5}
+                        className={`transition-colors shrink-0 ${isActive ? "text-[#0095FF]" : "text-slate-400"}`}
+                      />
+                      <span className="whitespace-nowrap hidden xl:inline">{t.label}</span>
+                      <span className="whitespace-nowrap xl:hidden">{t.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </nav>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-700 border border-slate-200 shadow-2xs">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Sede San Miguel</span>
-              </span>
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-slate-700">
+                <span className="font-heading font-extrabold text-slate-900">
+                  Plano de Cubículos
+                </span>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-600">
+                  Turno: <strong className="text-[#0048B5]">{currentUser.shift || "General"}</strong>
+                </span>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* ============================================================== */}
-        {/* ZONA CENTRAL: NAVEGACIÓN MATEMÁTICAMENTE CENTRADA             */}
-        {/* ============================================================== */}
-        {!isDoctorRole ? (
-          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center justify-center pointer-events-auto">
-            <nav className="flex items-center gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70 shadow-inner">
-              {tabs.map((t) => {
-                const isActive = tab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
-                    className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[12px] transition-all duration-200 cursor-pointer ${
-                      isActive
-                        ? "bg-white text-[#0048B5] shadow-xs font-black ring-1 ring-slate-200/90 scale-[1.01]"
-                        : "text-slate-600 font-bold hover:text-[#0048B5] hover:bg-white/60"
-                    }`}
-                  >
-                    <t.icon
-                      size={14}
-                      className={`transition-colors shrink-0 ${isActive ? "text-[#0095FF]" : "text-slate-400"}`}
-                    />
-                    <span className="whitespace-nowrap hidden xl:inline">{t.label}</span>
-                    <span className="whitespace-nowrap xl:hidden">{t.shortLabel}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-        ) : (
-          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-2 text-[12.5px] font-semibold text-slate-700">
-            <span className="font-heading font-extrabold text-slate-900">
-              Plano de Cubículos
-            </span>
-            <span className="text-slate-300">·</span>
-            <span className="text-slate-600 text-[12px]">
-              Turno: <strong className="text-[#0048B5]">{currentUser.shift || "General"}</strong>
-            </span>
-          </div>
-        )}
+          {/* ============================================================== */}
+          {/* COLUMNA 3 (DERECHA): SOLO LOS BOTONES IMPORTANTES + BOTÓN CAJA */}
+          {/* ============================================================== */}
+          <div className="flex items-center gap-2 justify-end shrink-0">
+            {/* 1. Botón Importante: Auto Check-In */}
+            {!isDoctorRole && onOpenCheckIn && (
+              <button
+                type="button"
+                onClick={onOpenCheckIn}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-black text-white transition-all hover:brightness-110 active:scale-95 shadow-xs cursor-pointer"
+                style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+                title="Abrir Auto Check-In de Médicos"
+              >
+                <CheckCircle2 size={13.5} className="shrink-0" />
+                <span className="hidden sm:inline">Auto Check-In</span>
+                <span className="sm:hidden">Check-In</span>
+              </button>
+            )}
 
-        {/* ============================================================== */}
-        {/* ZONA DERECHA: SOLO LOS BOTONES IMPORTANTES + BOTÓN CAJA        */}
-        {/* ============================================================== */}
-        <div className="flex items-center gap-2 shrink-0 z-10">
-          {/* 1. Botón Importante: Auto Check-In */}
-          {!isDoctorRole && onOpenCheckIn && (
-            <button
-              type="button"
-              onClick={onOpenCheckIn}
-              className="flex items-center gap-1.5 rounded-xl px-3 sm:px-3.5 py-1.5 text-[12px] font-black text-white transition-all hover:brightness-110 active:scale-95 shadow-xs cursor-pointer"
-              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-              title="Abrir Auto Check-In de Médicos"
-            >
-              <CheckCircle2 size={14} className="shrink-0" />
-              <span className="hidden sm:inline">Auto Check-In</span>
-              <span className="sm:hidden">Check-In</span>
-            </button>
-          )}
+            {/* 2. Botón Importante: Sync en Vivo */}
+            {!isDoctorRole && onSync && (
+              <button
+                type="button"
+                onClick={onSync}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-700 transition hover:bg-slate-50 hover:border-slate-300 shadow-2xs disabled:opacity-75 cursor-pointer"
+                title={
+                  lastSyncTime
+                    ? `Sincronización en vivo activa · Última: ${lastSyncTime.toLocaleTimeString("es-SV")}`
+                    : "Sincronizar puestos y nómina en tiempo real"
+                }
+              >
+                <RefreshCw
+                  size={12.5}
+                  className={isSyncing ? "animate-spin text-[#0095FF]" : "text-emerald-500"}
+                />
+                <span className="hidden md:inline">{isSyncing ? "Sync..." : "Sync"}</span>
+                <span
+                  className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"
+                  title="Conexión en vivo activa"
+                />
+              </button>
+            )}
 
-          {/* 2. Botón Importante: Sync en Vivo */}
-          {!isDoctorRole && onSync && (
-            <button
-              type="button"
-              onClick={onSync}
-              disabled={isSyncing}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-2.5 sm:px-3 py-1.5 text-[12px] font-bold text-slate-700 transition hover:bg-slate-50 hover:border-slate-300 shadow-2xs disabled:opacity-75 cursor-pointer"
-              title={
-                lastSyncTime
-                  ? `Sincronización en vivo activa · Última: ${lastSyncTime.toLocaleTimeString("es-SV")}`
-                  : "Sincronizar puestos y nómina en tiempo real"
-              }
-            >
-              <RefreshCw
-                size={13}
-                className={isSyncing ? "animate-spin text-[#0095FF]" : "text-emerald-500"}
-              />
-              <span className="hidden md:inline">{isSyncing ? "Sync..." : "Sync"}</span>
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"
-                title="Conexión en vivo activa"
-              />
-            </button>
-          )}
+            {/* 3. BOTÓN CAJA (Abre el cajón con todas las herramientas secundarias) */}
+            {!isDoctorRole && (
+              <button
+                type="button"
+                onClick={() => setBoxDrawerOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 px-2.5 sm:px-3 py-1.5 text-[12px] font-extrabold text-slate-700 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                title="Abrir Caja de Herramientas, Ajustes y Módulos"
+              >
+                <Package size={14} className="text-[#0048B5]" />
+                <span className="hidden sm:inline">Caja de Herramientas</span>
+                <span className="sm:hidden">Caja</span>
+                {alerts?.length > 0 && (
+                  <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                )}
+              </button>
+            )}
 
-          {/* 3. BOTÓN CAJA (Guarda todas las herramientas secundarias en un cajón limpio) */}
-          {!isDoctorRole && (
-            <button
-              type="button"
-              onClick={() => setBoxDrawerOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 px-3 py-1.5 text-[12px] font-extrabold text-slate-700 transition-all shadow-2xs active:scale-95 cursor-pointer"
-              title="Abrir Caja de Herramientas y Ajustes"
-            >
-              <Package size={14} className="text-[#0048B5]" />
-              <span className="hidden sm:inline">Caja de Herramientas</span>
-              <span className="sm:hidden">Caja</span>
-              {alerts?.length > 0 && (
-                <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-              )}
-            </button>
-          )}
-
-          {/* 4. Sesión / Perfil */}
-          {isDoctorRole ? (
-            /* CONTROL DE SESIÓN DEL DOCTOR */
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <div className="flex items-center gap-2 rounded-xl bg-slate-100/90 border border-slate-200/90 px-2.5 py-1 text-[11.5px]">
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
-                  <User size={13} />
-                </span>
-                <div className="flex flex-col text-left leading-tight">
-                  <span className="font-extrabold text-slate-900 max-w-[100px] sm:max-w-[150px] truncate">
+            {/* 4. Sesión / Perfil */}
+            {isDoctorRole ? (
+              /* SESIÓN DEL DOCTOR */
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200 px-2 py-1 text-[11px]">
+                  <span className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
+                    <User size={12} />
+                  </span>
+                  <span className="font-extrabold text-slate-900 max-w-[90px] sm:max-w-[130px] truncate">
                     {currentUser.name}
                   </span>
-                  {currentUser.spaceId ? (
-                    <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-0.5">
-                      <Laptop size={10} /> Puesto #{currentUser.spaceId}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-amber-600 animate-pulse">
-                      Sin puesto
-                    </span>
-                  )}
                 </div>
-              </div>
 
-              {currentUser.spaceId && onReleaseMySpace && (
+                {currentUser.spaceId && onReleaseMySpace && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`¿Deseas quitarte del Puesto #${currentUser.spaceId}?`)) {
+                        onReleaseMySpace();
+                      }
+                    }}
+                    className="p-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer"
+                    title={`Quitar puesto #${currentUser.spaceId}`}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`¿Deseas quitarte del Puesto #${currentUser.spaceId}? El cubículo quedará DISPONIBLE.`)) {
-                      onReleaseMySpace();
+                    if (window.confirm("¿Deseas finalizar tu jornada y salir?")) {
+                      onLogout();
                     }
                   }}
-                  className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                  title="Liberar cubículo"
+                  className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-extrabold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-xs transition-all cursor-pointer"
+                  title="Salir"
                 >
-                  <X size={12} className="text-amber-700" />
-                  <span className="hidden sm:inline">Quitar #{currentUser.spaceId}</span>
+                  <LogOut size={12} />
+                  <span className="hidden sm:inline">Salir</span>
                 </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm("¿Deseas finalizar tu jornada y cerrar sesión?")) {
-                    onLogout();
-                  }
-                }}
-                className="flex items-center gap-1 rounded-xl px-2.5 sm:px-3 py-1.5 text-[11.5px] font-extrabold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-xs transition-all cursor-pointer"
-                title="Finalizar jornada"
-              >
-                <LogOut size={12} />
-                <span className="hidden sm:inline">Salir</span>
-              </button>
-            </div>
-          ) : isSupervisorRole ? (
-            /* CONTROL DE SESIÓN DE SUPERVISOR */
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-2 rounded-xl bg-cyan-50 border border-cyan-200 px-2.5 py-1 text-[11.5px]">
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
-                  <UserCheck size={13} />
-                </span>
-                <div className="flex flex-col text-left leading-tight">
-                  <span className="font-extrabold text-slate-900 max-w-[100px] sm:max-w-[140px] truncate">
+              </div>
+            ) : isSupervisorRole ? (
+              /* SESIÓN DE SUPERVISOR */
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 rounded-xl bg-cyan-50 border border-cyan-200 px-2 py-1 text-[11px]">
+                  <span className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
+                    <UserCheck size={12} />
+                  </span>
+                  <span className="font-extrabold text-slate-900 max-w-[80px] sm:max-w-[120px] truncate">
                     {currentUser.name}
                   </span>
-                  <span className="text-[10px] font-bold text-cyan-800">
-                    Puesto #{currentUser.puesto}
-                  </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="p-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 transition-colors shadow-2xs cursor-pointer"
+                  title="Cerrar sesión"
+                >
+                  <LogOut size={13} />
+                </button>
               </div>
+            ) : isMasterRole ? (
+              /* SESIÓN DE MASTER */
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 px-2 py-1.5 text-[11px] font-bold text-slate-700 transition-colors shadow-2xs cursor-pointer"
+                  title="Cerrar sesión de Doctor Master"
+                >
+                  <LogOut size={12} />
+                  <span className="hidden sm:inline">Salir</span>
+                </button>
+              </div>
+            ) : (
+              /* BOTÓN DE ACCESO */
               <button
                 type="button"
-                onClick={onLogout}
-                className="p-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 transition-colors shadow-2xs cursor-pointer"
-                title="Cerrar sesión"
+                onClick={onOpenAuthPortal}
+                className="flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-[12px] font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 cursor-pointer"
+                style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
               >
-                <LogOut size={14} />
+                <LogIn size={13} />
+                <span>Acceso</span>
               </button>
-            </div>
-          ) : isMasterRole ? (
-            /* MASTER ADMIN CONTROLS */
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onLogout}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 px-2.5 sm:px-3 py-1.5 text-[11.5px] font-bold text-slate-700 transition-colors shadow-2xs cursor-pointer"
-                title="Cerrar sesión de Doctor Master"
-              >
-                <LogOut size={13} />
-                <span className="hidden sm:inline">Salir</span>
-              </button>
-            </div>
-          ) : (
-            /* BOTÓN DE ACCESO */
-            <button
-              type="button"
-              onClick={onOpenAuthPortal}
-              className="flex items-center gap-1.5 rounded-xl px-3 sm:px-3.5 py-1.5 text-[12px] font-black text-white shadow-xs transition hover:brightness-110 active:scale-95 cursor-pointer"
-              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-            >
-              <LogIn size={13} />
-              <span>Acceso</span>
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
