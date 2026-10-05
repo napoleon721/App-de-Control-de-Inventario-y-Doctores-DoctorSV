@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LayoutGrid, Warehouse, Stethoscope, FileClock, Bell,
   RefreshCw, LogIn, Sparkles, UserCheck, CheckCircle2,
   Shield, LogOut, Laptop, User, FileSpreadsheet, Clock,
-  SlidersHorizontal, ChevronDown, X
+  Package, ChevronRight, X, Check, Database
 } from "lucide-react";
 import DoctorSVLogo from "./DoctorSVLogo";
 
@@ -25,49 +25,39 @@ export default function Header({
   onOpenGoogleSheetsConfig,
   onOpenDailyLots,
 }) {
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [alertOpen, setAlertOpen] = useState(false);
-  const toolsRef = useRef(null);
-  const alertRef = useRef(null);
+  const [boxDrawerOpen, setBoxDrawerOpen] = useState(false);
 
-  // Cerrar menús al hacer clic fuera
+  // Cerrar el cajón de herramientas con tecla Escape
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (toolsRef.current && !toolsRef.current.contains(e.target)) {
-        setToolsOpen(false);
-      }
-      if (alertRef.current && !alertRef.current.contains(e.target)) {
-        setAlertOpen(false);
+    function handleKeyDown(e) {
+      if (e.key === "Escape") {
+        setBoxDrawerOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const allTabs = [
-    { id: "mapa", label: "Mapa de Espacios", shortLabel: "Mapa", icon: LayoutGrid },
-    { id: "asistencia", label: "Control de Asistencia", shortLabel: "Asistencia", icon: UserCheck },
-    { id: "medicos", label: "Padrón de Médicos", shortLabel: "Médicos", icon: Stethoscope },
-    { id: "bodega", label: "Inventario Bodega", shortLabel: "Bodega", icon: Warehouse },
-    { id: "historial", label: "Auditoría & Historial", shortLabel: "Historial", icon: FileClock },
+    { id: "mapa", label: "Mapa de Espacios", shortLabel: "Mapa", icon: LayoutGrid, desc: "Visualización interactiva de cubículos y hardware" },
+    { id: "asistencia", label: "Control de Asistencia", shortLabel: "Asistencia", icon: UserCheck, desc: "Nómina quincenal y control de turnos en vivo" },
+    { id: "medicos", label: "Padrón de Médicos", shortLabel: "Médicos", icon: Stethoscope, desc: "Directorio del personal médico asignado" },
+    { id: "bodega", label: "Inventario Bodega", shortLabel: "Bodega", icon: Warehouse, desc: "Stock de repuestos y equipos en almacén" },
+    { id: "historial", label: "Auditoría & Historial", shortLabel: "Historial", icon: FileClock, desc: "Registro cronológico de movimientos" },
   ];
 
   const isDoctorRole = currentUser?.role === "DOCTOR";
   const isMasterRole = currentUser?.role === "MASTER";
   const isSupervisorRole = currentUser?.role === "SUPERVISOR";
 
-  // Supervisores solo tienen acceso a "Mapa de Espacios" y "Control de Asistencia"
+  // Supervisores solo tienen acceso a "Mapa" y "Asistencia"
   const tabs = isSupervisorRole
     ? allTabs.filter((t) => ["mapa", "asistencia"].includes(t.id))
     : allTabs;
 
-  const hasToolsAvailable = !isDoctorRole && (
-    onOpenGoogleSheetsConfig || onOpenDailyLots || onOpenSupervisorConfig || onOpenShiftConfig || onOpenLiveReport
-  );
-
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs transition-all">
-      {/* Barra superior con gradiente institucional DoctorSV */}
+      {/* Barra superior con gradiente de identidad DoctorSV */}
       <div
         className="h-1 w-full"
         style={{
@@ -79,40 +69,40 @@ export default function Header({
         }}
       />
 
-      {/* Contenedor principal con distribución armónica en 3 zonas */}
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-2.5">
+      {/* Contenedor relativo para permitir centrado matemático de la navegación */}
+      <div className="relative mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 py-2.5">
         
         {/* ============================================================== */}
-        {/* ZONA 1: LOGO INSTITUCIONAL + BADGE DE ROL                      */}
+        {/* ZONA IZQUIERDA: LOGO + BADGE LIMPIO                             */}
         {/* ============================================================== */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 z-10">
           <div
             className="flex items-center cursor-pointer select-none"
             onClick={() => setTab("mapa")}
-            title="Ir al Mapa de Espacios"
+            title="Ir al Mapa Principal"
           >
             <DoctorSVLogo className="h-8 sm:h-9" showSubtext={false} />
           </div>
 
-          {/* Badges de Estado / Sede */}
-          <div className="flex items-center">
+          {/* Badge de Rol o Sede */}
+          <div className="hidden sm:flex items-center">
             {isDoctorRole ? (
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200 shadow-2xs">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200 shadow-2xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Estación Médica</span>
               </span>
             ) : isSupervisorRole ? (
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-2.5 py-0.5 text-[11px] font-bold text-cyan-900 border border-cyan-200 shadow-2xs">
-                <UserCheck size={12} className="text-cyan-700" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-2.5 py-0.5 text-[11px] font-bold text-cyan-900 border border-cyan-200 shadow-2xs">
+                <UserCheck size={11} className="text-cyan-700" />
                 <span>Supervisor · San Miguel</span>
               </span>
             ) : isMasterRole ? (
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-900 border border-indigo-200 shadow-2xs">
-                <Shield size={12} className="text-indigo-600" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-900 border border-indigo-200 shadow-2xs">
+                <Shield size={11} className="text-indigo-600" />
                 <span>Doctor Master</span>
               </span>
             ) : (
-              <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-700 border border-slate-200 shadow-2xs">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-700 border border-slate-200 shadow-2xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Sede San Miguel</span>
               </span>
@@ -121,57 +111,58 @@ export default function Header({
         </div>
 
         {/* ============================================================== */}
-        {/* ZONA 2: NAVEGACIÓN CENTRAL SEGMENTADA (Pestañas principales)  */}
+        {/* ZONA CENTRAL: NAVEGACIÓN MATEMÁTICAMENTE CENTRADA             */}
         {/* ============================================================== */}
         {!isDoctorRole ? (
-          <nav className="hidden lg:flex items-center justify-center gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70 shadow-inner">
-            {tabs.map((t) => {
-              const isActive = tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[12px] transition-all duration-200 cursor-pointer ${
-                    isActive
-                      ? "bg-white text-[#0048B5] shadow-xs font-black ring-1 ring-slate-200/90 scale-[1.01]"
-                      : "text-slate-600 font-bold hover:text-[#0048B5] hover:bg-white/60"
-                  }`}
-                >
-                  <t.icon
-                    size={14}
-                    className={`transition-colors shrink-0 ${isActive ? "text-[#0095FF]" : "text-slate-400"}`}
-                  />
-                  <span className="whitespace-nowrap hidden xl:inline">{t.label}</span>
-                  <span className="whitespace-nowrap xl:hidden">{t.shortLabel}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center justify-center pointer-events-auto">
+            <nav className="flex items-center gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70 shadow-inner">
+              {tabs.map((t) => {
+                const isActive = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[12px] transition-all duration-200 cursor-pointer ${
+                      isActive
+                        ? "bg-white text-[#0048B5] shadow-xs font-black ring-1 ring-slate-200/90 scale-[1.01]"
+                        : "text-slate-600 font-bold hover:text-[#0048B5] hover:bg-white/60"
+                    }`}
+                  >
+                    <t.icon
+                      size={14}
+                      className={`transition-colors shrink-0 ${isActive ? "text-[#0095FF]" : "text-slate-400"}`}
+                    />
+                    <span className="whitespace-nowrap hidden xl:inline">{t.label}</span>
+                    <span className="whitespace-nowrap xl:hidden">{t.shortLabel}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         ) : (
-          /* Doctor Role: Título limpio centrado */
-          <div className="hidden md:flex items-center gap-2 text-[12.5px] font-semibold text-slate-700">
+          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-2 text-[12.5px] font-semibold text-slate-700">
             <span className="font-heading font-extrabold text-slate-900">
-              Plano de Ubicación de Cubículos
+              Plano de Cubículos
             </span>
             <span className="text-slate-300">·</span>
             <span className="text-slate-600 text-[12px]">
-              Turno activo: <strong className="text-[#0048B5]">{currentUser.shift || "General"}</strong>
+              Turno: <strong className="text-[#0048B5]">{currentUser.shift || "General"}</strong>
             </span>
           </div>
         )}
 
         {/* ============================================================== */}
-        {/* ZONA 3: ACCIONES RÁPIDAS + HERRAMIENTAS + SESIÓN              */}
+        {/* ZONA DERECHA: SOLO LOS BOTONES IMPORTANTES + BOTÓN CAJA        */}
         {/* ============================================================== */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Botón Primario: Auto Check-In */}
+        <div className="flex items-center gap-2 shrink-0 z-10">
+          {/* 1. Botón Importante: Auto Check-In */}
           {!isDoctorRole && onOpenCheckIn && (
             <button
               type="button"
               onClick={onOpenCheckIn}
               className="flex items-center gap-1.5 rounded-xl px-3 sm:px-3.5 py-1.5 text-[12px] font-black text-white transition-all hover:brightness-110 active:scale-95 shadow-xs cursor-pointer"
               style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-              title="Abrir modal de Auto Check-In de Médicos"
+              title="Abrir Auto Check-In de Médicos"
             >
               <CheckCircle2 size={14} className="shrink-0" />
               <span className="hidden sm:inline">Auto Check-In</span>
@@ -179,7 +170,7 @@ export default function Header({
             </button>
           )}
 
-          {/* Botón de Sincronización en Vivo */}
+          {/* 2. Botón Importante: Sync en Vivo */}
           {!isDoctorRole && onSync && (
             <button
               type="button"
@@ -204,257 +195,24 @@ export default function Header({
             </button>
           )}
 
-          {/* MENÚ DESPLEGABLE: HERRAMIENTAS & AJUSTES (Agrupa las configuraciones en un solo menú limpio) */}
-          {hasToolsAvailable && (
-            <div className="relative" ref={toolsRef}>
-              <button
-                type="button"
-                onClick={() => {
-                  setToolsOpen((prev) => !prev);
-                  setAlertOpen(false);
-                }}
-                className={`flex items-center gap-1.5 rounded-xl border px-2.5 sm:px-3 py-1.5 text-[12px] font-bold transition-all shadow-2xs cursor-pointer ${
-                  toolsOpen
-                    ? "border-blue-400 bg-blue-50/90 text-[#0048B5] ring-2 ring-blue-500/20"
-                    : "border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
-                }`}
-                title="Herramientas y Configuración del Sistema"
-              >
-                <SlidersHorizontal size={14} className={toolsOpen ? "text-[#0095FF]" : "text-slate-500"} />
-                <span className="hidden sm:inline">Herramientas</span>
-                <ChevronDown
-                  size={13}
-                  className={`text-slate-400 transition-transform duration-200 ${toolsOpen ? "rotate-180 text-blue-600" : ""}`}
-                />
-              </button>
-
-              {/* Popover con las 5 opciones organizadas */}
-              {toolsOpen && (
-                <div className="absolute right-0 mt-2 w-72 sm:w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-2.5">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                      Herramientas de Gestión
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#0048B5] font-mono">
-                      DoctorSV Admin
-                    </span>
-                  </div>
-
-                  <div className="p-2 space-y-1">
-                    {/* 1. Google Sheets en Vivo */}
-                    {onOpenGoogleSheetsConfig && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setToolsOpen(false);
-                          onOpenGoogleSheetsConfig();
-                        }}
-                        className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-emerald-50/80 text-left transition-colors group cursor-pointer"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
-                          <FileSpreadsheet size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[12.5px] font-bold text-slate-800 group-hover:text-emerald-900 truncate">
-                              Google Sheets en Vivo
-                            </span>
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                              Base de Datos
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            Vincular y sincronizar la hoja maestra
-                          </p>
-                        </div>
-                      </button>
-                    )}
-
-                    {/* 2. Resumen San Miguel */}
-                    {onOpenDailyLots && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setToolsOpen(false);
-                          onOpenDailyLots();
-                        }}
-                        className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-indigo-50/80 text-left transition-colors group cursor-pointer"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
-                          <LayoutGrid size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[12.5px] font-bold text-slate-800 group-hover:text-indigo-900 truncate">
-                              Resumen San Miguel
-                            </span>
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 shrink-0">
-                              Lotes Diarios
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            Distribución de cubículos por turno
-                          </p>
-                        </div>
-                      </button>
-                    )}
-
-                    {/* 3. Lotes Supervisores */}
-                    {onOpenSupervisorConfig && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setToolsOpen(false);
-                          onOpenSupervisorConfig();
-                        }}
-                        className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-sky-50/80 text-left transition-colors group cursor-pointer"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
-                          <Shield size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[12.5px] font-bold text-slate-800 group-hover:text-sky-900 truncate">
-                              Lotes Supervisores
-                            </span>
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 shrink-0">
-                              Cubículos
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            Rangos fijos asignados por supervisor
-                          </p>
-                        </div>
-                      </button>
-                    )}
-
-                    {/* 4. Configuración de Turnos */}
-                    {onOpenShiftConfig && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setToolsOpen(false);
-                          onOpenShiftConfig();
-                        }}
-                        className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50/80 text-left transition-colors group cursor-pointer"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#0048B5] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
-                          <Clock size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[12.5px] font-bold text-slate-800 group-hover:text-blue-900 truncate">
-                              Turnos y Horarios
-                            </span>
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-[#0048B5] shrink-0">
-                              Horarios
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            Configurar franjas oficiales de atención
-                          </p>
-                        </div>
-                      </button>
-                    )}
-
-                    {/* 5. Reporte de Asistencia en Vivo */}
-                    {onOpenLiveReport && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setToolsOpen(false);
-                          onOpenLiveReport();
-                        }}
-                        className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-amber-50/80 text-left transition-colors group cursor-pointer"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
-                          <Sparkles size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[12.5px] font-bold text-slate-800 group-hover:text-amber-900 truncate">
-                              Reporte de Asistencia
-                            </span>
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 shrink-0">
-                              En Vivo
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            Estadísticas y ocupación en tiempo real
-                          </p>
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Campanita de Notificaciones y Alertas */}
-          <div className="relative" ref={alertRef}>
+          {/* 3. BOTÓN CAJA (Guarda todas las herramientas secundarias en un cajón limpio) */}
+          {!isDoctorRole && (
             <button
-              onClick={() => {
-                setAlertOpen((v) => !v);
-                setToolsOpen(false);
-              }}
-              className={`relative flex h-8.5 w-8.5 items-center justify-center rounded-xl border transition-all cursor-pointer ${
-                alertOpen
-                  ? "border-blue-400 bg-blue-50 text-[#0048B5] ring-2 ring-blue-500/20"
-                  : "border-slate-200/90 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-              title="Notificaciones y Alertas del Sistema"
+              type="button"
+              onClick={() => setBoxDrawerOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 px-3 py-1.5 text-[12px] font-extrabold text-slate-700 transition-all shadow-2xs active:scale-95 cursor-pointer"
+              title="Abrir Caja de Herramientas y Ajustes"
             >
-              <Bell size={15} />
-              {alerts && alerts.length > 0 && (
-                <span
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-sm ring-2 ring-white"
-                  style={{ background: "#E11D48" }}
-                >
-                  {alerts.length}
-                </span>
+              <Package size={14} className="text-[#0048B5]" />
+              <span className="hidden sm:inline">Caja de Herramientas</span>
+              <span className="sm:hidden">Caja</span>
+              {alerts?.length > 0 && (
+                <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               )}
             </button>
+          )}
 
-            {/* Dropdown de Alertas */}
-            {alertOpen && (
-              <div
-                className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 z-50 animate-in fade-in zoom-in-95 duration-150"
-              >
-                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-2.5">
-                  <p className="text-xs font-black uppercase tracking-wider text-slate-700">
-                    Alertas del Sistema ({alerts?.length || 0})
-                  </p>
-                  <button
-                    onClick={() => setAlertOpen(false)}
-                    className="text-[11px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs">
-                  {alerts && alerts.map((a, i) => (
-                    <div key={i} className="flex gap-2.5 p-3 hover:bg-slate-50/80 transition-colors">
-                      <span className="mt-0.5 text-base shrink-0">
-                        {a.type === "danger" ? "🚨" : a.type === "warn" ? "⚠️" : "ℹ️"}
-                      </span>
-                      <div>
-                        <p className="font-bold text-slate-800">{a.title}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{a.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {(!alerts || alerts.length === 0) && (
-                    <div className="p-6 text-center text-slate-400 italic">
-                      No hay incidencias activas en la sede.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* SESIÓN DE USUARIO */}
+          {/* 4. Sesión / Perfil */}
           {isDoctorRole ? (
             /* CONTROL DE SESIÓN DEL DOCTOR */
             <div className="flex items-center gap-1.5 sm:gap-2">
@@ -463,7 +221,7 @@ export default function Header({
                   <User size={13} />
                 </span>
                 <div className="flex flex-col text-left leading-tight">
-                  <span className="font-extrabold text-slate-900 max-w-[110px] sm:max-w-[160px] truncate">
+                  <span className="font-extrabold text-slate-900 max-w-[100px] sm:max-w-[150px] truncate">
                     {currentUser.name}
                   </span>
                   {currentUser.spaceId ? (
@@ -478,32 +236,26 @@ export default function Header({
                 </div>
               </div>
 
-              {/* Botón Quitar Puesto */}
               {currentUser.spaceId && onReleaseMySpace && (
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`¿Deseas quitarte del Puesto #${currentUser.spaceId}? El cubículo quedará DISPONIBLE para reasignarte a otro o para el siguiente turno.`)) {
+                    if (window.confirm(`¿Deseas quitarte del Puesto #${currentUser.spaceId}? El cubículo quedará DISPONIBLE.`)) {
                       onReleaseMySpace();
                     }
                   }}
-                  className="flex items-center gap-1 rounded-xl px-2 sm:px-2.5 py-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                  title="Liberar tu puesto actual sin cerrar sesión"
+                  className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  title="Liberar cubículo"
                 >
                   <X size={12} className="text-amber-700" />
                   <span className="hidden sm:inline">Quitar #{currentUser.spaceId}</span>
                 </button>
               )}
 
-              {/* Finalizar Jornada */}
               <button
                 type="button"
                 onClick={() => {
-                  if (window.confirm(
-                    currentUser.spaceId
-                      ? `¿Deseas finalizar tu jornada de trabajo? El Puesto #${currentUser.spaceId} volverá a estar DISPONIBLE y se cerrará tu sesión.`
-                      : "¿Deseas cerrar tu sesión?"
-                  )) {
+                  if (window.confirm("¿Deseas finalizar tu jornada y cerrar sesión?")) {
                     onLogout();
                   }
                 }}
@@ -516,13 +268,13 @@ export default function Header({
             </div>
           ) : isSupervisorRole ? (
             /* CONTROL DE SESIÓN DE SUPERVISOR */
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5">
               <div className="flex items-center gap-2 rounded-xl bg-cyan-50 border border-cyan-200 px-2.5 py-1 text-[11.5px]">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
                   <UserCheck size={13} />
                 </span>
                 <div className="flex flex-col text-left leading-tight">
-                  <span className="font-extrabold text-slate-900 max-w-[110px] sm:max-w-[160px] truncate">
+                  <span className="font-extrabold text-slate-900 max-w-[100px] sm:max-w-[140px] truncate">
                     {currentUser.name}
                   </span>
                   <span className="text-[10px] font-bold text-cyan-800">
@@ -534,14 +286,14 @@ export default function Header({
                 type="button"
                 onClick={onLogout}
                 className="p-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 transition-colors shadow-2xs cursor-pointer"
-                title="Cerrar sesión de Supervisor"
+                title="Cerrar sesión"
               >
                 <LogOut size={14} />
               </button>
             </div>
           ) : isMasterRole ? (
-            /* CONTROL DE SESIÓN DE MASTER ADMIN */
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            /* MASTER ADMIN CONTROLS */
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={onLogout}
@@ -553,7 +305,7 @@ export default function Header({
               </button>
             </div>
           ) : (
-            /* SIN SESIÓN: ACCESO / REGISTRO */
+            /* BOTÓN DE ACCESO */
             <button
               type="button"
               onClick={onOpenAuthPortal}
@@ -567,9 +319,7 @@ export default function Header({
         </div>
       </div>
 
-      {/* ============================================================== */}
-      {/* BARRA MÓVIL / TABLET DE PESTAÑAS (Visible en pantallas < lg)   */}
-      {/* ============================================================== */}
+      {/* Barra móvil para pantallas pequeñas (< lg) */}
       {!isDoctorRole && (
         <div className="flex lg:hidden overflow-x-auto px-4 py-2 border-t border-slate-100 bg-slate-50/90 gap-1.5 scrollbar-none">
           {tabs.map((t) => {
@@ -589,6 +339,281 @@ export default function Header({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* EL "BOTÓN CAJA": CAJÓN LATERAL DE HERRAMIENTAS Y AJUSTES      */}
+      {/* ============================================================== */}
+      {boxDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => setBoxDrawerOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm sm:max-w-md bg-white h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-250 border-l border-slate-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header de la Caja */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#0048B5] text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+                  <Package size={20} />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-black text-slate-900 tracking-tight">
+                    Caja de Herramientas
+                  </h3>
+                  <p className="text-[11.5px] text-slate-500 font-medium">
+                    Panel de administración, ajustes y módulos
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBoxDrawerOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Cuerpo del Cajón */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-50/30">
+              
+              {/* Sección 1: Herramientas de Configuración */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                    Ajustes de Administración
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#0048B5] font-mono">
+                    DoctorSV Admin
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {/* Google Sheets en Vivo */}
+                  {onOpenGoogleSheetsConfig && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBoxDrawerOpen(false);
+                        onOpenGoogleSheetsConfig();
+                      }}
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white border border-slate-200/90 hover:border-emerald-300 hover:bg-emerald-50/50 text-left transition-all shadow-xs group cursor-pointer"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                        <FileSpreadsheet size={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[13px] font-extrabold text-slate-900 group-hover:text-emerald-900 truncate">
+                            Google Sheets en Vivo
+                          </span>
+                          <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                            Base de Datos
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-slate-500 truncate mt-0.5">
+                          Hoja maestra con pestañas por supervisor
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Resumen San Miguel */}
+                  {onOpenDailyLots && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBoxDrawerOpen(false);
+                        onOpenDailyLots();
+                      }}
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white border border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/50 text-left transition-all shadow-xs group cursor-pointer"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                        <LayoutGrid size={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[13px] font-extrabold text-slate-900 group-hover:text-indigo-900 truncate">
+                            Resumen San Miguel
+                          </span>
+                          <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 shrink-0">
+                            Lotes Diarios
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-slate-500 truncate mt-0.5">
+                          Distribución de cubículos por turno y supervisor
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Lotes Supervisores */}
+                  {onOpenSupervisorConfig && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBoxDrawerOpen(false);
+                        onOpenSupervisorConfig();
+                      }}
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white border border-slate-200/90 hover:border-sky-300 hover:bg-sky-50/50 text-left transition-all shadow-xs group cursor-pointer"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                        <Shield size={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[13px] font-extrabold text-slate-900 group-hover:text-sky-900 truncate">
+                            Lotes de Supervisores
+                          </span>
+                          <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 shrink-0">
+                            Cubículos
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-slate-500 truncate mt-0.5">
+                          Rangos fijos asignados por supervisor
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Configuración de Turnos */}
+                  {onOpenShiftConfig && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBoxDrawerOpen(false);
+                        onOpenShiftConfig();
+                      }}
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white border border-slate-200/90 hover:border-blue-300 hover:bg-blue-50/50 text-left transition-all shadow-xs group cursor-pointer"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 text-[#0048B5] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                        <Clock size={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[13px] font-extrabold text-slate-900 group-hover:text-blue-900 truncate">
+                            Turnos y Horarios
+                          </span>
+                          <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-[#0048B5] shrink-0">
+                            Horarios
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-slate-500 truncate mt-0.5">
+                          Configurar franjas oficiales de atención
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Reporte en Vivo */}
+                  {onOpenLiveReport && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBoxDrawerOpen(false);
+                        onOpenLiveReport();
+                      }}
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white border border-slate-200/90 hover:border-amber-300 hover:bg-amber-50/50 text-left transition-all shadow-xs group cursor-pointer"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                        <Sparkles size={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[13px] font-extrabold text-slate-900 group-hover:text-amber-900 truncate">
+                            Reporte de Asistencia
+                          </span>
+                          <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 shrink-0">
+                            En Vivo
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-slate-500 truncate mt-0.5">
+                          Estadísticas y ocupación en tiempo real
+                        </p>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Sección 2: Navegación Completa de Módulos */}
+              <div className="space-y-2.5">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 px-1">
+                  Módulos del Sistema
+                </span>
+                <div className="space-y-1">
+                  {allTabs.map((t) => {
+                    const isActive = tab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setTab(t.id);
+                          setBoxDrawerOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-blue-50 text-[#0048B5] font-extrabold border border-blue-200 shadow-2xs"
+                            : "hover:bg-slate-100/80 text-slate-700 font-semibold"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <t.icon size={16} className={isActive ? "text-[#0095FF]" : "text-slate-400"} />
+                          <span className="text-[12.5px]">{t.label}</span>
+                        </div>
+                        {isActive && <Check size={14} className="text-[#0048B5]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Sección 3: Alertas del Sistema */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                    Incidencias & Alertas
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                    {alerts?.length || 0} activas
+                  </span>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-3 space-y-2">
+                  {alerts && alerts.length > 0 ? (
+                    alerts.map((a, i) => (
+                      <div key={i} className="flex gap-2.5 p-2 rounded-xl hover:bg-slate-50 text-xs">
+                        <span className="text-base shrink-0">
+                          {a.type === "danger" ? "🚨" : a.type === "warn" ? "⚠️" : "ℹ️"}
+                        </span>
+                        <div>
+                          <p className="font-bold text-slate-800">{a.title}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{a.desc}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-3 text-center text-slate-400 italic text-[12px]">
+                      ✅ Sin incidencias activas en la sede.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer del Cajón */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between text-[11.5px] text-slate-500">
+              <span>DoctorSV © {new Date().getFullYear()}</span>
+              <span className="font-bold text-emerald-700 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Sincronización Activa
+              </span>
+            </div>
+          </div>
         </div>
       )}
     </header>
