@@ -3,6 +3,7 @@ import {
   X, Laptop, Monitor, Mouse, Headphones, Cable, History, Save, Sparkles, UserX, Droplets, Wrench, Shield, Search, UserCheck
 } from "lucide-react";
 import { ESTADOS, MARCAS, HORARIOS, DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../../constants/tokens";
+import { getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
 export default function SpaceDetailModal({
   space,
@@ -14,6 +15,8 @@ export default function SpaceDetailModal({
   onOpenSupervisorConfig = null,
   onUpdateSupervisorOfficialShift = null,
   isMaster = false,
+  currentUser = null,
+  rosters = {},
   spaces = [],
   customStaff = [],
 }) {
@@ -75,6 +78,33 @@ export default function SpaceDetailModal({
   const matchedSupervisor = supervisores?.find(
     (s) => Number(s.puesto) === Number(space.id)
   );
+
+  const isSupervisorRole = currentUser?.role === "SUPERVISOR";
+  const userSup = useMemo(() => {
+    if (!currentUser) return null;
+    return (supervisores || SUPERVISORES_OFICIALES).find(
+      (s) => s.id === currentUser.supervisorId || s.correo === currentUser.email
+    ) || null;
+  }, [currentUser, supervisores]);
+
+  const isInMySupervisorLote = useMemo(() => {
+    if (!userSup || Number(userSup.bloqueInicio) === 0) return false;
+    const sid = Number(space.id);
+    return sid >= Number(userSup.bloqueInicio) && sid <= Number(userSup.bloqueFin);
+  }, [userSup, space.id]);
+
+  const canAssignDoctor = isMaster || (isSupervisorRole && isInMySupervisorLote);
+
+  const currentDoctorSup = useMemo(() => {
+    if (!form.doctor) return null;
+    return getDoctorSupervisorInfo({
+      docName: form.doctor,
+      rosters,
+      supervisores,
+      spaces,
+      filterHorario: form.horario,
+    });
+  }, [form.doctor, form.horario, rosters, supervisores, spaces]);
 
   // Lista unificada de médicos de toda la nómina oficial (Supervisores, Planilla, Servicios Profesionales, SSM)
   const allDoctors = useMemo(() => {
@@ -385,8 +415,8 @@ export default function SpaceDetailModal({
             </div>
           </div>
 
-          {/* Tarjeta de Asignación de Médico de Nómina & Turno: EXCLUSIVA para Doctor Master */}
-          {isMaster ? (
+          {/* Tarjeta de Asignación de Médico de Nómina & Turno: Para Doctor Master o Supervisor en su Lote */}
+          {canAssignDoctor ? (
             <div
               className={`rounded-2xl p-4 border transition-all duration-200 ${
                 form.doctor
@@ -401,7 +431,13 @@ export default function SpaceDetailModal({
                   }`}
                 >
                   <Sparkles size={14} className={form.doctor ? "text-rose-600" : "text-[#0095FF]"} />
-                  <span>{form.doctor ? "Médico Asignado & Turno" : "Asignar Médico de la Nómina & Turno (Doctor Master)"}</span>
+                  <span>
+                    {form.doctor
+                      ? "Médico Asignado & Turno"
+                      : isMaster
+                      ? "Asignar Médico de la Nómina & Turno (Doctor Master)"
+                      : `Asignar Médico a Puesto de tu Lote (${userSup?.nombre?.split(" ")[0] || "Supervisor"})`}
+                  </span>
                 </p>
 
                 {form.doctor ? (
@@ -457,15 +493,26 @@ export default function SpaceDetailModal({
                           foundDoc?.horarioDefault ||
                           (horarios && horarios[0]) ||
                           "07:00 AM – 12:00 PM";
+                        const supInfo = getDoctorSupervisorInfo({
+                          docName: foundDoc ? foundDoc.nombre : docName,
+                          rosters,
+                          supervisores,
+                          spaces,
+                          filterHorario: shiftToSet,
+                        });
                         updateField({
                           doctor: foundDoc ? foundDoc.nombre : docName,
                           horario: shiftToSet,
+                          supervisorId: supInfo?.supervisorId || form.supervisorId || (userSup ? userSup.id : null),
+                          supervisorNombre: supInfo?.supervisorNombre || form.supervisorNombre || (userSup ? userSup.nombre : null),
                           estado: "OCUPADO",
                         });
                       } else {
                         updateField({
                           doctor: null,
                           horario: null,
+                          supervisorId: null,
+                          supervisorNombre: null,
                         });
                       }
                     }}
@@ -518,7 +565,17 @@ export default function SpaceDetailModal({
                 </div>
               </div>
 
-              {/* Botón directo para que el Master quite al médico de este puesto */}
+              {/* Badge visual del Supervisor a quien pertenece el médico */}
+              {form.doctor && (
+                <div className="mt-2.5 flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-blue-900 bg-blue-100/90 px-2.5 py-0.5 rounded-full border border-blue-200 flex items-center gap-1.5 shadow-2xs">
+                    <Shield size={12} className="text-[#0048B5]" />
+                    Supervisor: {currentDoctorSup?.supervisorNombre || form.supervisorNombre || "Supervisor de Turno"}
+                  </span>
+                </div>
+              )}
+
+              {/* Botón directo para quitar al médico de este puesto */}
               {form.doctor && (
                 <div className="mt-3 pt-2.5 border-t border-rose-200/80 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[11px] text-rose-800 font-medium truncate max-w-full">
@@ -530,11 +587,13 @@ export default function SpaceDetailModal({
                       updateField({
                         doctor: null,
                         horario: null,
+                        supervisorId: null,
+                        supervisorNombre: null,
                         estado: "DISPONIBLE",
                         marca: (form.marca && form.marca !== "NO PC") ? form.marca : "DELL",
                         modelo: form.modelo || "OptiPlex 3080",
                         categoria: Number(form.id) === 1 ? null : form.categoria,
-                        observaciones: form.observaciones ? `${form.observaciones} | Puesto desocupado por Doctor Master` : "Turno liberado",
+                        observaciones: form.observaciones ? `${form.observaciones} | Puesto liberado` : "Turno liberado",
                       });
                     }}
                     className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-bold text-rose-700 bg-white hover:bg-rose-100 border border-rose-300 shadow-2xs active:scale-95 transition-all cursor-pointer ml-auto"
@@ -546,7 +605,7 @@ export default function SpaceDetailModal({
               )}
             </div>
           ) : form.doctor ? (
-            /* Si NO es Master pero el puesto está ocupado: tarjeta informativa de solo lectura para el supervisor */
+            /* Si NO tiene permisos pero el puesto está ocupado: tarjeta informativa con supervisor */
             <div className="rounded-2xl p-3.5 border border-rose-200 bg-rose-50/60 shadow-2xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-rose-900 font-bold text-[12px]">
@@ -562,9 +621,13 @@ export default function SpaceDetailModal({
                 <div>
                   <p className="font-bold text-slate-900 text-[13px]">{form.doctor}</p>
                   <p className="text-[11.5px] text-slate-500 font-medium">Turno: {form.horario || "Turno Oficial"}</p>
+                  <p className="text-[11.5px] text-blue-700 font-semibold mt-1 flex items-center gap-1">
+                    <Shield size={12} className="text-[#0048B5]" />
+                    Supervisor: {currentDoctorSup?.supervisorNombre || form.supervisorNombre || "Supervisor de Turno"}
+                  </p>
                 </div>
                 <span className="text-[10.5px] text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-lg">
-                  Gestión exclusiva Doctor Master
+                  {isSupervisorRole ? "Puesto fuera de tu lote" : "Gestión Doctor Master"}
                 </span>
               </div>
             </div>

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
 import { ESTADOS, MARCAS, HORARIOS, SUPERVISORES_OFICIALES, BODEGA_TIPOS } from "../../constants/tokens";
-import { isSameDoctor, isSameHorario } from "../../utils/safeHelpers";
+import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
 export default function SpaceMap({
   spaces,
@@ -63,8 +63,41 @@ export default function SpaceMap({
       if (filterSupervisor === "TODOS") return true;
       const targetSup = (supervisores || SUPERVISORES_OFICIALES).find((s) => s.id === filterSupervisor);
       if (!targetSup) return true;
-      if (Number(targetSup.bloqueInicio) === 0 && Number(targetSup.bloqueFin) === 0) return false;
+
+      // 1. Si el cubículo está ocupado por un médico, verificar si el médico pertenece a la base de este supervisor
+      if (space.doctor) {
+        if (space.supervisorId) {
+          return space.supervisorId === targetSup.id;
+        }
+        // Revisar nómina directa en rosters
+        if (rosterBySupervisor) {
+          if (Array.isArray(rosterBySupervisor[targetSup.id]) && rosterBySupervisor[targetSup.id].some((n) => isSameDoctor(n, space.doctor))) {
+            return true;
+          }
+          const hasInFranja = Object.entries(rosterBySupervisor).some(([k, list]) =>
+            k.startsWith(targetSup.id) && Array.isArray(list) && list.some((n) => isSameDoctor(n, space.doctor))
+          );
+          if (hasInFranja) return true;
+        }
+        // Resolución canónica de pertenencia de supervisor
+        const docSup = getDoctorSupervisorInfo({
+          docName: space.doctor,
+          rosters: rosterBySupervisor,
+          supervisores,
+          spaces,
+        });
+        if (docSup?.supervisorId) {
+          return docSup.supervisorId === targetSup.id;
+        }
+        // Si el médico pertenece comprobadamente a otro supervisor, no incluirlo
+        return false;
+      }
+
+      // 2. Si el espacio tiene supervisorId explícito asignado
       if (space.supervisorId) return space.supervisorId === targetSup.id;
+
+      // 3. Si el cubículo está disponible / sin médico, verificar si pertenece al lote físico del supervisor
+      if (Number(targetSup.bloqueInicio) === 0 && Number(targetSup.bloqueFin) === 0) return false;
       const sid = Number(space.id);
       return sid >= Number(targetSup.bloqueInicio) && sid <= Number(targetSup.bloqueFin);
     })();

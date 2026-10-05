@@ -62,7 +62,7 @@ export default function ExactCubicle({ space, onClick }) {
   }
 
   const tooltipText = isOcupado
-    ? `Puesto #${space.id} · Ocupado por Dr(a). ${space.doctor} (${space.horario || 'Turno activo'}) · PC: ${space.marca || 'DELL'}`
+    ? `Puesto #${space.id} · Ocupado por Dr(a). ${space.doctor} (${space.horario || 'Turno activo'})${space.supervisorNombre ? ` · Sup: ${space.supervisorNombre}` : ''} · PC: ${space.marca || 'DELL'}`
     : isSupervisor
     ? `Puesto de Supervisión #${space.id} (${space.marca || 'PC'})`
     : `Puesto #${space.id} · ${space.estado} · ${space.marca || 'DELL'}`;

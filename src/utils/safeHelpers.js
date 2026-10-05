@@ -110,11 +110,15 @@ export function isSameHorario(h1, h2) {
   return norm1 === norm2;
 }
 
+import { DOCTORES_EXCEL, SUPERVISORES_OFICIALES, getSPBlocks } from "../constants/tokens";
+
 /**
- * Determina a qué supervisor pertenece un médico según:
- * 1. Puesto físico donde está sentado (espacios)
- * 2. Nómina guardada por franja (`${supId}__${franja}`)
- * 3. Nómina general del supervisor (`${supId}`)
+ * Determina con máxima precisión a qué supervisor pertenece un médico según:
+ * 1. Puesto físico con supervisorId explícito
+ * 2. Nómina personalizada guardada por franja o general (rosters en Firestore/localStorage)
+ * 3. Puesto físico asignado dentro del lote del supervisor
+ * 4. Bloques oficiales de Servicios Profesionales (SP Emerson, SP Salvador, SP Alfredo, SP Reserva)
+ * 5. Grupos de nómina oficial (Grupo 1 -> Emerson, Grupo 2 -> Salvador, Grupo 3 -> Alfredo, General -> Roxana)
  */
 export function getDoctorSupervisorInfo({
   docName,
@@ -124,22 +128,15 @@ export function getDoctorSupervisorInfo({
   filterHorario = null,
 }) {
   if (!docName) return null;
+  const supsList = (supervisores && supervisores.length > 0) ? supervisores : SUPERVISORES_OFICIALES;
 
   // 1. Revisar si el médico tiene un puesto físico asignado
   const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, docName));
-  if (seatedSpace) {
-    let sup = null;
-    if (seatedSpace.supervisorId) {
-      sup = (supervisores || []).find((s) => s.id === seatedSpace.supervisorId);
-    }
-    if (!sup) {
-      sup = (supervisores || []).find(
-        (s) => Number(seatedSpace.id) >= Number(s.bloqueInicio) && Number(seatedSpace.id) <= Number(s.bloqueFin)
-      );
-    }
+  if (seatedSpace && seatedSpace.supervisorId) {
+    const sup = supsList.find((s) => s.id === seatedSpace.supervisorId);
     return {
       supervisor: sup || null,
-      supervisorId: sup?.id || seatedSpace.supervisorId || null,
+      supervisorId: seatedSpace.supervisorId,
       supervisorNombre: sup?.nombre || seatedSpace.supervisorNombre || "Supervisor de Turno",
       spaceId: Number(seatedSpace.id),
       horario: seatedSpace.horario || null,
@@ -147,41 +144,177 @@ export function getDoctorSupervisorInfo({
     };
   }
 
-  // 2. Revisar nómina por franja horaria específica si aplica
-  if (filterHorario && filterHorario !== "TODOS" && rosters) {
-    for (const sup of (supervisores || [])) {
-      const franjaKey = `${sup.id}__${filterHorario}`;
-      const list = rosters[franjaKey];
-      if (Array.isArray(list) && list.some((n) => isSameDoctor(n, docName))) {
-        return {
-          supervisor: sup,
-          supervisorId: sup.id,
-          supervisorNombre: sup.nombre,
-          spaceId: null,
-          horario: filterHorario,
-          isSeated: false,
-        };
+  // 2. Revisar nóminas personalizadas guardadas (rosters en Firestore / memoria)
+  if (rosters && typeof rosters === "object") {
+    // 2a. Por franja horaria específica si se especificó
+    if (filterHorario && filterHorario !== "TODOS") {
+      for (const sup of supsList) {
+        const franjaKey = `${sup.id}__${filterHorario}`;
+        const list = rosters[franjaKey];
+        if (Array.isArray(list) && list.some((n) => isSameDoctor(n, docName))) {
+          return {
+            supervisor: sup,
+            supervisorId: sup.id,
+            supervisorNombre: sup.nombre,
+            spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+            horario: filterHorario,
+            isSeated: Boolean(seatedSpace),
+          };
+        }
       }
     }
-  }
 
-  // 3. Revisar nómina general por ID de supervisor
-  if (rosters) {
-    for (const sup of (supervisores || [])) {
+    // 2b. Nómina general directa por ID de supervisor
+    for (const sup of supsList) {
       const list = rosters[sup.id];
       if (Array.isArray(list) && list.some((n) => isSameDoctor(n, docName))) {
         return {
           supervisor: sup,
           supervisorId: sup.id,
           supervisorNombre: sup.nombre,
-          spaceId: null,
+          spaceId: seatedSpace ? Number(seatedSpace.id) : null,
           horario: sup.activeFranja || sup.horario,
-          isSeated: false,
+          isSeated: Boolean(seatedSpace),
         };
       }
+    }
+
+    // 2c. Búsqueda en cualquier franja guardada de los supervisores
+    for (const [key, list] of Object.entries(rosters)) {
+      if (Array.isArray(list) && list.some((n) => isSameDoctor(n, docName))) {
+        const supId = key.split("__")[0];
+        const sup = supsList.find((s) => s.id === supId);
+        if (sup) {
+          return {
+            supervisor: sup,
+            supervisorId: sup.id,
+            supervisorNombre: sup.nombre,
+            spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+            horario: key.includes("__") ? key.split("__")[1] : (sup.activeFranja || sup.horario),
+            isSeated: Boolean(seatedSpace),
+          };
+        }
+      }
+    }
+  }
+
+  // 3. Si está sentado físicamente en un puesto del lote de un supervisor
+  if (seatedSpace) {
+    const sid = Number(seatedSpace.id);
+    const supByLote = supsList.find(
+      (s) => Number(s.bloqueInicio) > 0 && sid >= Number(s.bloqueInicio) && sid <= Number(s.bloqueFin)
+    );
+    if (supByLote) {
+      return {
+        supervisor: supByLote,
+        supervisorId: supByLote.id,
+        supervisorNombre: supByLote.nombre,
+        spaceId: sid,
+        horario: seatedSpace.horario || supByLote.horario,
+        isSeated: true,
+      };
+    }
+  }
+
+  // 4. Fallback oficial: Bloques de Servicios Profesionales (SP)
+  try {
+    const spBlocks = getSPBlocks(DOCTORES_EXCEL);
+    if (spBlocks["sup-1"]?.doctorNamesSet.has(docName)) {
+      const sup = supsList.find((s) => s.id === "sup-1");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-1",
+        supervisorNombre: sup?.nombre || "EMERSON JOSUE VIGIL HERNANDEZ",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "02:00 PM – 10:00 PM",
+        isSeated: Boolean(seatedSpace),
+      };
+    }
+    if (spBlocks["sup-2"]?.doctorNamesSet.has(docName)) {
+      const sup = supsList.find((s) => s.id === "sup-2");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-2",
+        supervisorNombre: sup?.nombre || "SALVADOR RENDEROS BONILLA",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "04:00 PM – 10:00 PM",
+        isSeated: Boolean(seatedSpace),
+      };
+    }
+    if (spBlocks["sup-3"]?.doctorNamesSet.has(docName)) {
+      const sup = supsList.find((s) => s.id === "sup-3");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-3",
+        supervisorNombre: sup?.nombre || "ALFREDO ISAAC MARTINEZ AMAYA",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "06:00 PM – 10:00 PM",
+        isSeated: Boolean(seatedSpace),
+      };
+    }
+    if (spBlocks["reserva"]?.doctorNamesSet.has(docName)) {
+      const sup = supsList.find((s) => s.id === "sup-5");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-5",
+        supervisorNombre: sup?.nombre || "EDWARD JOSUE ZELAYA PRUDENCIO",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "02:00 PM – 10:00 PM",
+        isSeated: Boolean(seatedSpace),
+      };
+    }
+  } catch {}
+
+  // 5. Fallback oficial: Grupos clínicos de DOCTORES_EXCEL
+  const docObj = (DOCTORES_EXCEL || []).find((d) => isSameDoctor(d.nombre, docName));
+  if (docObj?.grupo) {
+    if (docObj.grupo === "Grupo 1") {
+      const sup = supsList.find((s) => s.id === "sup-1");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-1",
+        supervisorNombre: sup?.nombre || "EMERSON JOSUE VIGIL HERNANDEZ",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "06:00 AM – 02:00 PM",
+        isSeated: Boolean(seatedSpace),
+      };
+    }
+    if (docObj.grupo === "Grupo 2") {
+      const sup = supsList.find((s) => s.id === "sup-2");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-2",
+        supervisorNombre: sup?.nombre || "SALVADOR RENDEROS BONILLA",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "02:00 PM – 10:00 PM",
+        isSeated: Boolean(seatedSpace),
+      };
+    }
+    if (docObj.grupo === "Grupo 3") {
+      const sup = supsList.find((s) => s.id === "sup-3");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-3",
+        supervisorNombre: sup?.nombre || "ALFREDO ISAAC MARTINEZ AMAYA",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "08:00 AM – 12:00 MD",
+        isSeated: Boolean(seatedSpace),
+      };
+    }
+    if (docObj.grupo === "Grupo General") {
+      const sup = supsList.find((s) => s.id === "sup-4");
+      return {
+        supervisor: sup || null,
+        supervisorId: "sup-4",
+        supervisorNombre: sup?.nombre || "ROXANA GUADALUPE CANALES RODRIGUEZ",
+        spaceId: seatedSpace ? Number(seatedSpace.id) : null,
+        horario: "07:00 AM – 12:00 PM",
+        isSeated: Boolean(seatedSpace),
+      };
     }
   }
 
   return null;
 }
+
 

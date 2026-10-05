@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
-import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES } from "../../constants/tokens";
+import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES, getDefaultSupervisorRosters } from "../../constants/tokens";
 import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
 import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
@@ -274,11 +274,17 @@ export default function AttendanceView({
       return docsInMyLote;
     }
 
-    // 6. Pre-carga oficial solo si coincide con el turno oficial de dicho supervisor
-    if (currentSupervisor.id === "sup-1" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "06:00 AM - 02:00 PM"))) {
-      return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 1").slice(0, currentSupervisor.totalPuestos || 40).map((d) => d.nombre);
-    } else if (currentSupervisor.id === "sup-2" && (!filterHorario || filterHorario === "TODOS" || isSameHorario(filterHorario, "02:00 PM - 10:00 PM"))) {
-      return DOCTORES_EXCEL.filter((d) => d.grupo === "Grupo 2").slice(0, currentSupervisor.totalPuestos || 34).map((d) => d.nombre);
+    // 6. Base oficial predeterminada de doctores para este supervisor y franja
+    const defaultRosters = getDefaultSupervisorRosters(DOCTORES_EXCEL);
+    if (filterHorario && filterHorario !== "TODOS") {
+      const franjaDefault = defaultRosters[`${currentSupervisor.id}__${filterHorario}`];
+      if (Array.isArray(franjaDefault) && franjaDefault.length > 0) {
+        return franjaDefault;
+      }
+    }
+    const supDefault = defaultRosters[currentSupervisor.id];
+    if (Array.isArray(supDefault) && supDefault.length > 0) {
+      return supDefault;
     }
     return [];
   }, [activeRosters, currentSupervisor, filterHorario, supervisorSpaces, quincena, selectedDate, currentSupervisorFranjas]);

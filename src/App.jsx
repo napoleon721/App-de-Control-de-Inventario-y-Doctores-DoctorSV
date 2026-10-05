@@ -23,7 +23,7 @@ const GoogleSheetsConfigModal = lazy(() => import("./components/config/GoogleShe
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces,
-  SUPERVISORES_OFICIALES, DOCTORES_EXCEL, ensureAllSpaces
+  SUPERVISORES_OFICIALES, DOCTORES_EXCEL, ensureAllSpaces, getDefaultSupervisorRosters
 } from "./constants/tokens";
 
 import {
@@ -57,7 +57,7 @@ import {
   isGoogleSheetsConfigured,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario } from "./utils/safeHelpers";
+import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, getDoctorSupervisorInfo } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -198,10 +198,17 @@ export default function App() {
   // 4. Nóminas de médicos asignadas a cada supervisor (sincronizadas en tiempo real con Firestore)
   const [rosters, setRosters] = useState(() => {
     try {
+      const defaults = getDefaultSupervisorRosters(DOCTORES_EXCEL);
       const saved = localStorage.getItem("DOCTORSV_SUPERVISOR_ROSTERS_V2");
-      return saved ? JSON.parse(saved) : {};
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+          return { ...defaults, ...parsed };
+        }
+      }
+      return defaults;
     } catch {
-      return {};
+      return getDefaultSupervisorRosters(DOCTORES_EXCEL);
     }
   });
 
@@ -656,9 +663,11 @@ export default function App() {
     const unsubRosters = subscribeToCloudRosters((cloudRosters) => {
       if (cloudRosters && typeof cloudRosters === "object" && Object.keys(cloudRosters).length > 0) {
         setRosters((prev) => {
-          if (JSON.stringify(prev) === JSON.stringify(cloudRosters)) return prev;
+          const defaults = getDefaultSupervisorRosters(DOCTORES_EXCEL);
+          const merged = { ...defaults, ...cloudRosters };
+          if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
           isRemoteRostersRef.current = true;
-          return cloudRosters;
+          return merged;
         });
       }
     }, null, myClientId.current);
@@ -823,9 +832,11 @@ export default function App() {
             });
           } else if (type === "ROSTERS_UPDATED" && payload) {
             setRosters((prev) => {
-              if (JSON.stringify(prev) === JSON.stringify(payload)) return prev;
+              const defaults = getDefaultSupervisorRosters(DOCTORES_EXCEL);
+              const merged = { ...defaults, ...payload };
+              if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
               isRemoteRostersRef.current = true;
-              return payload;
+              return merged;
             });
           } else if (type === "HORARIOS_UPDATED" && payload) {
             setHorarios((prev) => {
@@ -957,15 +968,41 @@ export default function App() {
     const hasHeadset = Boolean(updatedSpace.headset);
     const hasHub = Boolean(updatedSpace.hub);
 
-    // 3. Determinar estado automático del cubículo
+    // 3. Determinar estado automático del cubículo y resolución del supervisor del médico
     let finalEstado = updatedSpace.estado;
+    let assignedSupId = updatedSpace.supervisorId || null;
+    let assignedSupNombre = updatedSpace.supervisorNombre || null;
+
     if (updatedSpace.doctor) {
       finalEstado = "OCUPADO";
+      const supInfo = getDoctorSupervisorInfo({
+        docName: updatedSpace.doctor,
+        rosters,
+        supervisores,
+        spaces,
+        filterHorario: updatedSpace.horario,
+      });
+      if (supInfo?.supervisorId) {
+        assignedSupId = supInfo.supervisorId;
+        assignedSupNombre = supInfo.supervisorNombre;
+      } else if (!assignedSupId) {
+        const matchSup = (supervisores || SUPERVISORES_OFICIALES).find(
+          (s) => cleanId >= Number(s.bloqueInicio) && cleanId <= Number(s.bloqueFin)
+        );
+        if (matchSup) {
+          assignedSupId = matchSup.id;
+          assignedSupNombre = matchSup.nombre;
+        }
+      }
     } else if (
       finalEstado !== "INHABILITADO" &&
       finalEstado !== "REPARACION" &&
       finalEstado !== "RESERVADO"
     ) {
+      if (![135, 136, 137, 138, 139].includes(cleanId)) {
+        assignedSupId = null;
+        assignedSupNombre = null;
+      }
       if (!hasPc) {
         finalEstado = "VACIO";
       } else if (!hasMouse || !hasHeadset || !hasMonitor) {
@@ -981,6 +1018,8 @@ export default function App() {
     const normalized = {
       ...updatedSpace,
       estado: finalEstado,
+      supervisorId: assignedSupId,
+      supervisorNombre: assignedSupNombre,
       categoria: cleanId === 1 ? null : updatedSpace.categoria,
       marca: !hasPc ? "NO PC" : (updatedSpace.marca || "DELL"),
       modelo: !hasPc ? null : (updatedSpace.modelo || "OptiPlex 3080"),
@@ -1231,6 +1270,11 @@ export default function App() {
         ...prev,
         [String(normalized.doctor).trim()]: "PRESENTE",
       }));
+    } else if (prevSpace.doctor) {
+      setAttendanceRecords((prev) => ({
+        ...prev,
+        [String(prevSpace.doctor).trim()]: "FINALIZADO",
+      }));
     }
 
     if (isGoogleSheetsConfigured()) {
@@ -1254,6 +1298,27 @@ export default function App() {
     const assignedHorario = horario || "07:00 AM – 12:00 PM";
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
+    // Determinar automáticamente el supervisor de este médico
+    const supInfo = getDoctorSupervisorInfo({
+      docName: cleanDoc,
+      rosters,
+      supervisores,
+      spaces,
+      filterHorario: assignedHorario,
+    });
+    let assignedSupId = supInfo?.supervisorId || null;
+    let assignedSupNombre = supInfo?.supervisorNombre || null;
+
+    if (!assignedSupId) {
+      const matchSup = (supervisores || SUPERVISORES_OFICIALES).find(
+        (s) => cleanSpaceId >= Number(s.bloqueInicio) && cleanSpaceId <= Number(s.bloqueFin)
+      );
+      if (matchSup) {
+        assignedSupId = matchSup.id;
+        assignedSupNombre = matchSup.nombre;
+      }
+    }
+
     let previousSpaceId = null;
     const nextSpaces = spaces.map((s) => {
       // Liberar puesto anterior si el médico estaba asignado en otro cubículo
@@ -1264,6 +1329,8 @@ export default function App() {
           ...s,
           doctor: null,
           horario: null,
+          supervisorId: null,
+          supervisorNombre: null,
           categoria: Number(s.id) === 1 ? null : s.categoria,
           estado: "DISPONIBLE",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
@@ -1277,6 +1344,8 @@ export default function App() {
           ...s,
           doctor: cleanDoc,
           horario: assignedHorario,
+          supervisorId: assignedSupId,
+          supervisorNombre: assignedSupNombre,
           estado: "OCUPADO",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
           modelo: s.modelo || "OptiPlex 3080",
@@ -1349,10 +1418,13 @@ export default function App() {
         if (!unassignedSpaceId) unassignedSpaceId = Number(s.id);
         recentlyReleasedRef.current.set(Number(s.id), Date.now());
         const isSpecial = s.estado === "INHABILITADO" || s.estado === "REPARACION";
+        const isSupStation = [135, 136, 137, 138, 139].includes(Number(s.id));
         return {
           ...s,
           doctor: null,
           horario: null,
+          supervisorId: isSupStation ? s.supervisorId : null,
+          supervisorNombre: isSupStation ? s.supervisorNombre : null,
           categoria: Number(s.id) === 1 ? null : s.categoria,
           estado: isSpecial ? s.estado : "DISPONIBLE",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
@@ -1421,10 +1493,31 @@ export default function App() {
       const sid = Number(s.id);
       if (assignBySpaceId.has(sid)) {
         const docName = assignBySpaceId.get(sid);
+        const supInfo = getDoctorSupervisorInfo({
+          docName,
+          rosters,
+          supervisores,
+          spaces,
+          filterHorario: assignedHorario,
+        });
+        let supId = supInfo?.supervisorId || null;
+        let supNombre = supInfo?.supervisorNombre || null;
+        if (!supId) {
+          const matchSup = (supervisores || SUPERVISORES_OFICIALES).find(
+            (sp) => sid >= Number(sp.bloqueInicio) && sid <= Number(sp.bloqueFin)
+          );
+          if (matchSup) {
+            supId = matchSup.id;
+            supNombre = matchSup.nombre;
+          }
+        }
+
         return {
           ...s,
           doctor: docName,
           horario: assignedHorario,
+          supervisorId: supId,
+          supervisorNombre: supNombre,
           estado: "OCUPADO",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
           modelo: s.modelo || "OptiPlex 3080",
@@ -1438,6 +1531,8 @@ export default function App() {
           ...s,
           doctor: null,
           horario: null,
+          supervisorId: null,
+          supervisorNombre: null,
           categoria: sid === 1 ? null : s.categoria,
           estado: "DISPONIBLE",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
@@ -1505,6 +1600,9 @@ export default function App() {
   // Guardar nómina personalizada de un supervisor y sincronizarla en la nube
   function handleSaveSupervisorRoster(supId, newNames, franja = null, transferredDocs = []) {
     if (!supId) return;
+    const targetSup = (supervisores || SUPERVISORES_OFICIALES).find((s) => s.id === supId);
+    const supNombre = targetSup?.nombre || "Supervisor";
+
     setRosters((prev) => {
       const next = {
         ...prev,
@@ -1527,6 +1625,40 @@ export default function App() {
       }
       return next;
     });
+
+    // Sincronizar inmediatamente los puestos físicos que tengan a estos médicos sentados
+    // para que en el mapa de espacios se refleje el supervisor correcto
+    let spacesChanged = false;
+    const newNamesSet = new Set(newNames);
+    const transferredSet = new Set(transferredDocs || []);
+
+    const nextSpaces = spaces.map((s) => {
+      if (!s.doctor) return s;
+      const isDoctorInThisRoster = newNamesSet.has(s.doctor) || newNames.some((n) => isSameDoctor(n, s.doctor));
+      const isTransferredDoctor = transferredSet.has(s.doctor) || (transferredDocs || []).some((td) => isSameDoctor(td, s.doctor));
+
+      if ((isDoctorInThisRoster || isTransferredDoctor) && s.supervisorId !== supId) {
+        spacesChanged = true;
+        return {
+          ...s,
+          supervisorId: supId,
+          supervisorNombre: supNombre,
+        };
+      }
+      return s;
+    });
+
+    if (spacesChanged) {
+      setSpaces(nextSpaces);
+      saveCloudSpaces(nextSpaces, myClientId.current, true);
+      if (typeof BroadcastChannel !== "undefined") {
+        try {
+          const bc = new BroadcastChannel("doctorsv_sync_channel");
+          bc.postMessage({ type: "SPACES_UPDATED", payload: nextSpaces, sender: myClientId.current });
+          bc.close();
+        } catch {}
+      }
+    }
   }
 
   // Flujo exclusivo de Doctor: Asignación interactiva al hacer clic en un puesto del mapa
@@ -2567,6 +2699,8 @@ export default function App() {
           onOpenSupervisorConfig={() => setSupervisorConfigOpen(true)}
           onUpdateSupervisorOfficialShift={handleUpdateSupervisorOfficialShift}
           isMaster={currentUser?.role === "MASTER"}
+          currentUser={currentUser}
+          rosters={rosters}
           spaces={spaces}
           customStaff={customStaff}
         />

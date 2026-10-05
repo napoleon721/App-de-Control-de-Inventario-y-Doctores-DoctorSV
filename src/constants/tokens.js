@@ -316,3 +316,46 @@ export function getSPBlocks(doctorsList = DOCTORES_EXCEL) {
     },
   };
 }
+
+/**
+ * Nómina oficial predeterminada de médicos por cada uno de los 5 supervisores oficiales.
+ * Mapea tanto la nómina general de cada supervisor como sus franjas horarias específicas:
+ * - sup-1 (Emerson): Mañana (Grupo 1 · 19 médicos) / Tarde (SP Bloque 1 · 40 médicos)
+ * - sup-2 (Salvador): Tarde (Grupo 2 · 19 médicos) / Noche (SP Bloque 2 · 34 médicos)
+ * - sup-3 (Alfredo): Mañana (Grupo 3 · 22 médicos) / Noche (SP Bloque 3 · 36 médicos)
+ * - sup-4 (Roxana): Mañana (Grupo General · 11 médicos)
+ * - sup-5 (Edward): Turno Tarde/Noche (SP Bloque Reserva · 26 médicos)
+ */
+export function getDefaultSupervisorRosters(doctorsList = DOCTORES_EXCEL) {
+  const spBlocks = getSPBlocks(doctorsList);
+  const g1Names = (doctorsList || []).filter((d) => d.grupo === "Grupo 1").map((d) => d.nombre);
+  const g2Names = (doctorsList || []).filter((d) => d.grupo === "Grupo 2").map((d) => d.nombre);
+  const g3Names = (doctorsList || []).filter((d) => d.grupo === "Grupo 3").map((d) => d.nombre);
+  const ggNames = (doctorsList || []).filter((d) => d.grupo === "Grupo General").map((d) => d.nombre);
+
+  const sp1Names = spBlocks["sup-1"]?.doctorNames || [];
+  const sp2Names = spBlocks["sup-2"]?.doctorNames || [];
+  const sp3Names = spBlocks["sup-3"]?.doctorNames || [];
+  const spReservaNames = spBlocks["reserva"]?.doctorNames || [];
+
+  const sup1Combined = Array.from(new Set([...sp1Names, ...g1Names]));
+  const sup2Combined = Array.from(new Set([...sp2Names, ...g2Names]));
+  const sup3Combined = Array.from(new Set([...sp3Names, ...g3Names]));
+
+  return {
+    "sup-1": sp1Names.length > 0 ? sp1Names : sup1Combined,
+    "sup-1__06:00 AM – 02:00 PM": g1Names,
+    "sup-1__02:00 PM – 10:00 PM": sp1Names,
+    "sup-2": sp2Names.length > 0 ? sp2Names : sup2Combined,
+    "sup-2__02:00 PM – 10:00 PM": g2Names,
+    "sup-2__04:00 PM – 10:00 PM": sp2Names,
+    "sup-3": sp3Names.length > 0 ? sp3Names : sup3Combined,
+    "sup-3__08:00 AM – 12:00 MD": g3Names,
+    "sup-3__06:00 PM – 10:00 PM": sp3Names,
+    "sup-4": ggNames,
+    "sup-4__07:00 AM – 12:00 PM": ggNames,
+    "sup-5": spReservaNames,
+    "sup-5__02:00 PM – 10:00 PM": spReservaNames,
+  };
+}
+
