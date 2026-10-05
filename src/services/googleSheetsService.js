@@ -6,28 +6,67 @@
 import { parseQuincenaSpreadsheet } from "../utils/quincenaParser.js";
 import { DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../constants/tokens.js";
 
-// Hojas oficiales individuales de cada supervisor para Servicios Profesionales
-export const DEFAULT_SUPERVISOR_SHEETS = {
+// Enlace Maestro Oficial de Google Sheets (1 solo documento con una pestaña por supervisor)
+export const DEFAULT_MASTER_QUINCENA_URL =
+  "https://docs.google.com/spreadsheets/d/1kGcU-HtaVW6xjXrCRD6tjJMYNWWhuiPehKW-Hokdl5E/edit?usp=sharing";
+export const DEFAULT_MASTER_QUINCENA_SHEET_ID = "1kGcU-HtaVW6xjXrCRD6tjJMYNWWhuiPehKW-Hokdl5E";
+
+// Mapeo oficial de supervisores con su pestaña correspondiente en la hoja maestra
+export const DEFAULT_SUPERVISOR_TABS = {
   "sup-1": {
     id: "sup-1",
     nombre: "EMERSON JOSUE VIGIL HERNANDEZ",
     token: "000EV3",
-    sheetId: "1WuN2xtSLvb3Fof7OSvvTVDFP9FMpJuvcII8A25cgZBQ",
-    url: "https://docs.google.com/spreadsheets/d/1WuN2xtSLvb3Fof7OSvvTVDFP9FMpJuvcII8A25cgZBQ/edit?usp=sharing",
-  },
-  "sup-3": {
-    id: "sup-3",
-    nombre: "ALFREDO ISAAC MARTINEZ AMAYA",
-    token: "000AMB",
-    sheetId: "1EiJYr1Byvlz1gXJdLhhqHHqkJTjcWi-_27kGNSsI_kA",
-    url: "https://docs.google.com/spreadsheets/d/1EiJYr1Byvlz1gXJdLhhqHHqkJTjcWi-_27kGNSsI_kA/edit?usp=sharing",
+    tabName: "Emerson Vigil",
+    tabAliases: ["Emerson Vigil", "Emerson", "000EV3"],
+    puestosRange: "37 al 70",
   },
   "sup-2": {
     id: "sup-2",
     nombre: "SALVADOR RENDEROS BONILLA",
     token: "000SR0",
-    sheetId: "1epJWEXl0sGWhdyx3IvDAqzOgrZZoxkUxCWkU9Srx4Ok",
-    url: "https://docs.google.com/spreadsheets/d/1epJWEXl0sGWhdyx3IvDAqzOgrZZoxkUxCWkU9Srx4Ok/edit?usp=sharing",
+    tabName: "Salvador Renderos",
+    tabAliases: ["Salvador Renderos", "Salvador", "000SR0"],
+    puestosRange: "71 al 104",
+  },
+  "sup-3": {
+    id: "sup-3",
+    nombre: "ALFREDO ISAAC MARTINEZ AMAYA",
+    token: "000AMB",
+    tabName: "Alfredo Martínez",
+    tabAliases: ["Alfredo Martínez", "Alfredo Martinez", "Alfredo", "000AMB"],
+    puestosRange: "1 al 36",
+  },
+};
+
+// Hojas oficiales de cada supervisor para compatibilidad y fallback
+export const DEFAULT_SUPERVISOR_SHEETS = {
+  "sup-1": {
+    id: "sup-1",
+    nombre: "EMERSON JOSUE VIGIL HERNANDEZ",
+    token: "000EV3",
+    sheetId: DEFAULT_MASTER_QUINCENA_SHEET_ID,
+    url: DEFAULT_MASTER_QUINCENA_URL,
+    tabName: "Emerson Vigil",
+    puestosRange: "37 al 70",
+  },
+  "sup-2": {
+    id: "sup-2",
+    nombre: "SALVADOR RENDEROS BONILLA",
+    token: "000SR0",
+    sheetId: DEFAULT_MASTER_QUINCENA_SHEET_ID,
+    url: DEFAULT_MASTER_QUINCENA_URL,
+    tabName: "Salvador Renderos",
+    puestosRange: "71 al 104",
+  },
+  "sup-3": {
+    id: "sup-3",
+    nombre: "ALFREDO ISAAC MARTINEZ AMAYA",
+    token: "000AMB",
+    sheetId: DEFAULT_MASTER_QUINCENA_SHEET_ID,
+    url: DEFAULT_MASTER_QUINCENA_URL,
+    tabName: "Alfredo Martínez",
+    puestosRange: "1 al 36",
   },
 };
 
@@ -40,6 +79,31 @@ const DEFAULT_APPS_SCRIPT_URL =
 const STORAGE_KEY_SHEETS_URL = "DOCTORSV_GOOGLE_SHEETS_URL";
 const STORAGE_KEY_SHEET_IDS = "DOCTORSV_GOOGLE_SHEET_IDS";
 const STORAGE_KEY_SUPERVISOR_SHEETS = "DOCTORSV_SUPERVISOR_SHEETS_CONFIG";
+export const STORAGE_KEY_MASTER_QUINCENA_URL = "DOCTORSV_MASTER_QUINCENA_URL";
+
+/**
+ * Obtiene la URL activa de la Google Sheet Maestra de la Quincena
+ */
+export function getMasterQuincenaUrl() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_MASTER_QUINCENA_URL);
+    if (saved && saved.trim()) return saved.trim();
+  } catch {}
+  return DEFAULT_MASTER_QUINCENA_URL;
+}
+
+/**
+ * Guarda o actualiza la URL de la Google Sheet Maestra
+ */
+export function setMasterQuincenaUrl(url) {
+  try {
+    if (url && url.trim()) {
+      localStorage.setItem(STORAGE_KEY_MASTER_QUINCENA_URL, url.trim());
+    } else {
+      localStorage.removeItem(STORAGE_KEY_MASTER_QUINCENA_URL);
+    }
+  } catch {}
+}
 
 /**
  * Obtiene la URL activa del Webhook de Google Apps Script
@@ -415,41 +479,109 @@ export function updateSupervisorSheetUrl(supId, newUrlOrId) {
 }
 
 /**
- * Descarga el contenido CSV en vivo de una Google Sheet usando la API pública de visualización
+ * Descarga el contenido CSV en vivo de una Google Sheet usando la API pública de visualización.
+ * Si se especifica tabName, descarga esa pestaña específica del libro.
  */
-export async function fetchSupervisorSheetCsv(sheetIdOrUrl) {
+export async function fetchSupervisorSheetCsv(sheetIdOrUrl, tabName = null) {
   const sheetId = extractGoogleSheetId(sheetIdOrUrl);
   if (!sheetId) throw new Error("ID o enlace de Google Sheet no válido.");
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&_t=${Date.now()}`;
+  let url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&_t=${Date.now()}`;
+  if (tabName && typeof tabName === "string" && tabName.trim()) {
+    url += `&sheet=${encodeURIComponent(tabName.trim())}`;
+  }
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Error HTTP ${res.status} al descargar datos de Google Sheets.`);
   return await res.text();
 }
 
 /**
- * Sincroniza todas las hojas de Google Sheets de los supervisores y las fusiona en una Quincena unificada
+ * Sincroniza la nómina desde el Google Sheet Maestro (o configuración por supervisor)
+ * y genera una Quincena unificada de 15 días con los turnos de Emerson, Alfredo y Salvador.
  */
 export async function syncSupervisorSheets({
   doctorsList = DOCTORES_EXCEL,
   staffList = STAFF_EXCEL,
   supervisoresList = SUPERVISORES_OFICIALES,
   customConfigs = null,
+  masterUrl = null,
 } = {}) {
+  const masterSheetUrl = masterUrl || getMasterQuincenaUrl();
+  const masterSheetId = extractGoogleSheetId(masterSheetUrl) || DEFAULT_MASTER_QUINCENA_SHEET_ID;
+
   const configs = customConfigs || getSupervisorSheetConfigs();
   const results = [];
   const mergedDiasMap = {};
 
-  for (const supKey of Object.keys(configs)) {
-    const conf = configs[supKey];
-    if (!conf?.sheetId && !conf?.url) continue;
+  // Orden canónico de supervisores
+  const supKeys = ["sup-1", "sup-2", "sup-3"];
+  Object.keys(configs).forEach((k) => {
+    if (!supKeys.includes(k)) supKeys.push(k);
+  });
+
+  for (const supKey of supKeys) {
+    const tabInfo = DEFAULT_SUPERVISOR_TABS[supKey] || {};
+    const conf = configs[supKey] || tabInfo;
+
+    // Detectar si usamos la hoja maestra o una hoja independiente
+    const hasCustomIndividualSheet =
+      conf?.sheetId &&
+      conf.sheetId !== DEFAULT_MASTER_QUINCENA_SHEET_ID &&
+      conf.sheetId !== "1WuN2xtSLvb3Fof7OSvvTVDFP9FMpJuvcII8A25cgZBQ" &&
+      conf.sheetId !== "1EiJYr1Byvlz1gXJdLhhqHHqkJTjcWi-_27kGNSsI_kA" &&
+      conf.sheetId !== "1epJWEXl0sGWhdyx3IvDAqzOgrZZoxkUxCWkU9Srx4Ok";
+
+    const targetSheetId = hasCustomIndividualSheet
+      ? (extractGoogleSheetId(conf.url || conf.sheetId) || masterSheetId)
+      : masterSheetId;
+
+    const preferredTab = conf?.tabName || tabInfo?.tabName || conf?.nombre;
+    const candidateTabs = [
+      preferredTab,
+      ...(tabInfo?.tabAliases || []),
+      conf?.nombre,
+      conf?.token,
+    ].filter(Boolean);
+
+    let csv = null;
+    let successfulTab = preferredTab;
+    let fetchError = null;
+
+    // 1. Probar descargar las pestañas candidatas
+    for (const tab of [...new Set(candidateTabs)]) {
+      try {
+        const text = await fetchSupervisorSheetCsv(targetSheetId, tab);
+        if (text && text.length > 50 && (text.includes("Supervisor") || text.includes("NÓMINA") || text.includes("Oct") || text.includes("Sep"))) {
+          csv = text;
+          successfulTab = tab;
+          break;
+        }
+      } catch (e) {
+        fetchError = e;
+      }
+    }
+
+    // 2. Fallback: descarga directa sin parámetro de pestaña
+    if (!csv) {
+      try {
+        csv = await fetchSupervisorSheetCsv(targetSheetId);
+      } catch (err) {
+        results.push({
+          supId: conf.id || supKey,
+          nombre: conf.nombre || tabInfo.nombre || supKey,
+          tabName: preferredTab,
+          success: false,
+          error: fetchError?.message || err.message,
+        });
+        continue;
+      }
+    }
 
     try {
-      const csv = await fetchSupervisorSheetCsv(conf.sheetId || conf.url);
       const parsed = parseQuincenaSpreadsheet(csv, doctorsList, staffList, supervisoresList);
 
       if (parsed.success && parsed.dias && parsed.dias.length > 0) {
-        const actualSupId = parsed.supervisorId || parsed.supervisoresDetectados?.[0]?.id || conf.id;
-        const actualSupNombre = parsed.supervisorNombre || parsed.supervisoresDetectados?.[0]?.nombre || conf.nombre;
+        const actualSupId = parsed.supervisorId || parsed.supervisoresDetectados?.[0]?.id || conf.id || supKey;
+        const actualSupNombre = parsed.supervisorNombre || parsed.supervisoresDetectados?.[0]?.nombre || conf.nombre || tabInfo.nombre;
 
         parsed.dias.forEach((dia) => {
           if (!mergedDiasMap[dia.dateKey]) {
@@ -472,22 +604,25 @@ export async function syncSupervisorSheets({
         results.push({
           supId: actualSupId,
           nombre: actualSupNombre,
+          tabName: successfulTab,
           success: true,
           dias: parsed.dias.length,
           estadisticas: parsed.estadisticas,
         });
       } else {
         results.push({
-          supId: conf.id,
-          nombre: conf.nombre,
+          supId: conf.id || supKey,
+          nombre: conf.nombre || tabInfo.nombre,
+          tabName: successfulTab,
           success: false,
           error: parsed.error || "No se detectaron días válidos en la hoja.",
         });
       }
     } catch (err) {
       results.push({
-        supId: conf.id,
-        nombre: conf.nombre,
+        supId: conf.id || supKey,
+        nombre: conf.nombre || tabInfo.nombre,
+        tabName: successfulTab,
         success: false,
         error: err.message,
       });
@@ -515,7 +650,7 @@ export async function syncSupervisorSheets({
   if (mergedDias.length === 0) {
     return {
       success: false,
-      error: "No se pudieron obtener datos de las hojas de Google Sheets. Verifica los permisos de acceso o la conexión a internet.",
+      error: "No se pudieron obtener datos del Google Sheet. Verifica los permisos de acceso o el enlace compartido.",
       results,
     };
   }
@@ -528,11 +663,14 @@ export async function syncSupervisorSheets({
     id: `quincena_gs_${Date.now()}`,
     titulo: `Nómina Oficial Google Sheets (${mergedDias[0]?.label || ""} – ${mergedDias[mergedDias.length - 1]?.label || ""})`,
     source: "GOOGLE_SHEETS_LIVE",
+    masterSheetUrl,
+    masterSheetId,
     dias: mergedDias,
     diasDetectados: mergedDias.map((d) => d.dateKey),
     supervisoresDetectados: results.filter((r) => r.success).map((r) => ({
       id: r.supId,
       nombre: r.nombre,
+      tabName: r.tabName,
       totalAsignaciones: r.estadisticas?.totalLineasParseadas || 0,
     })),
     estadisticas: {

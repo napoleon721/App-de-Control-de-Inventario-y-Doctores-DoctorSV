@@ -992,10 +992,10 @@ export default function AttendanceView({
               onClick={handleQuickSyncGoogleSheets}
               disabled={isSyncingSheets}
               className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border border-emerald-300 text-[11.5px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
-              title="Sincronizar las 3 hojas de Google Sheets de Emerson, Alfredo y Salvador"
+              title="Sincronizar nómina en vivo desde el Google Sheet Maestro (Emerson, Alfredo y Salvador)"
             >
               <RefreshCw size={13} className={isSyncingSheets ? "animate-spin text-emerald-600" : "text-emerald-600"} />
-              <span>{isSyncingSheets ? "Sincronizando Sheets..." : "Sincronizar Sheets"}</span>
+              <span>{isSyncingSheets ? "Sincronizando Sheets..." : "Sincronizar Google Sheets"}</span>
             </button>
 
             <button

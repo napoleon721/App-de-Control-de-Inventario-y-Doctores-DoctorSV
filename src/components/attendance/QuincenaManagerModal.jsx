@@ -9,6 +9,10 @@ import { parseQuincenaSpreadsheet, parseDoctorLine, buildLookupMaps } from "../.
 import { DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import { generateDefaultQuincena } from "../../constants/quincenaDefault";
 import {
+  getMasterQuincenaUrl,
+  setMasterQuincenaUrl,
+  DEFAULT_MASTER_QUINCENA_URL,
+  DEFAULT_SUPERVISOR_TABS,
   getSupervisorSheetConfigs,
   updateSupervisorSheetUrl,
   syncSupervisorSheets
@@ -30,7 +34,10 @@ export default function QuincenaManagerModal({
     return activeQuincena?.dias?.[0]?.dateKey || "2026-10-01";
   });
 
-  // Estado para la pestaña de Google Sheets en vivo
+  // Estado para la pestaña de Google Sheets en vivo (Documento Maestro Único)
+  const [masterUrl, setMasterUrlState] = useState(() => getMasterQuincenaUrl());
+  const [isEditingMasterUrl, setIsEditingMasterUrl] = useState(false);
+  const [masterUrlInput, setMasterUrlInput] = useState(() => getMasterQuincenaUrl());
   const [sheetConfigs, setSheetConfigs] = useState(() => getSupervisorSheetConfigs());
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
@@ -38,33 +45,23 @@ export default function QuincenaManagerModal({
   const [editingSupId, setEditingSupId] = useState(null);
   const [editUrlInput, setEditUrlInput] = useState("");
 
-  // Estado para la pestaña de importar tabla completa
-  const [pastedTableText, setPastedTableText] = useState("");
-  const [parsedPreview, setParsedPreview] = useState(null);
-  const [parseError, setParseError] = useState("");
+  // Guardar cambio de URL Maestra
+  function handleSaveMasterUrl() {
+    const clean = masterUrlInput.trim();
+    if (!clean) return;
+    setMasterQuincenaUrl(clean);
+    setMasterUrlState(clean);
+    setIsEditingMasterUrl(false);
+  }
 
-  // Estado para la pestaña de pegar celda individual
-  const [singleDate, setSingleDate] = useState(() => selectedDate || "2026-09-29");
-  const [singleSupId, setSingleSupId] = useState(supervisores[0]?.id || "sup-1");
-  const [singleCellText, setSingleCellText] = useState("");
-  const [singlePreview, setSinglePreview] = useState(null);
+  function handleResetMasterUrl() {
+    setMasterQuincenaUrl(DEFAULT_MASTER_QUINCENA_URL);
+    setMasterUrlState(DEFAULT_MASTER_QUINCENA_URL);
+    setMasterUrlInput(DEFAULT_MASTER_QUINCENA_URL);
+    setIsEditingMasterUrl(false);
+  }
 
-  // Filtro de búsqueda en la vista de calendario
-  const [daySearch, setDaySearch] = useState("");
-  const [filterShift, setFilterShift] = useState("TODOS");
-
-  // Lookup maps para el analizador
-  const lookupMaps = useMemo(() => buildLookupMaps(DOCTORES_EXCEL, STAFF_EXCEL, supervisores), [supervisores]);
-
-  // Fechas de la quincena activa para asignar a filas sin encabezado
-  const fallbackDates = useMemo(() => {
-    if (activeQuincena?.dias && activeQuincena.dias.length > 0) {
-      return activeQuincena.dias.map((d) => d.dateKey);
-    }
-    return [];
-  }, [activeQuincena]);
-
-  // Manejar sincronización en vivo con las 3 hojas de Google Sheets
+  // Manejar sincronización en vivo con el documento maestro de Google Sheets
   async function handleSyncAllFromSheets() {
     setIsSyncingSheets(true);
     setSyncError("");
@@ -74,6 +71,7 @@ export default function QuincenaManagerModal({
         staffList: STAFF_EXCEL,
         supervisoresList: supervisores,
         customConfigs: sheetConfigs,
+        masterUrl: masterUrl,
       });
 
       if (res.success && res.quincena) {
@@ -326,7 +324,7 @@ export default function QuincenaManagerModal({
               <Globe size={15} className="text-emerald-600" />
               <span>Google Sheets en Vivo</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold">
-                3 Hojas
+                1 Enlace Maestro
               </span>
             </button>
 
@@ -385,7 +383,7 @@ export default function QuincenaManagerModal({
         {/* Contenido según pestaña */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/30">
           {/* ============================================================== */}
-          {/* PESTAÑA: GOOGLE SHEETS EN VIVO (3 SUPERVISORES)                */}
+          {/* PESTAÑA: GOOGLE SHEETS EN VIVO (1 ENLACE CON PESTAÑAS)         */}
           {/* ============================================================== */}
           {activeTab === "GOOGLE_SHEETS" && (
             <div className="space-y-6">
@@ -396,13 +394,13 @@ export default function QuincenaManagerModal({
                   <div className="space-y-2 max-w-xl">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-bold">
                       <Sparkles size={13} className="text-emerald-300" />
-                      <span>Conexión en Vivo con Google Sheets</span>
+                      <span>Base de Datos Oficial Única · Google Sheets</span>
                     </div>
                     <h3 className="text-xl font-black text-white tracking-tight">
-                      3 Hojas de Supervisores Vinculadas
+                      1 Solo Enlace para la Quincena Completa
                     </h3>
                     <p className="text-[12.5px] text-emerald-100/80 leading-relaxed">
-                      Emerson, Alfredo y Salvador gestionan su nómina en su propia hoja de cálculo de Google. Al sincronizar, DoctorSV lee automáticamente las 3 hojas, une sus asignaciones de los 15 días y actualiza los cubículos y la asistencia.
+                      Cada supervisor gestiona su nómina en una pestaña con su nombre (<strong>Emerson Vigil</strong>, <strong>Salvador Renderos</strong> y <strong>Alfredo Martínez</strong>) dentro del mismo libro de Google Sheets. Al sincronizar, DoctorSV descarga las 3 pestañas automáticamente, une las asignaciones de los 15 días y actualiza los puestos y la asistencia en vivo.
                     </p>
                   </div>
 
@@ -416,12 +414,12 @@ export default function QuincenaManagerModal({
                       {isSyncingSheets ? (
                         <>
                           <Loader2 size={18} className="animate-spin text-slate-950" />
-                          <span>Descargando y Fusionando...</span>
+                          <span>Descargando Pestañas y Fusionando...</span>
                         </>
                       ) : (
                         <>
                           <RefreshCw size={18} className="text-slate-950" />
-                          <span>Sincronizar las 3 Hojas Ahora</span>
+                          <span>Sincronizar Quincena en Vivo</span>
                         </>
                       )}
                     </button>
@@ -444,10 +442,10 @@ export default function QuincenaManagerModal({
                     <CheckCircle2 size={22} className="text-emerald-600 shrink-0" />
                     <div>
                       <p className="font-black text-emerald-900 text-[13.5px]">
-                        ¡Nómina sincronizada con éxito desde Google Sheets!
+                        ¡Nómina sincronizada con éxito desde el Google Sheet Maestro!
                       </p>
                       <p className="text-[11.5px] text-emerald-700 font-medium">
-                        Se actualizaron los 15 días con los turnos de Emerson, Alfredo y Salvador.
+                        Se actualizaron los 15 días con los turnos de Emerson Vigil, Salvador Renderos y Alfredo Martínez.
                       </p>
                     </div>
                   </div>
@@ -461,127 +459,190 @@ export default function QuincenaManagerModal({
                 </div>
               )}
 
-              {/* Tarjetas de Cada Supervisor */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {Object.keys(sheetConfigs).map((supId) => {
-                  const conf = sheetConfigs[supId];
-                  const isEditing = editingSupId === supId;
-                  const resultForSup = syncResults?.find((r) => r.supId === supId);
-
-                  return (
-                    <div
-                      key={supId}
-                      className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md hover:border-blue-200 transition-all"
-                    >
-                      <div className="space-y-3">
-                        {/* Header de la tarjeta */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-[#0048B5] flex items-center justify-center font-black text-xs">
-                              {conf.token ? conf.token.replace("000", "") : "SP"}
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                                {conf.token || supId}
-                              </span>
-                              <h4 className="text-[13px] font-black text-slate-900 mt-1 line-clamp-1">
-                                {conf.nombre}
-                              </h4>
-                            </div>
-                          </div>
-
-                          <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Enlace Activo
-                          </span>
-                        </div>
-
-                        {/* Detalle o Edición del Enlace */}
-                        {isEditing ? (
-                          <div className="space-y-2 pt-1">
-                            <label className="text-[11px] font-bold text-slate-600 block">
-                              Enlace de Google Sheets:
-                            </label>
-                            <input
-                              type="text"
-                              value={editUrlInput}
-                              onChange={(e) => setEditUrlInput(e.target.value)}
-                              placeholder="https://docs.google.com/spreadsheets/d/..."
-                              className="w-full px-3 py-2 text-[11px] font-mono rounded-xl border border-blue-400 bg-blue-50/30 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <div className="flex items-center gap-2 justify-end">
-                              <button
-                                type="button"
-                                onClick={() => setEditingSupId(null)}
-                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 hover:bg-slate-100 cursor-pointer"
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleSaveEditUrl(supId)}
-                                className="px-3 py-1 rounded-lg text-[11px] font-black bg-[#0048B5] text-white hover:bg-blue-700 flex items-center gap-1 cursor-pointer"
-                              >
-                                <Check size={12} />
-                                Guardar
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-2 pt-1">
-                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <Link2 size={13} className="text-slate-400 shrink-0" />
-                                <span className="text-[11px] font-mono text-slate-600 truncate block">
-                                  {conf.sheetId || "ID no configurado"}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditUrl(supId, conf.url)}
-                                title="Editar enlace de Google Sheets"
-                                className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                            </div>
-
-                            <a
-                              href={conf.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-[#0048B5] hover:text-blue-800 hover:underline pt-0.5"
-                            >
-                              <span>Abrir hoja en Google Sheets</span>
-                              <ExternalLink size={12} />
-                            </a>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Estadísticas de la última sincronización */}
-                      {resultForSup && (
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                          <span className="text-slate-500 font-medium">Asignaciones:</span>
-                          <span className="font-bold text-slate-800 font-mono">
-                            {resultForSup.estadisticas?.totalLineasParseadas || 0} turnos ({resultForSup.estadisticas?.tasaReconocimiento || "100%"})
-                          </span>
-                        </div>
-                      )}
+              {/* Tarjeta del Enlace Maestro de Google Sheets */}
+              <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center font-black">
+                      <FileSpreadsheet size={20} />
                     </div>
-                  );
-                })}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-[14px] font-black text-slate-900">
+                          Enlace Oficial de la Hoja Maestra (Google Sheets)
+                        </h4>
+                        <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Conexión Activa
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-slate-500 font-medium">
+                        Libro de cálculo donde cada supervisor tiene su pestaña designada
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={masterUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-50 text-[#0048B5] hover:bg-blue-100 font-bold text-[12px] flex items-center gap-1.5 transition-colors"
+                    >
+                      <ExternalLink size={13} />
+                      <span>Abrir en Google Sheets</span>
+                    </a>
+                  </div>
+                </div>
+
+                {isEditingMasterUrl ? (
+                  <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <label className="text-[11.5px] font-bold text-slate-700 block">
+                      Pega aquí el enlace compartido de Google Sheets:
+                    </label>
+                    <input
+                      type="text"
+                      value={masterUrlInput}
+                      onChange={(e) => setMasterUrlInput(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      className="w-full px-3.5 py-2.5 text-[12px] font-mono rounded-xl border border-blue-400 bg-blue-50/20 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={handleResetMasterUrl}
+                        className="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                      >
+                        Restaurar enlace por defecto
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMasterUrlInput(masterUrl);
+                            setIsEditingMasterUrl(false);
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-[11.5px] font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveMasterUrl}
+                          className="px-4 py-1.5 rounded-lg text-[11.5px] font-black bg-[#0048B5] text-white hover:bg-blue-700 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Check size={13} />
+                          <span>Guardar Enlace</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 bg-slate-50 rounded-xl p-3 border border-slate-200/70">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link2 size={15} className="text-slate-400 shrink-0" />
+                      <span className="text-[11.5px] font-mono text-slate-700 truncate">
+                        {masterUrl}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingMasterUrl(true)}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-600 hover:text-[#0048B5] hover:bg-blue-50 flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                    >
+                      <Edit2 size={12} />
+                      <span>Cambiar Enlace</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Guía rápida para los supervisores */}
+              {/* Tarjetas de las 3 Pestañas de Supervisores */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <h4 className="text-[13px] font-black text-slate-800">
+                    Pestañas Detectadas en el Documento Maestro (3 Supervisores)
+                  </h4>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Sincronización simultánea de cubículos y horarios
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {Object.keys(DEFAULT_SUPERVISOR_TABS).map((supKey) => {
+                    const tabInfo = DEFAULT_SUPERVISOR_TABS[supKey];
+                    const resultForSup = syncResults?.find((r) => r.supId === supKey);
+
+                    return (
+                      <div
+                        key={supKey}
+                        className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md hover:border-blue-200 transition-all"
+                      >
+                        <div className="space-y-3">
+                          {/* Header de la tarjeta */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-[#0048B5] flex items-center justify-center font-black text-xs">
+                                {tabInfo.token ? tabInfo.token.replace("000", "") : "SP"}
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                                  {tabInfo.token} · Puestos {tabInfo.puestosRange}
+                                </span>
+                                <h4 className="text-[13px] font-black text-slate-900 mt-1 line-clamp-1">
+                                  {tabInfo.nombre}
+                                </h4>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Nombre de la pestaña oficial en Google Sheets */}
+                          <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-slate-500 font-medium">Nombre de Pestaña:</span>
+                              <span className="font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                {tabInfo.tabName}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-slate-500 font-medium">Bloque Físico:</span>
+                              <span className="font-bold text-slate-700">
+                                Cubículos {tabInfo.puestosRange}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Estadísticas de la última sincronización */}
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11.5px]">
+                          <span className="text-slate-500 font-medium">Estado:</span>
+                          {resultForSup ? (
+                            <span className="font-black text-emerald-700 flex items-center gap-1">
+                              <CheckCircle2 size={13} />
+                              {resultForSup.estadisticas?.totalLineasParseadas || 0} turnos (100%)
+                            </span>
+                          ) : (
+                            <span className="font-bold text-slate-600 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Listo para sincronizar
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Guía explicativa */}
               <div className="bg-blue-50/60 rounded-2xl p-4 border border-blue-200/80 flex items-start gap-3">
                 <HelpCircle size={18} className="text-blue-600 shrink-0 mt-0.5" />
                 <div className="text-[12px] text-slate-700 space-y-1">
                   <p className="font-black text-slate-900">
-                    ¿Cómo funciona la vinculación en tiempo real?
+                    ¿Cómo funciona la sincronización con un solo documento de Google Sheets?
                   </p>
                   <p className="leading-relaxed">
-                    Cada supervisor llena únicamente su fila correspondiente en su Google Sheet personal. No tienen que enviarte archivos ni copiar tablas: cuando ellos hagan cambios en sus hojas, simplemente haz clic en <strong>"Sincronizar las 3 Hojas Ahora"</strong> y DoctorSV actualizará los cubículos, el mapa interactivo y el control de asistencia inmediatamente.
+                    Todo está centralizado en un único enlace. Cada supervisor tiene su propia pestaña con su nombre (<strong>Emerson Vigil</strong>, <strong>Salvador Renderos</strong>, <strong>Alfredo Martínez</strong>). Al pulsar <strong>"Sincronizar Quincena en Vivo"</strong>, DoctorSV lee cada pestaña en paralelo, reconoce los doctores automáticamente, une los 15 días y actualiza los cubículos correspondientes en el mapa.
                   </p>
                 </div>
               </div>

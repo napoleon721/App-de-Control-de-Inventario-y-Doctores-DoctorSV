@@ -2,7 +2,7 @@ import {
   User, CheckCircle2, AlertTriangle, Droplets, Wrench, Lock, XCircle,
   Laptop, Monitor, Mouse, Headphones, Cable, Wifi, Shield
 } from "lucide-react";
-import excelData from "./excelData.json";
+import excelData from "./excelData.json" with { type: "json" };
 
 /* ============================================================
    TOKENS — Paleta Oficial DoctorSV + Estados Exactos del Mapa

@@ -110,7 +110,7 @@ export function isSameHorario(h1, h2) {
   return norm1 === norm2;
 }
 
-import { DOCTORES_EXCEL, SUPERVISORES_OFICIALES, getSPBlocks } from "../constants/tokens";
+import { DOCTORES_EXCEL, SUPERVISORES_OFICIALES, getSPBlocks } from "../constants/tokens.js";
 
 /**
  * Determina con máxima precisión a qué supervisor pertenece un médico según:
