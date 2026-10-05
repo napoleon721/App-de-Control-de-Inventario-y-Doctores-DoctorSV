@@ -81,7 +81,7 @@ import {
   syncAllSupervisorSheets,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, getDoctorSupervisorInfo } from "./utils/safeHelpers";
+import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, isRelatedHorario, getDoctorSupervisorInfo } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -670,12 +670,26 @@ export default function App() {
       if (!supObj) return;
 
       const supLots = findDailyLotsForSupervisor(dailyLots, activeDateKey, supId, supObj.nombre, null);
-      let start = Number(supObj.bloqueInicio);
-      let end = Number(supObj.bloqueFin);
 
+      let allowedSpaceIds = [];
       if (supLots && supLots.length > 0) {
-        start = Number(supLots[0].bloqueInicio);
-        end = Number(supLots[supLots.length - 1].bloqueFin);
+        supLots.forEach((lot) => {
+          const lIni = Number(lot.bloqueInicio);
+          const lFin = Number(lot.bloqueFin);
+          if (!isNaN(lIni) && !isNaN(lFin) && lIni <= lFin) {
+            for (let i = lIni; i <= lFin; i++) {
+              if (!allowedSpaceIds.includes(i)) allowedSpaceIds.push(i);
+            }
+          }
+        });
+      } else {
+        const bIni = Number(supObj.bloqueInicio);
+        const bFin = Number(supObj.bloqueFin);
+        if (!isNaN(bIni) && !isNaN(bFin) && bIni <= bFin) {
+          for (let i = bIni; i <= bFin; i++) {
+            allowedSpaceIds.push(i);
+          }
+        }
       }
 
       supData.doctores.forEach((doc, idx) => {
@@ -697,11 +711,13 @@ export default function App() {
           return;
         }
 
-        const targetSpaceId = start + idx;
-        if (targetSpaceId <= end) {
+        if (idx < allowedSpaceIds.length) {
+          const targetSpaceId = allowedSpaceIds[idx];
+          const matchingLot = supLots?.find((l) => targetSpaceId >= Number(l.bloqueInicio) && targetSpaceId <= Number(l.bloqueFin));
+          const effectiveHorario = matchingLot?.horario || doc.horario || supObj.horario || "02:00 PM – 10:00 PM";
           assignmentsBySpace.set(targetSpaceId, {
             doctor: doc.nombre,
-            horario: doc.horario || supObj.horario || "02:00 PM – 10:00 PM",
+            horario: effectiveHorario,
             supervisorId: supId,
             supervisorNombre: supObj.nombre || supData.supervisorNombre,
           });
@@ -2248,10 +2264,65 @@ export default function App() {
     }
   }
 
-  function handleReleaseByHorario(horario) {
+  function handleReleaseByHorario(horario, options = {}) {
     if (!horario) return;
+    const targetSpaceIds = Array.isArray(options?.targetSpaceIds) ? options.targetSpaceIds.map(Number) : [];
+    const targetDoctorNames = Array.isArray(options?.targetDoctorNames) ? options.targetDoctorNames : [];
+    const supId = options?.supervisorId || null;
+
     const isSup = (s) => ([135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores") && s.estado !== "DISPONIBLE";
-    const isOccupiedInShift = (s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup(s) && isSameHorario(s.horario, horario);
+
+    const isOccupiedInShift = (s) => {
+      const sid = Number(s.id);
+      const isOccupied = s.estado === "OCUPADO" || Boolean(s.doctor);
+      if (!isOccupied) return false;
+
+      // 1. Puestos explícitos pasados para liberación
+      if (targetSpaceIds.includes(sid)) return true;
+
+      // 2. Si el médico asignado está en la lista de médicos de este turno/nómina
+      if (s.doctor && targetDoctorNames.some((dn) => isSameDoctor(dn, s.doctor))) return true;
+
+      // 3. Si el horario solicitado es TODOS y el puesto pertenece al supervisor
+      if (horario === "TODOS") {
+        if (supId && s.supervisorId === supId) return true;
+        return true;
+      }
+
+      // 4. Coincidencia directa de franja horaria
+      if (s.horario && isSameHorario(s.horario, horario)) return true;
+
+      // 5. Franjas vespertinas/nocturnas relacionadas (ej. 02:00 PM – 10:00 PM y 04:00 PM – 10:00 PM)
+      if (s.horario && isRelatedHorario(s.horario, horario)) return true;
+
+      // 6. Coincidencia por doctor asignado cuyo horario oficial coincide
+      if (s.doctor) {
+        const docObj = DOCTORES_EXCEL.find((d) => isSameDoctor(d.nombre, s.doctor));
+        if (docObj && (isSameHorario(docObj.horario, horario) || isRelatedHorario(docObj.horario, horario))) {
+          return true;
+        }
+      }
+
+      // 7. Salvaguarda explícita para cubículos 38 y 39
+      // Cuando se libera cualquier franja vespertina o el turno del supervisor correspondiente
+      if ((sid === 38 || sid === 39) && (
+        isRelatedHorario(horario, "02:00 PM – 10:00 PM") ||
+        isRelatedHorario(horario, "04:00 PM – 10:00 PM") ||
+        isRelatedHorario(horario, "06:00 PM – 10:00 PM") ||
+        /10:00\s*PM|22:00/i.test(horario) ||
+        (s.horario && (isSameHorario(s.horario, horario) || isRelatedHorario(s.horario, horario)))
+      )) {
+        return true;
+      }
+
+      // 8. Salvaguarda para cubículos 138 y 139 si el horario coincide
+      if ((sid === 138 || sid === 139) && (isSameHorario(s.horario, horario) || isRelatedHorario(s.horario, horario))) {
+        return true;
+      }
+
+      return false;
+    };
+
     const spacesToRelease = spaces.filter(isOccupiedInShift);
 
     spacesToRelease.forEach((s) => {
@@ -2289,6 +2360,7 @@ export default function App() {
     // Finalizar asistencia para puestos del turno y para doctores con este horario
     setAttendanceRecords((prev) => {
       const next = { ...prev };
+      // 1. Médicos con cubículo asignado
       spacesToRelease.forEach((s) => {
         if (s.doctor) {
           Object.keys(next).forEach((k) => {
@@ -2297,10 +2369,20 @@ export default function App() {
           next[s.doctor] = "FINALIZADO";
         }
       });
+      // 2. Médicos pasados en la nómina del lote/franja
+      targetDoctorNames.forEach((docName) => {
+        if (next[docName] === "PRESENTE") {
+          Object.keys(next).forEach((k) => {
+            if (isSameDoctor(k, docName)) next[k] = "FINALIZADO";
+          });
+          next[docName] = "FINALIZADO";
+        }
+      });
+      // 3. Médicos con horario coincidente en DOCTORES_EXCEL o quincena
       Object.keys(next).forEach((docName) => {
         if (next[docName] === "PRESENTE") {
           const docObj = DOCTORES_EXCEL.find((d) => isSameDoctor(d.nombre, docName));
-          if (docObj && isSameHorario(docObj.horario, horario)) {
+          if (docObj && (isSameHorario(docObj.horario, horario) || isRelatedHorario(docObj.horario, horario))) {
             next[docName] = "FINALIZADO";
           }
         }
@@ -2346,15 +2428,19 @@ export default function App() {
   }
 
   // Liberación atómica de todos los puestos ocupados en el lote a cargo de un supervisor
-  function handleReleaseLote(bloqueInicio, bloqueFin, supName, supId = null, targetDoctorNames = null) {
+  function handleReleaseLote(bloqueInicio, bloqueFin, supName, supId = null, targetDoctorNames = null, extraOptions = {}) {
     const bIni = Number(bloqueInicio);
     const bFin = Number(bloqueFin);
-    if (isNaN(bIni) || isNaN(bFin)) return;
+    const targetSpaceIds = Array.isArray(extraOptions?.targetSpaceIds) ? extraOptions.targetSpaceIds.map(Number) : [];
 
     const isSupStation = (sid) => [135, 136, 137, 138, 139].includes(sid);
     const spacesToRelease = spaces.filter((s) => {
       const sid = Number(s.id);
-      return sid >= bIni && sid <= bFin && (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSupStation(sid);
+      const isOccupied = s.estado === "OCUPADO" || Boolean(s.doctor);
+      if (!isOccupied) return false;
+      if (targetSpaceIds.length > 0 && targetSpaceIds.includes(sid)) return true;
+      if (isNaN(bIni) || isNaN(bFin)) return false;
+      return sid >= bIni && sid <= bFin && !isSupStation(sid);
     });
 
     // Detectar médicos remanentes asignados a este supervisor o lote que están en PRESENTE
@@ -2408,7 +2494,8 @@ export default function App() {
 
     const nextSpaces = spaces.map((s) => {
       const sid = Number(s.id);
-      if (sid >= bIni && sid <= bFin && (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSupStation(sid)) {
+      const isTarget = targetSpaceIds.includes(sid) || (!isNaN(bIni) && !isNaN(bFin) && sid >= bIni && sid <= bFin && !isSupStation(sid));
+      if (isTarget && (s.estado === "OCUPADO" || Boolean(s.doctor))) {
         return {
           ...s,
           doctor: null,

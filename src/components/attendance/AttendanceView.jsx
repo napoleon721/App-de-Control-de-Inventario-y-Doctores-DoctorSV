@@ -11,7 +11,7 @@ import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
 import PlanillaManagerModal from "./PlanillaManagerModal";
 import JustifyAbsenceModal from "./JustifyAbsenceModal";
-import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
+import { isSameDoctor, isSameHorario, isRelatedHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 import { findDailyLotForSupervisor, findDailyLotsForSupervisor } from "../../utils/dailyLotsParser";
 import { syncSupervisorSheets, syncPlanillaSupervisorSheets, mergeQuincenas } from "../../services/googleSheetsService";
 
@@ -1681,7 +1681,10 @@ export default function AttendanceView({
                     activeBloqueFin,
                     currentSupervisor.nombre,
                     currentSupervisor.id,
-                    batchDoctors.map((d) => d.nombre)
+                    batchDoctors.map((d) => d.nombre),
+                    {
+                      targetSpaceIds: supervisorSpaces.map((s) => Number(s.id)),
+                    }
                   )
                 }
                 className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
@@ -1702,9 +1705,41 @@ export default function AttendanceView({
 
             {/* Liberar Franja */}
             {onReleaseByHorario && (() => {
-              const franjaTarget = filterHorario !== "TODOS" ? filterHorario : currentSupervisor.horario;
-              const isSup = (s) => [135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores";
-              const ocupadosEnFranja = spaces.filter((s) => (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup(s) && isSameHorario(s.horario, franjaTarget)).length;
+              const franjaTarget = filterHorario !== "TODOS"
+                ? filterHorario
+                : (currentSupervisor.activeFranja || currentSupervisor.horarios?.[0] || currentSupervisor.horario);
+
+              const spacesToFree = (spaces || []).filter((s) => {
+                const sid = Number(s.id);
+                const isOccupied = s.estado === "OCUPADO" || Boolean(s.doctor);
+                if (!isOccupied) return false;
+
+                // 1. Si el médico asignado está en la nómina activa de este turno
+                if (s.doctor && batchDoctors.some((d) => isSameDoctor(d.nombre, s.doctor))) return true;
+
+                // 2. Si el puesto pertenece a los cubículos del lote del supervisor
+                if (supervisorSpaces.some((sp) => Number(sp.id) === sid)) return true;
+
+                // 3. Coincidencia directa o relacionada de franja horaria
+                if (s.horario && (isSameHorario(s.horario, franjaTarget) || isRelatedHorario(s.horario, franjaTarget))) return true;
+
+                // 4. Salvaguarda explícita para cubículos 38 y 39
+                if (sid === 38 || sid === 39) {
+                  if (
+                    isRelatedHorario(franjaTarget, "02:00 PM – 10:00 PM") ||
+                    isRelatedHorario(franjaTarget, "04:00 PM – 10:00 PM") ||
+                    isRelatedHorario(franjaTarget, "06:00 PM – 10:00 PM") ||
+                    /10:00\s*PM|22:00/i.test(franjaTarget)
+                  ) {
+                    return true;
+                  }
+                }
+
+                return false;
+              });
+
+              const ocupadosEnFranja = spacesToFree.length;
+
               return ocupadosEnFranja > 0 ? (
                 <button
                   type="button"
@@ -1712,7 +1747,11 @@ export default function AttendanceView({
                     if (window.confirm(
                       `¿Liberar totalmente los ${ocupadosEnFranja} puesto(s) asignados en la franja "${franjaTarget}"?\n\nEsto dejará los cubículos libres y disponibles para los médicos entrantes.`
                     )) {
-                      onReleaseByHorario(franjaTarget);
+                      onReleaseByHorario(franjaTarget, {
+                        supervisorId: currentSupervisor?.id,
+                        targetSpaceIds: spacesToFree.map((s) => Number(s.id)),
+                        targetDoctorNames: batchDoctors.map((d) => d.nombre),
+                      });
                     }
                   }}
                   className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11.5px] font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-2xs transition-all active:scale-95 cursor-pointer"

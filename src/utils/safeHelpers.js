@@ -110,6 +110,35 @@ export function isSameHorario(h1, h2) {
   return norm1 === norm2;
 }
 
+/**
+ * Determina si dos horarios pertenecen a la misma guardia/relevo o comparten jornada de salida
+ * (ej. 02:00 PM – 10:00 PM, 04:00 PM – 10:00 PM y 06:00 PM – 10:00 PM comparten la misma salida a las 10:00 PM)
+ */
+export function isRelatedHorario(h1, h2) {
+  if (!h1 || !h2) return false;
+  if (isSameHorario(h1, h2)) return true;
+
+  const norm1 = normalizeHorario(h1);
+  const norm2 = normalizeHorario(h2);
+
+  // Turnos de guardia nocturna/vespertina que finalizan a las 10:00 PM (o 22:00)
+  const isNight101 = /10:00\s*PM|22:00/i.test(norm1);
+  const isNight102 = /10:00\s*PM|22:00/i.test(norm2);
+  if (isNight101 && isNight102) return true;
+
+  // Turnos matutinos que finalizan a las 02:00 PM (o 14:00)
+  const isMorning21 = /(?:0?6:00|0?7:00)\s*AM.*?(?:0?2:00\s*PM|14:00)/i.test(norm1);
+  const isMorning22 = /(?:0?6:00|0?7:00)\s*AM.*?(?:0?2:00\s*PM|14:00)/i.test(norm2);
+  if (isMorning21 && isMorning22) return true;
+
+  // Turnos intermedios de mediodía (12:00 MD o 12:00 PM)
+  const isMidday1 = /12:00\s*(?:MD|PM)/i.test(norm1);
+  const isMidday2 = /12:00\s*(?:MD|PM)/i.test(norm2);
+  if (isMidday1 && isMidday2) return true;
+
+  return false;
+}
+
 import { DOCTORES_EXCEL, SUPERVISORES_OFICIALES, getSPBlocks } from "../constants/tokens.js";
 
 /**
