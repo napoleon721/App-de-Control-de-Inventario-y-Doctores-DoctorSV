@@ -7,7 +7,9 @@ import {
   getSheetsApiUrl,
   setSheetsApiUrl,
   fetchSpacesFromGoogleSheets,
-  isSheetsConfigured
+  isSheetsConfigured,
+  DEFAULT_MASTER_PLANILLA_URL,
+  DEFAULT_MASTER_QUINCENA_URL
 } from "../../services/googleSheetsService";
 
 export default function GoogleSheetsConfigModal({ onClose, onSyncComplete, onConnected }) {
@@ -208,15 +210,62 @@ function doPost(e) {
 
         {/* Content */}
         <form onSubmit={handleSave} className="p-5 sm:p-6 space-y-4 overflow-y-auto">
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3.5 text-[12px] flex items-start gap-2.5 text-slate-700">
-            <Database size={16} className="text-emerald-700 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-bold text-emerald-950">
-                Todo el ambiente está preparado para Google Sheets
-              </p>
-              <p className="text-[11.5px] text-slate-600 leading-snug">
-                Cuando tengas creados tus Google Sheets en Google Drive, solo pega la URL de la aplicación web de Apps Script aquí. La aplicación leerá y actualizará celdas en tiempo real.
-              </p>
+          {/* Hojas Oficiales de Nómina Vinculadas */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={16} className="text-emerald-600" />
+                <h4 className="text-[13px] font-black text-slate-900">Hojas de Nómina Oficiales en Google Sheets</h4>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                Lectura en Vivo Activa
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {/* Planilla Mensual (Edward & Roxana) */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-white border border-slate-200 gap-2 shadow-2xs">
+                <div>
+                  <p className="text-[12px] font-black text-slate-800 flex items-center gap-1.5">
+                    <span>📗 Planilla Mensual · Grupo 1 y 2 (Octubre 2026)</span>
+                    <span className="text-[9.5px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">57 Médicos</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Pestañas: <b>Edward Zelaya</b> (Puesto #139) y <b>Roxana Canales</b> (Puesto #138)
+                  </p>
+                </div>
+                <a
+                  href={DEFAULT_MASTER_PLANILLA_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 text-[11.5px] font-bold flex items-center gap-1 transition self-start sm:self-auto shrink-0"
+                >
+                  <ExternalLink size={12} />
+                  <span>Abrir Hoja</span>
+                </a>
+              </div>
+
+              {/* Servicios Profesionales (Emerson, Salvador, Alfredo) */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-white border border-slate-200 gap-2 shadow-2xs">
+                <div>
+                  <p className="text-[12px] font-black text-slate-800 flex items-center gap-1.5">
+                    <span>📘 Servicios Profesionales (SP)</span>
+                    <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">Quincena Rotativa</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Pestañas: Emerson Vigil, Salvador Renderos y Alfredo Martínez
+                  </p>
+                </div>
+                <a
+                  href={DEFAULT_MASTER_QUINCENA_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 text-[11.5px] font-bold flex items-center gap-1 transition self-start sm:self-auto shrink-0"
+                >
+                  <ExternalLink size={12} />
+                  <span>Abrir Hoja</span>
+                </a>
+              </div>
             </div>
           </div>
 

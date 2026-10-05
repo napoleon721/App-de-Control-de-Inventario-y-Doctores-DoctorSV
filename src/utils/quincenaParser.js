@@ -593,19 +593,32 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
     let nameColIdx = -1;
     let funcColIdx = -1;
     let groupColIdx = -1;
+    let idColIdx = -1;
 
     const headerRow = rows[headerRowIndex] || [];
-    const firstDateColIdx = dateColumns[0]?.colIndex || 6;
+    const firstDateColIdx = dateColumns[0]?.colIndex || 4;
 
     for (let c = 0; c < firstDateColIdx; c++) {
       const hText = (headerRow[c] || "").toUpperCase().trim();
-      if (hText.includes("NOMBRE") || hText.includes("MÉDICO") || hText.includes("MEDICO")) nameColIdx = c;
+      if (hText.includes("NOMBRE") || hText.includes("MÉDICO") || hText.includes("MEDICO") || hText.includes("COLABORADOR")) nameColIdx = c;
       else if (hText.includes("FUNCION") || hText.includes("FUNCIÓN") || hText.includes("ROL")) funcColIdx = c;
       else if (hText.includes("GRUPO")) groupColIdx = c;
+      else if (hText.includes("IDENTIFICADOR") || hText.includes("DUI") || hText.includes("ID") || hText.includes("CODIGO")) idColIdx = c;
     }
-    if (nameColIdx === -1) nameColIdx = Math.min(3, Math.max(0, firstDateColIdx - 3));
+    if (nameColIdx === -1) nameColIdx = Math.min(1, Math.max(0, firstDateColIdx - 3));
 
-    const NON_WORKING_STATUSES = ["LIBRE", "VACACION", "VACACIONES", "INCAPACIDAD", "PERMISO", "DESCANSO", "BAJA", "SUSPENSION"];
+    const NON_WORKING_STATUSES = [
+      "LIBRE",
+      "VACACION",
+      "VACACIONES",
+      "INCAPACIDAD",
+      "PERMISO",
+      "PERMISO PERSONAL",
+      "DESCANSO",
+      "BAJA",
+      "SUSPENSION",
+      "MATERNIDAD"
+    ];
     let currentSup = detectedGlobalSupervisor || null;
     const supsList = lookups.supervisores?.list || [];
 
@@ -616,6 +629,7 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
       const rawName = (row[nameColIdx] || "").trim();
       const rawFunc = funcColIdx >= 0 ? (row[funcColIdx] || "").toUpperCase().trim() : "";
       const rawGroup = groupColIdx >= 0 ? (row[groupColIdx] || "").toUpperCase().trim() : "";
+      const rawId = idColIdx >= 0 ? (row[idColIdx] || "").trim() : "";
 
       if (!rawName || rawName.length < 3) continue;
 
@@ -675,10 +689,30 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
       const parsedDoc = parseDoctorLine(rawName, lookups.doctors);
 
       dateColumns.forEach((col) => {
-        const shiftCell = (row[col.colIndex] || "").trim();
-        if (!shiftCell) return;
-        const shiftUpper = shiftCell.toUpperCase();
-        if (NON_WORKING_STATUSES.some((kw) => shiftUpper.includes(kw))) {
+        const rawShiftCell = (row[col.colIndex] || "").trim();
+        if (!rawShiftCell) return;
+
+        // Limpiar acentos para evaluar estado (ej: "VACACIÓN" -> "VACACION")
+        const cleanShift = rawShiftCell
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toUpperCase()
+          .trim();
+
+        // Estados que indican que no labora ese día
+        const isNonWorking =
+          cleanShift === "LIBRE" ||
+          cleanShift === "INCAPACIDAD" ||
+          cleanShift.startsWith("INCAPACIDAD") ||
+          cleanShift.includes("VACACION") ||
+          cleanShift.includes("MATERNIDAD") ||
+          cleanShift.includes("PERMISO PERSONAL") ||
+          cleanShift.includes("SUSPENSION") ||
+          cleanShift.includes("BAJA") ||
+          cleanShift.includes("DESCANSO") ||
+          (cleanShift === "PERMUTA"); // "PERMUTA" sin horario
+
+        if (isNonWorking) {
           return; // El médico no labora este día
         }
 
@@ -697,9 +731,21 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
 
         const supEntry = diasMap[col.dateKey].porSupervisor[currentSup.id];
         supEntry.doctorNames.push(parsedDoc.nombre);
+
+        // Si tiene prefijo P-06:00am-02:00pm, normalizar el horario
+        let horarioClean = rawShiftCell;
+        let isPermuta = false;
+        if (cleanShift.startsWith("P-") || cleanShift.startsWith("P ")) {
+          isPermuta = true;
+          horarioClean = rawShiftCell.replace(/^[Pp][\-\s]/, "");
+        }
+
         supEntry.doctores.push({
           ...parsedDoc,
-          horario: normalizeHorarioString(shiftCell),
+          horario: normalizeHorarioString(horarioClean),
+          identificador: rawId || parsedDoc.identificador || null,
+          dui: rawId || null,
+          isPermuta,
         });
         supEntry.totalDoctores = supEntry.doctores.length;
 
@@ -790,16 +836,21 @@ export function parseQuincenaSpreadsheet(rawText, doctorsList = [], staffList = 
   const diasArray = Object.values(diasMap).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   const rate = totalLineasParseadas > 0 ? ((totalReconocidos / totalLineasParseadas) * 100).toFixed(1) : "100.0";
 
+  const supsListDetected = Array.from(supervisoresDetectados.values());
+  const mainSup = supsListDetected[0];
+
   return {
     success: true,
     type: "TABLE",
+    supervisorId: mainSup?.id,
+    supervisorNombre: mainSup?.nombre,
     titulo: `Quincena Oficial (${diasArray[0]?.label || ""} – ${diasArray[diasArray.length - 1]?.label || ""})`,
     dias: diasArray,
     diasDetectados: diasArray.map((d) => d.dateKey),
-    supervisoresDetectados: Array.from(supervisoresDetectados.values()),
+    supervisoresDetectados: supsListDetected,
     estadisticas: {
       totalDias: diasArray.length,
-      totalSupervisores: supervisoresDetectados.size,
+      totalSupervisores: supsListDetected.length,
       totalLineasParseadas,
       totalReconocidos,
       tasaReconocimiento: `${rate}%`,

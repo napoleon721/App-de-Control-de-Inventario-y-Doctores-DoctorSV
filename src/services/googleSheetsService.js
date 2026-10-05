@@ -74,8 +74,8 @@ export const DEFAULT_SUPERVISOR_SHEETS = {
 // HOJAS DE GOOGLE SHEETS PARA SUPERVISORES EN PLANILLA (EDWARD, ROXANA, MARCELA)
 // =========================================================================
 export const DEFAULT_MASTER_PLANILLA_URL =
-  "https://docs.google.com/spreadsheets/d/1kGcU-HtaVW6xjXrCRD6tjJMYNWWhuiPehKW-Hokdl5E/edit?usp=sharing";
-export const DEFAULT_MASTER_PLANILLA_SHEET_ID = "1kGcU-HtaVW6xjXrCRD6tjJMYNWWhuiPehKW-Hokdl5E";
+  "https://docs.google.com/spreadsheets/d/1-eEZ6ccvSB-HW_lJt334RrzMMLF13pB1XNB8avEKBZs/edit?usp=sharing";
+export const DEFAULT_MASTER_PLANILLA_SHEET_ID = "1-eEZ6ccvSB-HW_lJt334RrzMMLF13pB1XNB8avEKBZs";
 
 export const DEFAULT_PLANILLA_SUPERVISOR_TABS = {
   "sup-5": {
@@ -1046,3 +1046,45 @@ export function mergeQuincenas(baseQuincena, newQuincena) {
     updatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Sincroniza todas las hojas de Google Sheets configuradas en el proyecto
+ * (Planilla Mensual: Edward Zelaya y Roxana Canales + Servicios Profesionales: Emerson, Salvador y Alfredo).
+ * Fusiona de forma transparente ambas fuentes para que los 5 supervisores y sus puestos operen en tiempo real.
+ */
+export async function syncAllSupervisorSheets({
+  doctorsList = DOCTORES_EXCEL,
+  staffList = STAFF_EXCEL,
+  supervisoresList = SUPERVISORES_OFICIALES,
+  customConfigs = null,
+} = {}) {
+  const [resPlanilla, resSP] = await Promise.allSettled([
+    syncPlanillaSupervisorSheets({ doctorsList, staffList, supervisoresList }),
+    syncSupervisorSheets({ doctorsList, staffList, supervisoresList, customConfigs }),
+  ]);
+
+  const pSuccess = resPlanilla.status === "fulfilled" && resPlanilla.value?.success;
+  const spSuccess = resSP.status === "fulfilled" && resSP.value?.success;
+
+  if (pSuccess && spSuccess) {
+    const merged = mergeQuincenas(resSP.value.quincena, resPlanilla.value.quincena);
+    return {
+      success: true,
+      quincena: merged,
+      results: [...(resSP.value.results || []), ...(resPlanilla.value.results || [])],
+    };
+  } else if (pSuccess) {
+    return resPlanilla.value;
+  } else if (spSuccess) {
+    return resSP.value;
+  }
+
+  const errP = resPlanilla.status === "rejected" ? resPlanilla.reason : resPlanilla.value?.error;
+  const errSP = resSP.status === "rejected" ? resSP.reason : resSP.value?.error;
+  return {
+    success: false,
+    error: `Error al sincronizar Google Sheets: ${errP || errSP || "Fallo de conexión"}`,
+    results: [],
+  };
+}
+

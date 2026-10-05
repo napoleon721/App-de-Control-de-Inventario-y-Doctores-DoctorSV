@@ -77,6 +77,8 @@ import {
   logMovementToGoogleSheets,
   isGoogleSheetsConfigured,
   syncSupervisorSheets,
+  syncPlanillaSupervisorSheets,
+  syncAllSupervisorSheets,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, getDoctorSupervisorInfo } from "./utils/safeHelpers";
@@ -760,24 +762,24 @@ export default function App() {
     });
   }, [quincena, supervisores, dailyLots, attendanceRecords]);
 
-  // Sincronizar automáticamente con las 3 hojas de Google Sheets al iniciar si no está cargada
+  // Sincronizar automáticamente con Google Sheets (Planilla Mensual y SP) al iniciar
   useEffect(() => {
-    if (!quincena || quincena.source !== "GOOGLE_SHEETS_LIVE") {
-      syncSupervisorSheets({
-        doctorsList: DOCTORES_EXCEL,
-        staffList: STAFF_EXCEL,
-        supervisoresList: supervisores,
-      }).then((res) => {
-        if (res.success && res.quincena) {
-          setQuincena(res.quincena);
-          handleSyncQuincenaWithSpaces(res.quincena);
-        }
-      }).catch((err) => {
-        console.warn("Auto-sync Google Sheets en inicio falló:", err);
-      });
-    } else {
-      handleSyncQuincenaWithSpaces(quincena);
-    }
+    syncAllSupervisorSheets({
+      doctorsList: DOCTORES_EXCEL,
+      staffList: STAFF_EXCEL,
+      supervisoresList: supervisores,
+    }).then((res) => {
+      if (res.success && res.quincena) {
+        setQuincena(res.quincena);
+        saveCloudQuincena(res.quincena);
+        handleSyncQuincenaWithSpaces(res.quincena);
+      }
+    }).catch((err) => {
+      console.warn("Auto-sync Google Sheets en inicio falló:", err);
+      if (quincena) {
+        handleSyncQuincenaWithSpaces(quincena);
+      }
+    });
   }, []);
 
   // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo sin bucles

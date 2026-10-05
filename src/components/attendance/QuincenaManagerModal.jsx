@@ -15,7 +15,10 @@ import {
   DEFAULT_SUPERVISOR_TABS,
   getSupervisorSheetConfigs,
   updateSupervisorSheetUrl,
-  syncSupervisorSheets
+  syncSupervisorSheets,
+  syncPlanillaSupervisorSheets,
+  syncAllSupervisorSheets,
+  DEFAULT_MASTER_PLANILLA_URL
 } from "../../services/googleSheetsService";
 
 export default function QuincenaManagerModal({
@@ -61,17 +64,16 @@ export default function QuincenaManagerModal({
     setIsEditingMasterUrl(false);
   }
 
-  // Manejar sincronización en vivo con el documento maestro de Google Sheets
+  // Manejar sincronización en vivo con el documento maestro de Google Sheets (SP y Planilla)
   async function handleSyncAllFromSheets() {
     setIsSyncingSheets(true);
     setSyncError("");
     try {
-      const res = await syncSupervisorSheets({
+      const res = await syncAllSupervisorSheets({
         doctorsList: DOCTORES_EXCEL,
         staffList: STAFF_EXCEL,
         supervisoresList: supervisores,
         customConfigs: sheetConfigs,
-        masterUrl: masterUrl,
       });
 
       if (res.success && res.quincena) {
