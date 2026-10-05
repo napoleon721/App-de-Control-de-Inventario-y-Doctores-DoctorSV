@@ -35,8 +35,8 @@ export default function AttendanceView({
   onSetAttendance: propOnSetAttendance = null,
   onUpdateSupervisorFranja = null,
   onUpdateSupervisorOfficialShift = null,
-  quincena = null,
   onSaveQuincena = null,
+  onSyncQuincenaDate = null,
   dailyLots = null,
   onSaveDailyLots = null,
   onOpenDailyLots = null,
@@ -92,11 +92,21 @@ export default function AttendanceView({
       });
 
       if (res.success && res.quincena) {
+        const targetDate = res.quincena.dias?.some((d) => d.dateKey === todayISO)
+          ? todayISO
+          : res.quincena.dias?.[0]?.dateKey || todayISO;
+
+        setSelectedDate(targetDate);
+
         if (onSaveQuincena) {
-          onSaveQuincena(res.quincena);
+          onSaveQuincena(res.quincena, targetDate);
         }
+        if (onSyncQuincenaDate) {
+          onSyncQuincenaDate(targetDate);
+        }
+
         setSyncFeedback(
-          `✅ Sincronización exitosa desde Google Sheets: ${res.quincena.dias.length} días actualizados (${res.quincena.estadisticas.totalLineasParseadas} turnos cargados para Emerson, Alfredo y Salvador).`
+          `✅ Sincronización exitosa desde Google Sheets: ${res.quincena.dias.length} días actualizados y puestos vinculados (${res.quincena.estadisticas.totalLineasParseadas} turnos para Emerson, Alfredo y Salvador).`
         );
         setTimeout(() => setSyncFeedback(null), 8000);
       } else {
@@ -109,14 +119,41 @@ export default function AttendanceView({
     }
   }
 
-  // Sincronizar filterHorario cuando cambia el supervisor o cuando se actualiza su franja activa
+  // Asegurar que selectedDate siempre apunte a un día válido de la quincena activa
   useEffect(() => {
+    if (quincena?.dias && quincena.dias.length > 0) {
+      const exists = quincena.dias.some((d) => d.dateKey === selectedDate);
+      if (!exists) {
+        const hasToday = quincena.dias.find((d) => d.dateKey === todayISO);
+        setSelectedDate(hasToday ? todayISO : quincena.dias[0].dateKey);
+      }
+    }
+  }, [quincena, todayISO, selectedDate]);
+
+  // Sincronizar filterHorario con los horarios reales de la quincena en la fecha seleccionada
+  useEffect(() => {
+    if (quincena && quincena.dias && selectedDate && currentSupervisor) {
+      const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
+      const supQuincena = diaObj?.porSupervisor?.[currentSupervisor.id];
+      if (supQuincena && Array.isArray(supQuincena.doctores) && supQuincena.doctores.length > 0) {
+        if (filterHorario !== "TODOS") {
+          const hasMatchingDoc = supQuincena.doctores.some(
+            (d) => d.horario && isSameHorario(d.horario, filterHorario)
+          );
+          if (!hasMatchingDoc) {
+            setFilterHorario("TODOS");
+          }
+        }
+        return;
+      }
+    }
+
     if (currentSupervisor?.activeFranja) {
       setFilterHorario(currentSupervisor.activeFranja);
     } else {
       setFilterHorario("TODOS");
     }
-  }, [currentSupervisor?.id, currentSupervisor?.activeFranja]);
+  }, [currentSupervisor?.id, currentSupervisor?.activeFranja, quincena, selectedDate]);
 
   function handleFilterHorarioChange(newFranja) {
     setFilterHorario(newFranja);
@@ -235,88 +272,55 @@ export default function AttendanceView({
 
   // Lista de nombres de médicos asignados al supervisor actual (con soporte multi-franja)
   const currentRosterNames = useMemo(() => {
-    // Función auxiliar para obtener médicos asignados a una franja específica
-    const getDocsForShift = (shift) => {
-      // a. Override guardado específicamente para este supervisor en esta fecha y franja
-      const dateFranjaKey = shift && selectedDate ? `${currentSupervisor.id}__${selectedDate}__${shift}` : null;
-      if (dateFranjaKey && activeRosters[dateFranjaKey] && Array.isArray(activeRosters[dateFranjaKey]) && activeRosters[dateFranjaKey].length > 0) {
-        return activeRosters[dateFranjaKey];
-      }
-      // b. Quincena Oficial asignada para esta fecha y supervisor en esta franja
-      if (quincena && quincena.dias && selectedDate) {
-        const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
-        const supQuincena = diaObj?.porSupervisor?.[currentSupervisor.id];
-        if (supQuincena && Array.isArray(supQuincena.doctores)) {
-          const shiftDocs = supQuincena.doctores
-            .filter((d) => !shift || !d.horario || isSameHorario(d.horario, shift))
-            .map((d) => d.nombre);
-          if (shiftDocs.length > 0) return shiftDocs;
-        }
-      }
-      // c. Override guardado por franja
-      const franjaKey = shift ? `${currentSupervisor.id}__${shift}` : null;
-      if (franjaKey && activeRosters[franjaKey] && Array.isArray(activeRosters[franjaKey]) && activeRosters[franjaKey].length > 0) {
-        return activeRosters[franjaKey];
-      }
-      return [];
-    };
-
-    // 1. Si hay una franja horaria seleccionada distinta de TODOS
-    if (filterHorario && filterHorario !== "TODOS") {
-      const shiftDocs = getDocsForShift(filterHorario);
-      if (shiftDocs.length > 0) return shiftDocs;
-    }
-
-    // 2. Si el filtro es TODOS y el supervisor tiene múltiples franjas asignadas (ej. 2pm-10pm y 4pm-10pm)
-    if ((!filterHorario || filterHorario === "TODOS") && currentSupervisorFranjas.length > 1) {
-      const combinedDocs = new Set();
-      currentSupervisorFranjas.forEach((shift) => {
-        const docs = getDocsForShift(shift);
-        docs.forEach((name) => combinedDocs.add(name));
-      });
-      if (combinedDocs.size > 0) {
-        return Array.from(combinedDocs);
-      }
-    }
-
-    // 3. Quincena Oficial completa para este supervisor en esta fecha
+    // 1. PRIORIDAD ABSOLUTA: Quincena Oficial de Google Sheets para esta fecha y supervisor
     if (quincena && quincena.dias && selectedDate) {
       const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
-      const supQuincena = diaObj?.porSupervisor?.[currentSupervisor.id];
-      if (supQuincena && Array.isArray(supQuincena.doctorNames) && supQuincena.doctorNames.length > 0) {
-        return supQuincena.doctorNames;
+      if (diaObj && diaObj.porSupervisor && diaObj.porSupervisor[currentSupervisor?.id]) {
+        const supQuincena = diaObj.porSupervisor[currentSupervisor.id];
+        const allDocs = Array.isArray(supQuincena.doctores) ? supQuincena.doctores : [];
+
+        // Si se filtró por una franja específica
+        if (filterHorario && filterHorario !== "TODOS") {
+          return allDocs
+            .filter((d) => !d.horario || isSameHorario(d.horario, filterHorario))
+            .map((d) => d.nombre);
+        }
+
+        // Si es TODOS, devolver exactamente todos los médicos de este supervisor hoy
+        return allDocs.map((d) => d.nombre);
       }
     }
 
-    // 4. Overrides generales por fecha o por supervisor
-    const dateOnlyKey = selectedDate ? `${currentSupervisor.id}__${selectedDate}` : null;
+    // 2. Si no hay quincena para este día, buscar en overrides o fallbacks
+    const dateFranjaKey = filterHorario && filterHorario !== "TODOS" && selectedDate ? `${currentSupervisor?.id}__${selectedDate}__${filterHorario}` : null;
+    if (dateFranjaKey && activeRosters[dateFranjaKey] && Array.isArray(activeRosters[dateFranjaKey]) && activeRosters[dateFranjaKey].length > 0) {
+      return activeRosters[dateFranjaKey];
+    }
+
+    const dateOnlyKey = selectedDate ? `${currentSupervisor?.id}__${selectedDate}` : null;
     if (dateOnlyKey && activeRosters[dateOnlyKey] && Array.isArray(activeRosters[dateOnlyKey]) && activeRosters[dateOnlyKey].length > 0) {
       return activeRosters[dateOnlyKey];
     }
-    if (activeRosters[currentSupervisor.id] && Array.isArray(activeRosters[currentSupervisor.id]) && activeRosters[currentSupervisor.id].length > 0) {
+
+    if (activeRosters[currentSupervisor?.id] && Array.isArray(activeRosters[currentSupervisor.id]) && activeRosters[currentSupervisor.id].length > 0) {
       return activeRosters[currentSupervisor.id];
     }
 
-    // 5. Médicos físicamente sentados en este lote
-    const docsInMyLote = supervisorSpaces.filter((s) => s.doctor).map((s) => s.doctor);
+    const docsInMyLote = (supervisorSpaces || []).filter((s) => s.doctor).map((s) => s.doctor);
     if (docsInMyLote.length > 0) {
       return docsInMyLote;
     }
 
-    // 6. Base oficial predeterminada de doctores para este supervisor y franja
     const defaultRosters = getDefaultSupervisorRosters(DOCTORES_EXCEL);
     if (filterHorario && filterHorario !== "TODOS") {
-      const franjaDefault = defaultRosters[`${currentSupervisor.id}__${filterHorario}`];
-      if (Array.isArray(franjaDefault) && franjaDefault.length > 0) {
-        return franjaDefault;
-      }
+      const franjaDefault = defaultRosters[`${currentSupervisor?.id}__${filterHorario}`];
+      if (Array.isArray(franjaDefault) && franjaDefault.length > 0) return franjaDefault;
     }
-    const supDefault = defaultRosters[currentSupervisor.id];
-    if (Array.isArray(supDefault) && supDefault.length > 0) {
-      return supDefault;
-    }
+    const supDefault = defaultRosters[currentSupervisor?.id];
+    if (Array.isArray(supDefault) && supDefault.length > 0) return supDefault;
+
     return [];
-  }, [activeRosters, currentSupervisor, filterHorario, supervisorSpaces, quincena, selectedDate, currentSupervisorFranjas]);
+  }, [quincena, selectedDate, currentSupervisor, filterHorario, activeRosters, supervisorSpaces]);
 
   function handleSaveSupervisorRoster(newNames, franja = null, transferredDocs = []) {
     const franjaTarget = franja || (filterHorario !== "TODOS" ? filterHorario : null);
@@ -528,8 +532,16 @@ export default function AttendanceView({
       }
     });
 
-    // 2. Incluir cualquier médico sentado físicamente en este lote O(1)
-    (supervisorSpaces || []).forEach((s) => {
+    // 2. Solo si NO hay quincena activa para este supervisor hoy, incluir médicos físicos o de asistencia
+    const hasQuincenaData = Boolean(
+      quincena?.dias?.some(
+        (d) => d.dateKey === selectedDate && d.porSupervisor && d.porSupervisor[currentSupervisor?.id]
+      )
+    );
+
+    if (!hasQuincenaData) {
+      // 2. Incluir cualquier médico sentado físicamente en este lote O(1)
+      (supervisorSpaces || []).forEach((s) => {
       if (s.doctor) {
         const cleanDocName = String(s.doctor).toLowerCase().trim();
         const normDocName = normalizeDocName(s.doctor);
@@ -620,9 +632,10 @@ export default function AttendanceView({
         if (normObj) addedNames.add(normObj);
       }
     });
+    }
 
     return list;
-  }, [currentRosterNames, doctorsMap, spacesByDoctor, attendanceMap, currentSupervisor, supervisorSpaces, filterHorario]);
+  }, [currentRosterNames, doctorsMap, spacesByDoctor, attendanceMap, currentSupervisor, supervisorSpaces, filterHorario, quincena, selectedDate]);
 
   // Médicos filtrados
   const filteredBatch = useMemo(() => {
@@ -1011,7 +1024,12 @@ export default function AttendanceView({
               <button
                 key={dia.dateKey}
                 type="button"
-                onClick={() => setSelectedDate(dia.dateKey)}
+                onClick={() => {
+                  setSelectedDate(dia.dateKey);
+                  if (onSyncQuincenaDate) {
+                    onSyncQuincenaDate(dia.dateKey);
+                  }
+                }}
                 className={`shrink-0 px-3 py-1.5 rounded-xl border text-left transition-all relative flex items-center gap-2 ${
                   isSelected
                     ? "bg-[#0048B5] text-white border-[#0048B5] shadow-xs ring-2 ring-blue-500/20"

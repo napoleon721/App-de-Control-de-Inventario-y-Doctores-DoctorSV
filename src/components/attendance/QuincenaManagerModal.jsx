@@ -78,10 +78,14 @@ export default function QuincenaManagerModal({
 
       if (res.success && res.quincena) {
         setSyncResults(res.results);
-        onSaveQuincena(res.quincena);
-        if (res.quincena.dias?.[0]?.dateKey) {
-          setSelectedDayKey(res.quincena.dias[0].dateKey);
-        }
+        const todayStr = new Date().toLocaleDateString("en-CA");
+        const targetDate = res.quincena.dias?.some((d) => d.dateKey === todayStr)
+          ? todayStr
+          : res.quincena.dias?.[0]?.dateKey || "2026-10-01";
+
+        onSaveQuincena(res.quincena, targetDate);
+        setSelectedDayKey(targetDate);
+        if (onSelectDate) onSelectDate(targetDate);
       } else {
         setSyncError(res.error || "No se pudo sincronizar la información.");
       }

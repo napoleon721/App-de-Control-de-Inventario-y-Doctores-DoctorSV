@@ -33,7 +33,7 @@ export const DEFAULT_SUPERVISOR_SHEETS = {
 
 // URL del Webhook de Google Apps Script (cuando el usuario la configure en .env o localStorage)
 const DEFAULT_APPS_SCRIPT_URL =
-  import.meta.env.VITE_GOOGLE_SHEETS_API_URL ||
+  (typeof import.meta !== "undefined" && import.meta?.env?.VITE_GOOGLE_SHEETS_API_URL) ||
   "https://script.google.com/macros/s/AKfycbxUpY1ZWCJTN8ahWDTE7WvwFr-D4x_v8wAIwCBr5rFob4_ls8CjnPpt042U1Q-_vc0oeA/exec";
 
 // Claves de persistencia para configuración dinámica
@@ -493,6 +493,23 @@ export async function syncSupervisorSheets({
       });
     }
   }
+
+  const successfulSups = results.filter((r) => r.success);
+
+  // Garantizar que cada supervisor tenga su entrada oficial en cada uno de los 15 días (incluso si tiene 0 médicos)
+  Object.values(mergedDiasMap).forEach((dia) => {
+    successfulSups.forEach((sup) => {
+      if (!dia.porSupervisor[sup.supId]) {
+        dia.porSupervisor[sup.supId] = {
+          supervisorId: sup.supId,
+          supervisorNombre: sup.nombre,
+          doctorNames: [],
+          doctores: [],
+          totalDoctores: 0,
+        };
+      }
+    });
+  });
 
   const mergedDias = Object.values(mergedDiasMap).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   if (mergedDias.length === 0) {

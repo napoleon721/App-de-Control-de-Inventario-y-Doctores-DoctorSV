@@ -47,7 +47,7 @@ import {
   saveCloudDailyLots,
 } from "./services/firestoreSync";
 import { generateDefaultQuincena } from "./constants/quincenaDefault";
-import { DEFAULT_DAILY_LOTS } from "./utils/dailyLotsParser";
+import { DEFAULT_DAILY_LOTS, findDailyLotsForSupervisor } from "./utils/dailyLotsParser";
 import { logoutFromFirebase, subscribeToAuthChanges } from "./services/firebaseAuth";
 import {
   fetchSpacesFromGoogleSheets,
@@ -55,6 +55,7 @@ import {
   updateSpacesBatchInGoogleSheets,
   logMovementToGoogleSheets,
   isGoogleSheetsConfigured,
+  syncSupervisorSheets,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, getDoctorSupervisorInfo } from "./utils/safeHelpers";
@@ -621,6 +622,124 @@ export default function App() {
       console.error("Error saving quincena:", e);
     }
   }, [quincena]);
+
+  // Sincronizar automáticamente cubículos físicos de espacios según la nómina quincenal activa
+  const handleSyncQuincenaWithSpaces = React.useCallback((targetQuincena, targetDateKey = null) => {
+    const q = targetQuincena || quincena;
+    if (!q || !Array.isArray(q.dias) || q.dias.length === 0) return;
+
+    const todayStr = new Date().toLocaleDateString("en-CA");
+    const activeDateKey = targetDateKey ||
+      (q.dias.some((d) => d.dateKey === todayStr) ? todayStr : q.dias[0].dateKey);
+
+    const diaObj = q.dias.find((d) => d.dateKey === activeDateKey);
+    if (!diaObj || !diaObj.porSupervisor) return;
+
+    const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+    const assignmentsBySpace = new Map();
+    const assignedSupervisors = Object.keys(diaObj.porSupervisor);
+
+    assignedSupervisors.forEach((supId) => {
+      const supData = diaObj.porSupervisor[supId];
+      if (!supData || !Array.isArray(supData.doctores)) return;
+
+      const supObj = (supervisores || SUPERVISORES_OFICIALES).find((s) => s.id === supId);
+      if (!supObj) return;
+
+      const supLots = findDailyLotsForSupervisor(dailyLots, activeDateKey, supId, supObj.nombre, null);
+      let start = Number(supObj.bloqueInicio);
+      let end = Number(supObj.bloqueFin);
+
+      if (supLots && supLots.length > 0) {
+        start = Number(supLots[0].bloqueInicio);
+        end = Number(supLots[supLots.length - 1].bloqueFin);
+      }
+
+      supData.doctores.forEach((doc, idx) => {
+        const targetSpaceId = start + idx;
+        if (targetSpaceId <= end) {
+          assignmentsBySpace.set(targetSpaceId, {
+            doctor: doc.nombre,
+            horario: doc.horario || supObj.horario || "02:00 PM – 10:00 PM",
+            supervisorId: supId,
+            supervisorNombre: supObj.nombre || supData.supervisorNombre,
+          });
+        }
+      });
+    });
+
+    setSpaces((prevSpaces) => {
+      const next = prevSpaces.map((s) => {
+        const sid = Number(s.id);
+        if (assignmentsBySpace.has(sid)) {
+          const assign = assignmentsBySpace.get(sid);
+          return {
+            ...s,
+            doctor: assign.doctor,
+            horario: assign.horario,
+            supervisorId: assign.supervisorId,
+            supervisorNombre: assign.supervisorNombre,
+            estado: "OCUPADO",
+            marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+            modelo: s.modelo || "OptiPlex 3080",
+            ultimoMovimiento: nowTime,
+          };
+        }
+
+        const belongsToSyncedSup = (supervisores || SUPERVISORES_OFICIALES).find(
+          (sp) => assignedSupervisors.includes(sp.id) && sid >= Number(sp.bloqueInicio) && sid <= Number(sp.bloqueFin)
+        );
+        if (belongsToSyncedSup && s.doctor) {
+          return {
+            ...s,
+            doctor: null,
+            horario: null,
+            supervisorId: null,
+            supervisorNombre: null,
+            estado: "DISPONIBLE",
+            categoria: sid === 1 ? null : s.categoria,
+            marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
+            modelo: s.modelo || "OptiPlex 3080",
+            ultimoMovimiento: nowTime,
+          };
+        }
+        return s;
+      });
+
+      saveCloudSpaces(next, myClientId.current, true);
+      return next;
+    });
+
+    setAttendanceRecords((prev) => {
+      const next = { ...prev };
+      assignmentsBySpace.forEach((assign) => {
+        if (!next[assign.doctor] || next[assign.doctor] === "PENDIENTE") {
+          next[assign.doctor] = "PRESENTE";
+        }
+      });
+      return next;
+    });
+  }, [quincena, supervisores, dailyLots]);
+
+  // Sincronizar automáticamente con las 3 hojas de Google Sheets al iniciar si no está cargada
+  useEffect(() => {
+    if (!quincena || quincena.source !== "GOOGLE_SHEETS_LIVE") {
+      syncSupervisorSheets({
+        doctorsList: DOCTORES_EXCEL,
+        staffList: STAFF_EXCEL,
+        supervisoresList: supervisores,
+      }).then((res) => {
+        if (res.success && res.quincena) {
+          setQuincena(res.quincena);
+          handleSyncQuincenaWithSpaces(res.quincena);
+        }
+      }).catch((err) => {
+        console.warn("Auto-sync Google Sheets en inicio falló:", err);
+      });
+    } else {
+      handleSyncQuincenaWithSpaces(quincena);
+    }
+  }, []);
 
   // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo sin bucles
   useEffect(() => {
@@ -2622,7 +2741,11 @@ export default function App() {
               currentUser={currentUser}
               attendanceRecords={attendanceRecords}
               quincena={quincena}
-              onSaveQuincena={(newQ) => setQuincena(newQ)}
+              onSaveQuincena={(newQ, targetDateKey = null) => {
+                setQuincena(newQ);
+                handleSyncQuincenaWithSpaces(newQ, targetDateKey);
+              }}
+              onSyncQuincenaDate={(dateKey) => handleSyncQuincenaWithSpaces(quincena, dateKey)}
               dailyLots={dailyLots}
               onSaveDailyLots={(newDL) => setDailyLots(newDL)}
               onOpenDailyLots={() => setDailyLotsModalOpen(true)}
