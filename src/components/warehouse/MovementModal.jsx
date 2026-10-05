@@ -2,17 +2,35 @@ import React, { useState } from "react";
 import { X, Save, PlusCircle, PackagePlus, ArrowDownRight } from "lucide-react";
 import { BODEGA_TIPOS } from "../../constants/tokens";
 
-export default function MovementModal({ onClose, onRegister, spaces = [] }) {
-  const [equipo, setEquipo] = useState("PC");
-  const [accion, setAccion] = useState("Reemplazo");
-  const [cantidad, setCantidad] = useState(1);
-  const [espacio, setEspacio] = useState(spaces[0]?.id || "");
-  const [origen, setOrigen] = useState("BODEGA");
-  const [destino, setDestino] = useState(spaces[0]?.id ? `Puesto #${spaces[0].id}` : "Puesto");
-  const [falla, setFalla] = useState("");
-  const [obs, setObs] = useState("");
+export default function MovementModal({ onClose, onRegister, spaces = [], bodegaStock = [], initialData = {} }) {
+  const [equipo, setEquipo] = useState(initialData.equipo || "PC");
+  const [accion, setAccion] = useState(initialData.accion || "Reemplazo");
+  const [cantidad, setCantidad] = useState(initialData.cantidad || 1);
+  const defaultSpace = initialData.espacio !== undefined ? initialData.espacio : (spaces[0]?.id || "");
+  const [espacio, setEspacio] = useState(defaultSpace);
+  const [origen, setOrigen] = useState(
+    initialData.origen || (initialData.accion === "Ingreso" ? "PROVEEDOR" : "BODEGA")
+  );
+  const [destino, setDestino] = useState(
+    initialData.destino ||
+      (initialData.accion === "Ingreso"
+        ? "BODEGA"
+        : defaultSpace
+        ? `Puesto #${defaultSpace}`
+        : "Puesto")
+  );
+  const [falla, setFalla] = useState(initialData.falla || "");
+  const [obs, setObs] = useState(initialData.obs || "");
 
   const isIngreso = accion === "Ingreso";
+
+  const curStock = React.useMemo(() => {
+    if (!bodegaStock || !Array.isArray(bodegaStock)) return 0;
+    const match = bodegaStock.find(
+      (b) => b.key === equipo || (equipo === "MAUSE" && b.key === "MOUSE") || (equipo === "MOUSE" && b.key === "MAUSE")
+    );
+    return match?.actual ?? 0;
+  }, [bodegaStock, equipo]);
 
   function handleAccionChange(newAccion) {
     setAccion(newAccion);
@@ -56,6 +74,16 @@ export default function MovementModal({ onClose, onRegister, spaces = [] }) {
   function handleSubmit(e) {
     e.preventDefault();
     const qty = Math.max(1, parseInt(cantidad, 10) || 1);
+
+    if (!isIngreso && String(origen || "").toUpperCase().includes("BODEGA") && curStock < qty) {
+      if (
+        !window.confirm(
+          `⚠️ Existencias Bajas en Bodega:\n\nActualmente hay ${curStock} unidad(es) de ${equipo} en Bodega, y estás registrando una salida de ${qty} unidad(es).\n\n¿Deseas registrar este movimiento de todas formas?`
+        )
+      ) {
+        return;
+      }
+    }
 
     const newMovement = {
       id: `mov-${Date.now()}`,
@@ -122,9 +150,14 @@ export default function MovementModal({ onClose, onRegister, spaces = [] }) {
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div>
-              <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Tipo de Hardware
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Hardware
+                </label>
+                <span className={`text-[10px] font-bold font-mono px-1.5 py-0.2 rounded ${curStock > 0 ? "text-[#0048B5] bg-blue-50" : "text-rose-700 bg-rose-50"}`}>
+                  Bodega: {curStock}
+                </span>
+              </div>
               <select
                 value={equipo}
                 onChange={(e) => setEquipo(e.target.value)}

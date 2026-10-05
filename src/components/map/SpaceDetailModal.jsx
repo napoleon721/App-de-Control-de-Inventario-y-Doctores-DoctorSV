@@ -19,11 +19,53 @@ export default function SpaceDetailModal({
   rosters = {},
   spaces = [],
   customStaff = [],
+  bodegaStock = [],
 }) {
   const mountTimeRef = useRef(Date.now());
   const backdropMouseDownRef = useRef(false);
   const [form, setForm] = useState({ ...space });
   const [doctorSearch, setDoctorSearch] = useState("");
+
+  const getBodegaItemStock = (itemKey) => {
+    if (!bodegaStock || !Array.isArray(bodegaStock)) return 0;
+    const match = bodegaStock.find(
+      (b) =>
+        b.key === itemKey ||
+        (itemKey === "MAUSE" && (b.key === "MOUSE" || b.key === "MAUSE")) ||
+        (itemKey === "MOUSE" && (b.key === "MOUSE" || b.key === "MAUSE"))
+    );
+    return match?.actual ?? 0;
+  };
+
+  const PERIPHERAL_BODEGA_MAP = {
+    mouse: "MAUSE",
+    headset: "HEADSET",
+    hub: "HUB",
+  };
+
+  function handleTogglePeripheral(key, label) {
+    const isCurrentlyChecked = Boolean(form[key]);
+    const bodegaKey = PERIPHERAL_BODEGA_MAP[key];
+    const stock = getBodegaItemStock(bodegaKey);
+    const hadOriginally = Boolean(space && space[key]);
+
+    if (!isCurrentlyChecked) {
+      if (!hadOriginally && stock <= 0) {
+        alert(
+          `⚠️ Stock Agotado en Bodega Central:\n\nNo hay existencias disponibles de ${label} en Bodega (Stock: 0).\nPor favor registra un ingreso de inventario en el módulo de Bodega antes de asignarlo a un cubículo.`
+        );
+        return;
+      }
+      updateField({ [key]: true });
+    } else {
+      updateField({ [key]: false });
+    }
+  }
+
+  const hadPcOriginally = Boolean(space && space.marca && space.marca !== "NO PC");
+  const hadMonitorOriginally = Boolean(space && space.monitor && (space.monitor.marca || space.monitor.activo || space.monitor === true));
+  const pcStock = getBodegaItemStock("PC");
+  const monitorStock = getBodegaItemStock("MONITOR");
 
   useEffect(() => {
     setForm({ ...space });
@@ -637,19 +679,43 @@ export default function SpaceDetailModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* PC */}
             <div className="rounded-2xl border border-slate-200 p-3.5 bg-slate-50/70">
-              <p className="mb-2.5 flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-wider text-[#0048B5]">
-                <Laptop size={14} /> Computadora (PC)
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-wider text-[#0048B5]">
+                  <Laptop size={14} /> Computadora (PC)
+                </p>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    pcStock > 0 ? "bg-blue-100 text-[#0048B5]" : "bg-rose-100 text-rose-700"
+                  }`}
+                  title={`Existencias actuales en Bodega Central: ${pcStock}`}
+                >
+                  Bodega: {pcStock} {pcStock === 1 ? "PC" : "PCs"}
+                </span>
+              </div>
               <label className="mb-1 block text-[10.5px] font-semibold text-slate-500">Marca</label>
               <select
                 value={form.marca || ""}
-                onChange={(e) => updateField({ marca: e.target.value || null })}
+                onChange={(e) => {
+                  const newMarca = e.target.value || null;
+                  if (newMarca && newMarca !== "NO PC" && !hadPcOriginally && pcStock <= 0) {
+                    alert(
+                      "⚠️ Stock Agotado en Bodega Central:\n\nNo hay computadoras (PC) disponibles en Bodega (Stock: 0).\nPor favor registra un ingreso de PCs en Inventario Bodega antes de asignar una a este cubículo."
+                    );
+                    return;
+                  }
+                  updateField({ marca: newMarca });
+                }}
                 className="mb-2 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium"
               >
                 <option value="">— Sin PC —</option>
-                {MARCAS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {MARCAS.map((m) => {
+                  const isBlocked = !hadPcOriginally && pcStock <= 0;
+                  return (
+                    <option key={m} value={m} disabled={isBlocked}>
+                      {m} {isBlocked ? "— (Sin stock en bodega)" : ""}
+                    </option>
+                  );
+                })}
               </select>
 
               <label className="mb-1 block text-[10.5px] font-semibold text-slate-500">Modelo</label>
@@ -673,25 +739,47 @@ export default function SpaceDetailModal({
 
             {/* Monitor & Peripherals */}
             <div className="rounded-2xl border border-slate-200 p-3.5 bg-slate-50/70">
-              <p className="mb-2.5 flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-wider text-[#0095FF]">
-                <Monitor size={14} /> Monitor & Periféricos
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="flex items-center gap-1.5 text-[11.5px] font-bold uppercase tracking-wider text-[#0095FF]">
+                  <Monitor size={14} /> Monitor & Periféricos
+                </p>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    monitorStock > 0 ? "bg-sky-100 text-sky-800" : "bg-rose-100 text-rose-700"
+                  }`}
+                  title={`Existencias actuales en Bodega Central: ${monitorStock}`}
+                >
+                  Bodega: {monitorStock} {monitorStock === 1 ? "Monitor" : "Monitores"}
+                </span>
+              </div>
               <label className="mb-1 block text-[10.5px] font-semibold text-slate-500">Marca Monitor</label>
               <select
                 value={form.monitor?.marca || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const newMarca = e.target.value;
+                  if (newMarca && !hadMonitorOriginally && monitorStock <= 0) {
+                    alert(
+                      "⚠️ Stock Agotado en Bodega Central:\n\nNo hay monitores disponibles en Bodega (Stock: 0).\nPor favor registra un ingreso de monitores en Inventario Bodega antes de asignar uno a este cubículo."
+                    );
+                    return;
+                  }
                   updateField({
-                    monitor: e.target.value
-                      ? { ...(form.monitor || {}), marca: e.target.value }
+                    monitor: newMarca
+                      ? { ...(form.monitor || {}), marca: newMarca }
                       : null,
-                  })
-                }
+                  });
+                }}
                 className="mb-2 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium"
               >
                 <option value="">— Sin monitor —</option>
-                {MARCAS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {MARCAS.map((m) => {
+                  const isBlocked = !hadMonitorOriginally && monitorStock <= 0;
+                  return (
+                    <option key={m} value={m} disabled={isBlocked}>
+                      {m} {isBlocked ? "— (Sin stock en bodega)" : ""}
+                    </option>
+                  );
+                })}
               </select>
 
               <label className="mb-1 block text-[10.5px] font-semibold text-slate-500">Activo Monitor</label>
@@ -721,32 +809,49 @@ export default function SpaceDetailModal({
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    ["mouse", Mouse, "Mouse"],
-                    ["headset", Headphones, "Headset"],
-                    ["hub", Cable, "Hub USB"],
-                  ].map(([key, Icon, label]) => {
+                    ["mouse", Mouse, "Mouse", "MAUSE"],
+                    ["headset", Headphones, "Headset", "HEADSET"],
+                    ["hub", Cable, "Hub USB", "HUB"],
+                  ].map(([key, Icon, label, bodegaKey]) => {
                     const isChecked = !!form[key];
+                    const hadOriginally = Boolean(space && space[key]);
+                    const stock = getBodegaItemStock(bodegaKey);
+                    const isOutOfStock = !isChecked && !hadOriginally && stock <= 0;
+
                     return (
                       <button
                         key={key}
                         type="button"
-                        onClick={() => updateField({ [key]: !isChecked })}
-                        className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all duration-150 cursor-pointer shadow-2xs active:scale-95 ${
+                        onClick={() => handleTogglePeripheral(key, label)}
+                        className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all duration-150 shadow-2xs ${
                           isChecked
-                            ? "bg-emerald-50 border-emerald-300 text-emerald-800 ring-1 ring-emerald-400/30"
-                            : "bg-slate-100 border-slate-200 text-slate-400 hover:bg-slate-200/70"
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-800 ring-1 ring-emerald-400/30 cursor-pointer active:scale-95"
+                            : isOutOfStock
+                            ? "bg-rose-50/50 border-dashed border-rose-300 text-slate-400 cursor-not-allowed opacity-80"
+                            : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/70 cursor-pointer active:scale-95"
                         }`}
+                        title={
+                          isChecked
+                            ? `${label}: Asignado en puesto (Clic para desasignar y enviar a Bodega)`
+                            : isOutOfStock
+                            ? `Sin existencias de ${label} en Bodega (Stock: 0)`
+                            : `${label}: ${stock} disponible(s) en Bodega. Clic para asignar al puesto`
+                        }
                       >
                         <div className="flex items-center gap-1 mb-1">
-                          <Icon size={14} className={isChecked ? "text-emerald-600" : "text-slate-400"} />
+                          <Icon size={14} className={isChecked ? "text-emerald-600" : isOutOfStock ? "text-rose-400" : "text-slate-500"} />
                           <span className="text-[11.5px] font-bold">{label}</span>
                         </div>
                         <span
                           className={`text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full ${
-                            isChecked ? "bg-emerald-200/80 text-emerald-900" : "bg-slate-200 text-slate-600"
+                            isChecked
+                              ? "bg-emerald-200/80 text-emerald-900 font-bold"
+                              : isOutOfStock
+                              ? "bg-rose-100 text-rose-700 font-bold"
+                              : "bg-blue-100 text-[#0048B5] font-bold"
                           }`}
                         >
-                          {isChecked ? "✓ En puesto" : "✗ Falta"}
+                          {isChecked ? "✓ En puesto" : isOutOfStock ? "Agotado (0)" : `Bodega: ${stock}`}
                         </span>
                       </button>
                     );

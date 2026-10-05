@@ -9,17 +9,38 @@ import SpaceDetailModal from "./components/map/SpaceDetailModal";
 import ClaimSpaceModal from "./components/map/ClaimSpaceModal";
 import AuthPortal from "./components/auth/AuthPortal";
 
-// Carga diferida (Code-Splitting) para vistas y modales secundarios
-const WarehouseView = lazy(() => import("./components/warehouse/WarehouseView"));
-const DoctorsView = lazy(() => import("./components/doctors/DoctorsView"));
-const HistoryView = lazy(() => import("./components/history/HistoryView"));
-const AttendanceView = lazy(() => import("./components/attendance/AttendanceView"));
-const QuickCheckInModal = lazy(() => import("./components/attendance/QuickCheckInModal"));
-const ShiftConfigModal = lazy(() => import("./components/config/ShiftConfigModal"));
-const SupervisorConfigModal = lazy(() => import("./components/config/SupervisorConfigModal"));
-const DailyLotsManagerModal = lazy(() => import("./components/config/DailyLotsManagerModal"));
-const LiveAttendanceReportModal = lazy(() => import("./components/attendance/LiveAttendanceReportModal"));
-const GoogleSheetsConfigModal = lazy(() => import("./components/config/GoogleSheetsConfigModal"));
+// Carga diferida con recuperación automática ante nuevas versiones y hash mismatch
+function lazyWithRetry(componentImport) {
+  return lazy(async () => {
+    const retryKey = "doctorsv_chunk_retry_" + window.location.pathname;
+    const pageHasBeenRetried = window.sessionStorage.getItem(retryKey) === "true";
+    try {
+      const component = await componentImport();
+      window.sessionStorage.removeItem(retryKey);
+      return component;
+    } catch (error) {
+      console.warn("DoctorSV: Error al importar chunk dinámico. Reintentando con recarga limpia...", error);
+      if (!pageHasBeenRetried) {
+        window.sessionStorage.setItem(retryKey, "true");
+        window.location.reload();
+        return { default: () => null };
+      }
+      throw error;
+    }
+  });
+}
+
+// Vistas y modales secundarios diferidos con auto-recuperación
+const WarehouseView = lazyWithRetry(() => import("./components/warehouse/WarehouseView"));
+const DoctorsView = lazyWithRetry(() => import("./components/doctors/DoctorsView"));
+const HistoryView = lazyWithRetry(() => import("./components/history/HistoryView"));
+const AttendanceView = lazyWithRetry(() => import("./components/attendance/AttendanceView"));
+const QuickCheckInModal = lazyWithRetry(() => import("./components/attendance/QuickCheckInModal"));
+const ShiftConfigModal = lazyWithRetry(() => import("./components/config/ShiftConfigModal"));
+const SupervisorConfigModal = lazyWithRetry(() => import("./components/config/SupervisorConfigModal"));
+const DailyLotsManagerModal = lazyWithRetry(() => import("./components/config/DailyLotsManagerModal"));
+const LiveAttendanceReportModal = lazyWithRetry(() => import("./components/attendance/LiveAttendanceReportModal"));
+const GoogleSheetsConfigModal = lazyWithRetry(() => import("./components/config/GoogleSheetsConfigModal"));
 
 import {
   BRAND, ESTADOS, BODEGA_TIPOS, HISTORIAL_MOCK, HORARIOS, buildInitialSpaces,
