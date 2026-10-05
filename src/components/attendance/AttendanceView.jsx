@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
-  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar, LogOut, RotateCcw, Copy
+  Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar, LogOut, RotateCcw, Copy,
+  ShieldCheck, Edit3, FileText
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
@@ -9,6 +10,7 @@ import { DOCTORES_EXCEL, STAFF_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFI
 import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
 import PlanillaManagerModal from "./PlanillaManagerModal";
+import JustifyAbsenceModal from "./JustifyAbsenceModal";
 import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 import { findDailyLotForSupervisor, findDailyLotsForSupervisor } from "../../utils/dailyLotsParser";
 import { syncSupervisorSheets, syncPlanillaSupervisorSheets, mergeQuincenas } from "../../services/googleSheetsService";
@@ -423,6 +425,78 @@ export default function AttendanceView({
     });
   }
 
+  // Control de Justificaciones de Inasistencia (motivo estructurado, soporte y notas)
+  const [justifyingDoctor, setJustifyingDoctor] = useState(null);
+  const [attendanceJustifications, setAttendanceJustifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem("DOCTORSV_ATTENDANCE_JUSTIFICATIONS_V1");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  function getJustificationForDoctor(docName) {
+    if (!docName || !attendanceJustifications) return null;
+    if (attendanceJustifications[docName]) return attendanceJustifications[docName];
+    const matchKey = Object.keys(attendanceJustifications).find((k) => isSameDoctor(k, docName));
+    return matchKey ? attendanceJustifications[matchKey] : null;
+  }
+
+  function handleSaveDoctorJustification(justificationData) {
+    if (!justifyingDoctor?.nombre) return;
+    const docName = justifyingDoctor.nombre;
+
+    setAttendanceJustifications((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (isSameDoctor(k, docName)) delete next[k];
+      });
+      next[docName] = justificationData;
+      try {
+        localStorage.setItem("DOCTORSV_ATTENDANCE_JUSTIFICATIONS_V1", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    handleSetAttendance(docName, "JUSTIFICADO");
+
+    const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, docName));
+    const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (justifyingDoctor.espacio || null);
+    if (onUnassignDoctor) {
+      onUnassignDoctor(docName, spaceToFree, "JUSTIFICADO");
+    }
+
+    setJustifyingDoctor(null);
+  }
+
+  function handleSaveDoctorUnjustified(unjustifiedData) {
+    if (!justifyingDoctor?.nombre) return;
+    const docName = justifyingDoctor.nombre;
+
+    setAttendanceJustifications((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (isSameDoctor(k, docName)) delete next[k];
+      });
+      next[docName] = unjustifiedData;
+      try {
+        localStorage.setItem("DOCTORSV_ATTENDANCE_JUSTIFICATIONS_V1", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    handleSetAttendance(docName, "AUSENTE");
+
+    const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, docName));
+    const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (justifyingDoctor.espacio || null);
+    if (onUnassignDoctor) {
+      onUnassignDoctor(docName, spaceToFree, "AUSENTE");
+    }
+
+    setJustifyingDoctor(null);
+  }
+
   // Conteo de puestos ocupados en el lote (excluye estaciones reservadas de supervisores 135-139)
   const ocupadosEnMiLote = useMemo(() => {
     const isSupStation = (sid) => [135, 136, 137, 138, 139].includes(Number(sid));
@@ -831,6 +905,16 @@ export default function AttendanceView({
   function handleRevertToPresent(doc) {
     if (!doc?.nombre) return;
     handleSetAttendance(doc.nombre, "PRESENTE");
+    setAttendanceJustifications((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (isSameDoctor(k, doc.nombre)) delete next[k];
+      });
+      try {
+        localStorage.setItem("DOCTORSV_ATTENDANCE_JUSTIFICATIONS_V1", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
     const freeSpaces = supervisorSpaces.filter((s) => !s.doctor && s.estado !== "INHABILITADO");
     if (freeSpaces.length > 0) {
       if (
@@ -845,20 +929,32 @@ export default function AttendanceView({
 
   // Revertir inasistencia de todos los ausentes a PRESENTE en lote
   function handleRevertAllAusentes() {
-    const absentDocs = batchDoctors.filter((d) => d.status === "AUSENTE");
+    const absentDocs = batchDoctors.filter((d) => d.status === "AUSENTE" || d.status === "JUSTIFICADO");
     if (absentDocs.length === 0) {
       alert("No hay médicos marcados como ausentes para revertir.");
       return;
     }
     if (
       !window.confirm(
-        `¿Deseas revertir la inasistencia de los ${absentDocs.length} médico(s) ausentes y marcarlos como PRESENTES (Llegada tardía)?`
+        `¿Deseas revertir a PRESENTE a los ${absentDocs.length} médico(s) que figuran ausentes/justificados?`
       )
     ) {
       return;
     }
     absentDocs.forEach((d) => {
       handleSetAttendance(d.nombre, "PRESENTE");
+    });
+    setAttendanceJustifications((prev) => {
+      const next = { ...prev };
+      absentDocs.forEach((d) => {
+        Object.keys(next).forEach((k) => {
+          if (isSameDoctor(k, d.nombre)) delete next[k];
+        });
+      });
+      try {
+        localStorage.setItem("DOCTORSV_ATTENDANCE_JUSTIFICATIONS_V1", JSON.stringify(next));
+      } catch {}
+      return next;
     });
   }
 
@@ -1938,6 +2034,7 @@ export default function AttendanceView({
                   const isPresent = doc.status === "PRESENTE";
                   const isAbsent = doc.status === "AUSENTE";
                   const isJustified = doc.status === "JUSTIFICADO";
+                  const docJustification = getJustificationForDoctor(doc.nombre);
 
                   return (
                     <tr key={`${doc.id}-${doc.nombre}`} className="hover:bg-blue-50/30 transition-colors">
@@ -1991,9 +2088,20 @@ export default function AttendanceView({
                           <span className="inline-flex items-center gap-1 text-[11.5px] text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg font-bold border border-indigo-200">
                             <CheckCircle2 size={12} className="text-indigo-600" /> Jornada Finalizada
                           </span>
+                        ) : isJustified ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md font-bold border border-amber-300">
+                              <ShieldCheck size={11} className="text-amber-600 shrink-0" /> Justificado
+                            </span>
+                            {docJustification?.motivo && (
+                              <span className="text-[10px] text-slate-500 font-medium truncate max-w-[170px]" title={docJustification.motivo}>
+                                {docJustification.motivo}
+                              </span>
+                            )}
+                          </div>
                         ) : isAbsent ? (
                           <span className="text-[11.5px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md font-semibold border border-rose-200">
-                            Inasistencia
+                            Inasistencia (Sin justificar)
                           </span>
                         ) : (
                           <span className="text-[11.5px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-semibold border border-amber-200">
@@ -2002,75 +2110,109 @@ export default function AttendanceView({
                         )}
                       </td>
                       <td className="px-3.5 py-3 text-center">
-                        <div className="inline-flex items-center rounded-xl p-0.5 bg-slate-100 border border-slate-200">
-                          <button
-                            onClick={() => {
-                              if (isAbsent) {
-                                handleRevertToPresent(doc);
-                              } else {
-                                handleSetAttendance(doc.nombre, "PRESENTE");
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="inline-flex items-center rounded-xl p-0.5 bg-slate-100 border border-slate-200 shadow-2xs">
+                            {/* 1. Botón PRESENTE */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isAbsent || isJustified) {
+                                  handleRevertToPresent(doc);
+                                } else {
+                                  handleSetAttendance(doc.nombre, "PRESENTE");
+                                }
+                              }}
+                              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                                isPresent
+                                  ? "bg-emerald-600 text-white shadow-xs"
+                                  : "text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/60"
+                              }`}
+                              title="Marcar médico como PRESENTE en su turno"
+                            >
+                              Presente
+                            </button>
+
+                            {/* 2. Botón AUSENTE / JUSTIFICADO (Abre la ventanilla para especificar causa) */}
+                            <button
+                              type="button"
+                              onClick={() => setJustifyingDoctor(doc)}
+                              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                                isJustified
+                                  ? "bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-xs font-black ring-1 ring-amber-400"
+                                  : isAbsent
+                                  ? "bg-rose-600 text-white shadow-xs font-black"
+                                  : "text-slate-600 hover:text-rose-700 hover:bg-rose-50/60"
+                              }`}
+                              title={
+                                isJustified
+                                  ? "Inasistencia justificada. Clic para ver o modificar el motivo"
+                                  : isAbsent
+                                  ? "Inasistencia sin justificar. Clic para justificar o modificar"
+                                  : "Marcar inasistencia (Abre ventana para indicar por qué se ausentó)"
                               }
-                            }}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                              isPresent
-                                ? "bg-emerald-600 text-white shadow-xs"
-                                : "text-slate-600 hover:text-emerald-700"
-                            }`}
-                          >
-                            Presente
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleSetAttendance(doc.nombre, "AUSENTE");
-                              const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
-                              const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
-                              if (onUnassignDoctor) {
-                                onUnassignDoctor(doc.nombre, spaceToFree, "AUSENTE");
-                              }
-                            }}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                              isAbsent
-                                ? "bg-rose-600 text-white shadow-xs"
-                                : "text-slate-600 hover:text-rose-700"
-                            }`}
-                          >
-                            Ausente
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleSetAttendance(doc.nombre, "JUSTIFICADO");
-                              const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
-                              const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
-                              if (onUnassignDoctor) {
-                                onUnassignDoctor(doc.nombre, spaceToFree, "JUSTIFICADO");
-                              }
-                            }}
-                            className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                              isJustified
-                                ? "bg-amber-600 text-white shadow-xs"
-                                : "text-slate-600 hover:text-amber-700"
-                            }`}
-                          >
-                            Justif.
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleSetAttendance(doc.nombre, "FINALIZADO");
-                              const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
-                              const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
-                              if (onUnassignDoctor) {
-                                onUnassignDoctor(doc.nombre, spaceToFree, "FINALIZADO");
-                              }
-                            }}
-                            className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                              doc.status === "FINALIZADO"
-                                ? "bg-indigo-600 text-white shadow-xs"
-                                : "text-slate-600 hover:text-indigo-700"
-                            }`}
-                            title="Marcar salida / jornada completada"
-                          >
-                            Salida
-                          </button>
+                            >
+                              {isJustified ? (
+                                <>
+                                  <ShieldCheck size={13} className="text-amber-200" />
+                                  <span>Justificado</span>
+                                </>
+                              ) : isAbsent ? (
+                                <>
+                                  <AlertCircle size={13} className="text-rose-200" />
+                                  <span>Ausente</span>
+                                </>
+                              ) : (
+                                <span>Ausente</span>
+                              )}
+                            </button>
+
+                            {/* 3. Botón SALIDA */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSetAttendance(doc.nombre, "FINALIZADO");
+                                const seatedSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, doc.nombre));
+                                const spaceToFree = seatedSpace ? Number(seatedSpace.id) : (doc.espacio || null);
+                                if (onUnassignDoctor) {
+                                  onUnassignDoctor(doc.nombre, spaceToFree, "FINALIZADO");
+                                }
+                              }}
+                              className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                                doc.status === "FINALIZADO"
+                                  ? "bg-indigo-600 text-white shadow-xs"
+                                  : "text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/60"
+                              }`}
+                              title="Marcar salida / jornada completada"
+                            >
+                              Salida
+                            </button>
+                          </div>
+
+                          {/* Sub-indicador de Justificación con clic para editar */}
+                          {isJustified && (
+                            <button
+                              type="button"
+                              onClick={() => setJustifyingDoctor(doc)}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md transition cursor-pointer max-w-[220px]"
+                              title="Clic para ver o editar el motivo de justificación"
+                            >
+                              <FileText size={10} className="text-amber-600 shrink-0" />
+                              <span className="truncate">{docJustification?.motivo || "Justificado"}</span>
+                              <Edit3 size={9} className="text-amber-500 shrink-0 ml-0.5" />
+                            </button>
+                          )}
+
+                          {isAbsent && (
+                            <button
+                              type="button"
+                              onClick={() => setJustifyingDoctor(doc)}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md transition cursor-pointer"
+                              title="Clic para especificar el motivo o justificar"
+                            >
+                              <AlertTriangle size={10} className="text-rose-500 shrink-0" />
+                              <span>Sin justificar · + Justificar</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td className="px-3.5 py-3 text-right">
@@ -2477,6 +2619,20 @@ export default function AttendanceView({
           }}
           onClose={() => setPlanillaModalOpen(false)}
           supervisores={supervisores}
+        />
+      )}
+
+      {/* Ventanilla / Modal de Justificación de Inasistencia */}
+      {justifyingDoctor && (
+        <JustifyAbsenceModal
+          isOpen={Boolean(justifyingDoctor)}
+          doctor={justifyingDoctor}
+          existingJustification={getJustificationForDoctor(justifyingDoctor.nombre)}
+          selectedDate={selectedDate}
+          onConfirmJustify={handleSaveDoctorJustification}
+          onConfirmUnjustified={handleSaveDoctorUnjustified}
+          onRevertToPresent={handleRevertToPresent}
+          onClose={() => setJustifyingDoctor(null)}
         />
       )}
     </div>
