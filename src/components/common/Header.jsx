@@ -69,8 +69,8 @@ export default function Header({
         }}
       />
 
-      {/* Contenedor principal con distribución armónica */}
-      <div className="relative mx-auto flex max-w-[1440px] items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-2">
+      {/* Contenedor principal con distribución armónica adaptable */}
+      <div className={`relative mx-auto flex ${tab === "mapa" ? "w-full max-w-[1920px] 2xl:max-w-[99vw] px-2 sm:px-4 lg:px-6" : "max-w-[1540px] px-4 sm:px-6"} items-center justify-between gap-3 sm:gap-4 py-2 transition-all duration-200`}>
         
         {/* ============================================================== */}
         {/* 1. LOGOTIPO A UN LADO, PEQUEÑO COMO ANTES                      */}

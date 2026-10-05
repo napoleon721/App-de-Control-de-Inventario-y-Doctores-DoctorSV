@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import {
   Search, Filter, DoorOpen, LayoutGrid, Monitor, ShieldCheck, Sparkles,
   Layers, CheckCircle2, AlertTriangle, Droplets, XCircle, Wrench, Lock, ArrowDown, ArrowUp,
-  Clock, RefreshCw, UserCheck, LogOut, Laptop, User, Shield
+  Clock, RefreshCw, UserCheck, LogOut, Laptop, User, Shield, Maximize2, Minimize2
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
 import { ESTADOS, MARCAS, HORARIOS, SUPERVISORES_OFICIALES, BODEGA_TIPOS } from "../../constants/tokens";
@@ -21,6 +21,7 @@ export default function SpaceMap({
   supervisores = SUPERVISORES_OFICIALES,
   rosterBySupervisor = {},
   bodegaStock = BODEGA_TIPOS,
+  attendanceRecords = {},
 }) {
   const isDoctorRole = currentUser?.role === "DOCTOR";
   const isMasterRole = currentUser?.role === "MASTER";
@@ -30,6 +31,31 @@ export default function SpaceMap({
   const [filterTurno, setFilterTurno] = useState("TODOS");
   const [filterSupervisor, setFilterSupervisor] = useState("TODOS");
   const [releaseHorarioTarget, setReleaseHorarioTarget] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Densidad / Escala visual de los cubículos (compacto, normal, amplio)
+  const [density, setDensity] = useState(() => {
+    try {
+      return localStorage.getItem("DOCTORSV_MAP_DENSITY") || "normal";
+    } catch {
+      return "normal";
+    }
+  });
+
+  const handleDensityChange = (newDensity) => {
+    setDensity(newDensity);
+    try {
+      localStorage.setItem("DOCTORSV_MAP_DENSITY", newDensity);
+    } catch (_) {}
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
 
   const currentDoctorSup = useMemo(() => {
     if (!currentUser?.supervisorId) return null;
@@ -47,7 +73,8 @@ export default function SpaceMap({
 
   function renderCubicle(id) {
     const space = spaceMap[id];
-    if (!space) return <div className="h-[43px] w-full" />;
+    const fallbackH = density === "compact" ? "h-[37px]" : density === "wide" ? "h-[48px]" : "h-[44px]";
+    if (!space) return <div className={`${fallbackH} w-full`} />;
 
     const matchesQuery =
       query.trim() === "" ||
@@ -123,8 +150,20 @@ export default function SpaceMap({
     const isSelectableForDoctor = !space.doctor && space.estado === "DISPONIBLE";
     const isBlockedForDoctor = isDoctorRole && !isOwnSpace && !isSelectableForDoctor;
 
+    const isDocNotWorking = (() => {
+      if (!space.doctor || !attendanceRecords) return false;
+      const direct = attendanceRecords[space.doctor];
+      if (direct === "AUSENTE" || direct === "FINALIZADO" || direct === "JUSTIFICADO") return true;
+      const match = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, space.doctor));
+      if (match) {
+        const st = attendanceRecords[match];
+        return st === "AUSENTE" || st === "FINALIZADO" || st === "JUSTIFICADO";
+      }
+      return false;
+    })();
+
     // Para el rol Master y Supervisor: destacar visualmente los espacios ocupados por médicos
-    const isOccupiedByDoctor = !isDoctorRole && (space.estado === "OCUPADO" || !!space.doctor);
+    const isOccupiedByDoctor = !isDoctorRole && (space.estado === "OCUPADO" || !!space.doctor) && !isDocNotWorking;
 
     return (
       <div
@@ -143,7 +182,7 @@ export default function SpaceMap({
         }`}
         title={isBlockedForDoctor ? `Puesto ${space.estado} — No disponible para asignación` : undefined}
       >
-        <ExactCubicle space={space} onClick={onSelectSpace} />
+        <ExactCubicle space={space} onClick={onSelectSpace} attendanceRecords={attendanceRecords} density={density} />
         {/* Indicador visual de bloqueo en modo Doctor */}
         {isBlockedForDoctor && isMatch && (
           <div className="pointer-events-none absolute inset-0 rounded-[6px] bg-slate-900/10 flex items-end justify-center pb-0.5">
@@ -316,8 +355,62 @@ export default function SpaceMap({
           </div>
         </div>
 
-        {/* Buscador, Filtro por Franja de Horario, Estado y Supervisor */}
+        {/* Buscador, Filtro por Franja de Horario, Estado, Supervisor y Selector de Vista */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Selector de Densidad / Escala */}
+          <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80">
+            <span className="text-[10px] font-black text-slate-400 uppercase px-1.5 tracking-wider hidden sm:inline">
+              VISTA:
+            </span>
+            <button
+              type="button"
+              onClick={() => handleDensityChange("compact")}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                density === "compact"
+                  ? "bg-white text-[#0048B5] shadow-xs border border-blue-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Vista compacta: encoge los puestos para que quepan más espacios en pantalla"
+            >
+              Compacto
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDensityChange("normal")}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                density === "normal"
+                  ? "bg-white text-[#0048B5] shadow-xs border border-blue-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Vista estándar: tamaño óptimo equilibrado"
+            >
+              Estándar
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDensityChange("wide")}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                density === "wide"
+                  ? "bg-white text-[#0048B5] shadow-xs border border-blue-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Vista amplia: puestos más anchos para monitores panorámicos"
+            >
+              Amplio
+            </button>
+          </div>
+
+          {/* Botón Pantalla Completa */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-[#0048B5] border border-slate-200 text-[11.5px] font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
+            title={isFullscreen ? "Salir de pantalla completa" : "Ver en pantalla completa"}
+          >
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            <span className="hidden md:inline text-[11px]">{isFullscreen ? "Restaurar" : "Pantalla Completa"}</span>
+          </button>
+
           {/* Buscador */}
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF]/40 focus-within:bg-white transition-all">
             <Search size={14} className="text-slate-400" />
@@ -574,13 +667,13 @@ export default function SpaceMap({
       )}
 
       {/* CONTENEDOR PRINCIPAL DEL PLANO ARQUITECTÓNICO SIMÉTRICO */}
-      <div className="relative bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-8 shadow-sm overflow-x-auto">
-        <div className="min-w-[1540px] max-w-[1680px] mx-auto flex flex-col gap-7">
+      <div className="relative bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-6 lg:p-7 shadow-sm overflow-x-auto">
+        <div className="w-full min-w-[1300px] mx-auto flex flex-col gap-6">
 
           {/* ================= SECCIÓN SUPERIOR: ACCESO ANEXO + ENTRADA (Centro) vs MÓDULOS 55-70 & 71-86 (Der) ================= */}
-          <div className="flex gap-7 items-center justify-between">
+          <div className="grid grid-cols-[minmax(320px,0.8fr)_minmax(440px,1.05fr)_minmax(440px,1.05fr)] gap-5 lg:gap-7 items-center">
             {/* Espacio Aéreo Anexo */}
-            <div className="w-[420px] flex items-center justify-center p-3 h-44 rounded-2xl border-2 border-dashed border-indigo-200/80 bg-indigo-50/20 text-indigo-800">
+            <div className="w-full flex items-center justify-center p-3 h-44 rounded-2xl border-2 border-dashed border-indigo-200/80 bg-indigo-50/20 text-indigo-800">
               <div className="text-center">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 block">
                   Acceso Lateral Anexo
@@ -592,7 +685,7 @@ export default function SpaceMap({
             </div>
 
             {/* ENTRADA ARQUITECTÓNICA (Alineada con Ala Izquierda) */}
-            <div className="w-[530px] flex justify-center">
+            <div className="w-full flex justify-center">
               <div className="relative flex flex-col items-center justify-center w-72 h-44 bg-gradient-to-b from-[#EBF3FF] to-[#D8E8FC] border-2 border-slate-700/80 rounded-2xl shadow-xs overflow-hidden">
                 <div className="absolute top-0 inset-x-0 h-2 bg-[#0048B5]" />
                 <div className="flex items-center gap-2 mb-1">
@@ -611,7 +704,7 @@ export default function SpaceMap({
             </div>
 
             {/* SECTOR SUPERIOR DERECHO (Cubículos 55 al 70 Y Cubículos 71 al 86) */}
-            <div className="w-[530px] flex flex-col gap-3 justify-start">
+            <div className="w-full flex flex-col gap-3 justify-start">
               {/* Módulo Superior 1: 55 al 70 */}
               <div className="flex flex-col gap-1.5 border-2 border-slate-700/80 p-2.5 bg-slate-50/80 rounded-xl shadow-xs">
                 <div className="flex items-center justify-between px-1 pb-0.5">
@@ -663,10 +756,10 @@ export default function SpaceMap({
           </div>
 
           {/* ================= CUERPO PRINCIPAL SIMÉTRICO: SECTOR ANEXO + ALA IZQUIERDA + ALA DERECHA ================= */}
-          <div className="flex gap-7 items-start justify-between">
+          <div className="grid grid-cols-[minmax(320px,0.8fr)_minmax(440px,1.05fr)_minmax(440px,1.05fr)] gap-5 lg:gap-7 items-start">
 
             {/* ================= SECTOR ANEXO (141 al 170) - 2 MÓDULOS (7×2 y 8×2) ================= */}
-            <div className="w-[420px] flex flex-col gap-5">
+            <div className="w-full flex flex-col gap-5">
               {/* Encabezado Sector Anexo */}
               <div className="flex items-center justify-between px-2 pb-1 border-b border-indigo-200">
                 <span className="text-[12px] font-extrabold uppercase tracking-wider text-indigo-900 font-heading flex items-center gap-1.5">
@@ -752,7 +845,7 @@ export default function SpaceMap({
             </div>
 
             {/* ================= ALA IZQUIERDA (1 al 54) - 3 MÓDULOS DE 9×2 ================= */}
-            <div className="w-[530px] flex flex-col gap-5">
+            <div className="w-full flex flex-col gap-5">
               {/* Encabezado Ala Izquierda */}
               <div className="flex items-center justify-between px-2 pb-1 border-b border-slate-200">
                 <span className="text-[12px] font-extrabold uppercase tracking-wider text-slate-700 font-heading">
@@ -829,7 +922,7 @@ export default function SpaceMap({
             </div>
 
             {/* ================= ALA DERECHA (87 al 140) - 3 MÓDULOS DE 9×2 ================= */}
-            <div className="w-[530px] flex flex-col gap-5">
+            <div className="w-full flex flex-col gap-5">
               {/* Encabezado Ala Derecha */}
               <div className="flex items-center justify-between px-2 pb-1 border-b border-slate-200">
                 <span className="text-[12px] font-extrabold uppercase tracking-wider text-slate-700 font-heading">
@@ -904,7 +997,7 @@ export default function SpaceMap({
           </div>
 
           {/* ================= TABLAS INFERIORES RESUMEN CON DISEÑO PREMIUM ================= */}
-          <div className={`mt-8 pt-6 border-t-2 border-slate-200/80 ${isMasterRole ? "grid grid-cols-1 md:grid-cols-3 gap-6" : "max-w-md"} text-[12px]`}>
+          <div className={`mt-8 pt-6 border-t-2 border-slate-200/80 ${!isDoctorRole ? "grid grid-cols-1 md:grid-cols-3 gap-6" : "max-w-md"} text-[12px]`}>
 
             {/* TABLA 1: CÓDIGO DE COLOR & RESUMEN DE DISPONIBILIDAD (Visible para Médicos, Supervisores y Master) */}
             <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200 shadow-2xs">
@@ -912,7 +1005,7 @@ export default function SpaceMap({
                 <span className="font-heading font-bold text-[13px] tracking-wider text-slate-800 uppercase">
                   {isDoctorRole ? "Resumen de Puestos y Disponibilidad" : "Código de Color & Totales"}
                 </span>
-                <span className="text-[11px] font-mono-data text-slate-400 font-bold">140 Espacios</span>
+                <span className="text-[11px] font-mono-data text-slate-400 font-bold">{spaces.length} Espacios</span>
               </div>
               <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white shadow-2xs">
                 <div className="flex items-center justify-between p-2.5 hover:bg-slate-50 transition-colors">
@@ -967,8 +1060,8 @@ export default function SpaceMap({
               </div>
             </div>
 
-            {/* TABLA 2 Y TABLA 3: EXCLUSIVAS PARA ADMINISTRADOR / MASTER (Ocultas para Supervisor y Doctor) */}
-            {isMasterRole && (
+            {/* TABLA 2 Y TABLA 3: VISIBLES PARA SUPERVISOR Y MASTER (Ocultas solo para Doctor) */}
+            {!isDoctorRole && (
               <>
                 {/* TABLA 2: INVENTARIO BODEGA */}
                 <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">

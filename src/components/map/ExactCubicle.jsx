@@ -1,8 +1,10 @@
-import React from "react";
-import { Monitor, AlertTriangle, Droplets, Wrench, Lock, XCircle, User, Shield } from "lucide-react";
+import React, { useMemo } from "react";
+import { Monitor, AlertTriangle, Droplets, Wrench, Lock, XCircle, User, Shield, UserX } from "lucide-react";
+import { isSameDoctor } from "../../utils/safeHelpers";
 
-export default function ExactCubicle({ space, onClick }) {
-  if (!space) return <div className="h-[43px] w-full" />;
+export default function ExactCubicle({ space, onClick, attendanceRecords = null, density = "normal" }) {
+  const fallbackH = density === "compact" ? "h-[37px]" : density === "wide" ? "h-[48px]" : "h-[44px]";
+  if (!space) return <div className={`${fallbackH} w-full`} />;
 
   const isVacio = space.estado === "VACIO";
   const isInhabilitado = space.estado === "INHABILITADO";
@@ -11,7 +13,34 @@ export default function ExactCubicle({ space, onClick }) {
   const isIncompleto = space.estado === "INCOMPLETO";
   const isSupervisorStation = [135, 136, 137, 138, 139].includes(Number(space.id));
   const isSupervisor = (isSupervisorStation || space.categoria === "Supervisores") && space.estado !== "DISPONIBLE" && space.estado !== "VACIO";
-  const isOcupado = (space.estado === "OCUPADO" || Boolean(space.doctor)) && !isSupervisor;
+
+  // Dimensiones y tipografía responsivas según la densidad seleccionada
+  const dimClasses = density === "compact"
+    ? "h-[37px] w-full max-w-[58px] min-w-[32px] p-0.5 rounded-[5px]"
+    : density === "wide"
+    ? "h-[48px] w-full max-w-[84px] min-w-[42px] p-1 sm:p-1.5 rounded-[7px]"
+    : "h-[44px] w-full max-w-[72px] min-w-[36px] p-1 rounded-[6px]";
+
+  const numTextClass = density === "compact" ? "text-[10px]" : density === "wide" ? "text-[12px]" : "text-[11px]";
+  const tagTextClass = density === "compact" ? "text-[6.5px]" : density === "wide" ? "text-[8.5px]" : "text-[7.5px]";
+  const iconSize = density === "compact" ? 7 : density === "wide" ? 9 : 8;
+  const dotClass = density === "compact" ? "h-1 w-1" : density === "wide" ? "h-2 w-2" : "h-1.5 w-1.5";
+
+  // Verificar si el médico asignado a este cubículo está marcado como ausente o finalizado en Asistencias
+  const doctorAttStatus = useMemo(() => {
+    if (!space?.doctor || !attendanceRecords) return null;
+    const cleanDoc = String(space.doctor).trim();
+    if (attendanceRecords[cleanDoc]) return attendanceRecords[cleanDoc];
+    const match = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, cleanDoc));
+    return match ? attendanceRecords[match] : null;
+  }, [space?.doctor, attendanceRecords]);
+
+  const isDoctorAbsent = doctorAttStatus === "AUSENTE";
+  const isDoctorFinished = doctorAttStatus === "FINALIZADO";
+  const isDoctorJustified = doctorAttStatus === "JUSTIFICADO";
+  const isNotWorking = isDoctorAbsent || isDoctorFinished || isDoctorJustified;
+
+  const isOcupado = (space.estado === "OCUPADO" || Boolean(space.doctor)) && !isSupervisor && !isNotWorking;
 
   // Paleta armónica moderna médica DoctorSV
   let bgGradient = "linear-gradient(180deg, #10B981 0%, #059669 100%)"; // Verde Disponible
@@ -29,6 +58,13 @@ export default function ExactCubicle({ space, onClick }) {
     const firstWord = cleanDoc.split(" ")[0] || "DOC";
     tagText = firstWord.length > 7 ? firstWord.slice(0, 6) + "." : firstWord;
     TagIcon = User;
+  } else if (isDoctorAbsent && space.doctor) {
+    // Médico registrado como AUSENTE: Puesto no ocupado / disponible para relevo
+    bgGradient = "linear-gradient(180deg, #E11D48 0%, #BE123C 100%)";
+    textColor = "#FFFFFF";
+    borderColor = "#FDA4AF";
+    tagText = "AUSENTE";
+    TagIcon = UserX;
   } else if (isIncompleto) {
     bgGradient = "linear-gradient(180deg, #F59E0B 0%, #D97706 100%)"; // Ámbar / Alerta
     textColor = "#FFFFFF";
@@ -61,7 +97,9 @@ export default function ExactCubicle({ space, onClick }) {
     TagIcon = isSupervisor ? Shield : Lock;
   }
 
-  const tooltipText = isOcupado
+  const tooltipText = isDoctorAbsent && space.doctor
+    ? `Puesto #${space.id} · Dr(a). ${space.doctor} [AUSENTE / Inasistencia] · Puesto disponible para reasignar`
+    : isOcupado
     ? `Puesto #${space.id} · Ocupado por Dr(a). ${space.doctor} (${space.horario || 'Turno activo'})${space.supervisorNombre ? ` · Sup: ${space.supervisorNombre}` : ''} · PC: ${space.marca || 'DELL'}`
     : isSupervisor
     ? `Puesto de Supervisión #${space.id} (${space.marca || 'PC'})`
@@ -80,23 +118,25 @@ export default function ExactCubicle({ space, onClick }) {
         borderColor: borderColor,
         color: textColor,
       }}
-      className="group relative flex flex-col justify-between items-center h-[43px] w-full max-w-[48px] rounded-[6px] border border-black/20 p-1 shadow-2xs hover:scale-105 hover:z-30 hover:shadow-md transition-all duration-150 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-white"
+      className={`group relative flex flex-col justify-between items-center ${dimClasses} border border-black/20 shadow-2xs hover:scale-105 hover:z-30 hover:shadow-md transition-all duration-150 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-white`}
     >
       {/* Fila Superior: Número & Indicador */}
       <div className="w-full flex items-center justify-between px-0.5 leading-none">
-        <span className="text-[11px] font-extrabold font-heading tracking-tight drop-shadow-xs">
+        <span className={`${numTextClass} font-extrabold font-heading tracking-tight drop-shadow-xs`}>
           {space.id}
         </span>
         {isSupervisor ? (
-          <span className="h-1.5 w-1.5 rounded-full bg-cyan-200 ring-1 ring-slate-900/40" title={`Puesto de Supervisión: ${space.doctor || 'Supervisor'}`} />
+          <span className={`${dotClass} rounded-full bg-cyan-200 ring-1 ring-slate-900/40`} title={`Puesto de Supervisión: ${space.doctor || 'Supervisor'}`} />
         ) : isOcupado ? (
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 ring-1 ring-white animate-pulse" />
+          <span className={`${dotClass} rounded-full bg-emerald-400 ring-1 ring-white animate-pulse`} />
+        ) : isDoctorAbsent && space.doctor ? (
+          <span className={`${dotClass} rounded-full bg-rose-300 ring-1 ring-white`} title="Médico Ausente en Asistencia" />
         ) : null}
       </div>
 
       {/* Fila Inferior: Hardware Tag & Ícono */}
-      <div className="w-full flex items-center justify-center gap-0.5 text-[7.5px] font-bold tracking-tight uppercase leading-none opacity-95">
-        <TagIcon size={8} className="shrink-0 opacity-85" />
+      <div className={`w-full flex items-center justify-center gap-0.5 ${tagTextClass} font-bold tracking-tight uppercase leading-none opacity-95`}>
+        <TagIcon size={iconSize} className="shrink-0 opacity-85" />
         <span className="truncate">{tagText}</span>
       </div>
 

@@ -2779,8 +2779,8 @@ export default function App() {
         onOpenGoogleSheetsConfig={() => setGoogleSheetsModalOpen(true)}
       />
 
-      {/* Contenedor central */}
-      <main className="mx-auto max-w-[1440px] px-4 sm:px-6 py-6 space-y-6">
+      {/* Contenedor central adaptable (ancho completo en mapa para aprovechar monitores panorámicos) */}
+      <main className={`mx-auto ${tab === "mapa" ? "w-full max-w-[1920px] 2xl:max-w-[99vw] px-2 sm:px-4 lg:px-6" : "max-w-[1540px] px-4 sm:px-6"} py-6 space-y-6 transition-all duration-200`}>
         {/* KPI Header Bar (Solo visible para Doctor Master o sin sesión, para dar vista limpia al doctor) */}
         {!isDoctorRole && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
