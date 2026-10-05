@@ -720,23 +720,23 @@ export default function PlanillaManagerModal({
                 <div className="space-y-1">
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10.5px] font-bold">
                     <FileText size={12} />
-                    <span>Plantilla Oficial de Planilla</span>
+                    <span>Plantilla Oficial Mensual de Planilla (2 Hojas)</span>
                   </div>
                   <h4 className="text-lg font-black text-slate-900 tracking-tight">
-                    Plantilla_Planilla_DoctorSV.xlsx
+                    Plantilla_Planilla_Mensual_DoctorSV.xlsx
                   </h4>
                   <p className="text-[12px] text-slate-600 max-w-xl">
-                    Archivo Excel preconfigurado con las columnas oficiales (Grupo 1 Edward Zelaya y Grupo 2 Roxana Canales) y validación de turnos. Listo para subir a Google Drive o usar localmente.
+                    Archivo Excel mensual con 2 hojas: <strong>Edward Zelaya</strong> (Grupo 1) y <strong>Roxana Canales</strong> (Grupo 2), con 31 días de programación y únicamente los campos requeridos por supervisor.
                   </p>
                 </div>
 
                 <a
-                  href="/Plantilla_Planilla_DoctorSV.xlsx"
-                  download="Plantilla_Planilla_DoctorSV.xlsx"
+                  href="/Plantilla_Planilla_Mensual_DoctorSV.xlsx"
+                  download="Plantilla_Planilla_Mensual_DoctorSV.xlsx"
                   className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-[12.5px] font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-95 transition-all shrink-0 cursor-pointer"
                 >
                   <Download size={16} />
-                  <span>Descargar Plantilla (.xlsx)</span>
+                  <span>Descargar Plantilla Mensual (.xlsx)</span>
                 </a>
               </div>
 
@@ -746,17 +746,17 @@ export default function PlanillaManagerModal({
                 <div className="bg-white rounded-2xl p-5 border border-slate-200 space-y-2.5">
                   <h5 className="font-black text-slate-900 text-[13px] flex items-center gap-2 text-[#0048B5]">
                     <Layers size={15} />
-                    1. Estructura de Columnas Recomendada
+                    1. Estructura de 2 Hojas y Columnas Requeridas
                   </h5>
                   <p className="text-[11.5px] text-slate-600 leading-relaxed">
-                    Para que Google Sheets y DoctorSV reconozcan la nómina sin errores, la fila 2 debe tener:
+                    El archivo contiene 2 hojas: <code>Edward Zelaya</code> y <code>Roxana Canales</code>, con las columnas esenciales:
                   </p>
                   <ul className="text-[11px] text-slate-700 space-y-1 pl-4 list-disc font-medium">
-                    <li><strong>Col A / B:</strong> Grupo (ej: <code>GRUPO 1</code>, <code>GRUPO 2</code>).</li>
-                    <li><strong>Col C:</strong> N° secuencial (1, 2, 3...).</li>
-                    <li><strong>Col D:</strong> NOMBRE DEL MÉDICO (completo).</li>
-                    <li><strong>Col E:</strong> FUNCIÓN (<code>SUPERVISOR</code> para el jefe, <code>CONSULTANTE</code> para médicos).</li>
-                    <li><strong>Col G en adelante:</strong> Fechas (ej: <code>01/10/2026</code> a <code>15/10/2026</code>).</li>
+                    <li><strong>Col A (N°):</strong> SUP para el supervisor, 1..28/29 para médicos.</li>
+                    <li><strong>Col B (MÉDICO):</strong> Nombre completo oficial.</li>
+                    <li><strong>Col C (FUNCIÓN):</strong> <code>SUPERVISOR</code> o <code>CONSULTANTE</code>.</li>
+                    <li><strong>Col D (IDENTIFICADOR):</strong> DUI oficial (9 dígitos).</li>
+                    <li><strong>Col E a AI (Fechas):</strong> Del <code>01/10/2026</code> al <code>31/10/2026</code> (31 días).</li>
                   </ul>
                 </div>
 
