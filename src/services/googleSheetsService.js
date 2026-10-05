@@ -3,6 +3,34 @@
  * Permite leer, editar, actualizar celdas y registrar movimientos en tiempo real.
  */
 
+import { parseQuincenaSpreadsheet } from "../utils/quincenaParser.js";
+import { DOCTORES_EXCEL, STAFF_EXCEL, SUPERVISORES_OFICIALES } from "../constants/tokens.js";
+
+// Hojas oficiales individuales de cada supervisor para Servicios Profesionales
+export const DEFAULT_SUPERVISOR_SHEETS = {
+  "sup-1": {
+    id: "sup-1",
+    nombre: "EMERSON JOSUE VIGIL HERNANDEZ",
+    token: "000EV3",
+    sheetId: "1WuN2xtSLvb3Fof7OSvvTVDFP9FMpJuvcII8A25cgZBQ",
+    url: "https://docs.google.com/spreadsheets/d/1WuN2xtSLvb3Fof7OSvvTVDFP9FMpJuvcII8A25cgZBQ/edit?usp=sharing",
+  },
+  "sup-3": {
+    id: "sup-3",
+    nombre: "ALFREDO ISAAC MARTINEZ AMAYA",
+    token: "000AMB",
+    sheetId: "1EiJYr1Byvlz1gXJdLhhqHHqkJTjcWi-_27kGNSsI_kA",
+    url: "https://docs.google.com/spreadsheets/d/1EiJYr1Byvlz1gXJdLhhqHHqkJTjcWi-_27kGNSsI_kA/edit?usp=sharing",
+  },
+  "sup-2": {
+    id: "sup-2",
+    nombre: "SALVADOR RENDEROS BONILLA",
+    token: "000SR0",
+    sheetId: "1epJWEXl0sGWhdyx3IvDAqzOgrZZoxkUxCWkU9Srx4Ok",
+    url: "https://docs.google.com/spreadsheets/d/1epJWEXl0sGWhdyx3IvDAqzOgrZZoxkUxCWkU9Srx4Ok/edit?usp=sharing",
+  },
+};
+
 // URL del Webhook de Google Apps Script (cuando el usuario la configure en .env o localStorage)
 const DEFAULT_APPS_SCRIPT_URL =
   import.meta.env.VITE_GOOGLE_SHEETS_API_URL ||
@@ -11,6 +39,7 @@ const DEFAULT_APPS_SCRIPT_URL =
 // Claves de persistencia para configuración dinámica
 const STORAGE_KEY_SHEETS_URL = "DOCTORSV_GOOGLE_SHEETS_URL";
 const STORAGE_KEY_SHEET_IDS = "DOCTORSV_GOOGLE_SHEET_IDS";
+const STORAGE_KEY_SUPERVISOR_SHEETS = "DOCTORSV_SUPERVISOR_SHEETS_CONFIG";
 
 /**
  * Obtiene la URL activa del Webhook de Google Apps Script
@@ -323,4 +352,185 @@ export async function addStaffToGoogleSheets(staffMember) {
     console.warn("Error al agregar personal en Google Sheets:", error);
     return false;
   }
+}
+
+/**
+ * =========================================================================
+ * INTEGRACIÓN EN VIVO CON HOJAS DE GOOGLE SHEETS DE SUPERVISORES (SP)
+ * =========================================================================
+ */
+
+/**
+ * Extrae el ID de una Google Sheet a partir de una URL o cadena limpia
+ */
+export function extractGoogleSheetId(input) {
+  if (!input || typeof input !== "string") return "";
+  const trimmed = input.trim();
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match) return match[1];
+  if (/^[a-zA-Z0-9-_]{20,60}$/.test(trimmed)) return trimmed;
+  return trimmed;
+}
+
+/**
+ * Obtiene la configuración actual de hojas de Google Sheets por supervisor
+ */
+export function getSupervisorSheetConfigs() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_SUPERVISOR_SHEETS);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_SUPERVISOR_SHEETS, ...parsed };
+    }
+  } catch {}
+  return { ...DEFAULT_SUPERVISOR_SHEETS };
+}
+
+/**
+ * Guarda la configuración de hojas de supervisores
+ */
+export function saveSupervisorSheetConfigs(configs) {
+  try {
+    localStorage.setItem(STORAGE_KEY_SUPERVISOR_SHEETS, JSON.stringify(configs));
+  } catch {}
+}
+
+/**
+ * Actualiza la URL o ID de Google Sheets para un supervisor
+ */
+export function updateSupervisorSheetUrl(supId, newUrlOrId) {
+  const current = getSupervisorSheetConfigs();
+  const cleanId = extractGoogleSheetId(newUrlOrId);
+  if (current[supId]) {
+    current[supId] = {
+      ...current[supId],
+      sheetId: cleanId,
+      url: newUrlOrId && newUrlOrId.includes("http")
+        ? newUrlOrId.trim()
+        : `https://docs.google.com/spreadsheets/d/${cleanId}/edit?usp=sharing`,
+    };
+    saveSupervisorSheetConfigs(current);
+  }
+  return current;
+}
+
+/**
+ * Descarga el contenido CSV en vivo de una Google Sheet usando la API pública de visualización
+ */
+export async function fetchSupervisorSheetCsv(sheetIdOrUrl) {
+  const sheetId = extractGoogleSheetId(sheetIdOrUrl);
+  if (!sheetId) throw new Error("ID o enlace de Google Sheet no válido.");
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&_t=${Date.now()}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Error HTTP ${res.status} al descargar datos de Google Sheets.`);
+  return await res.text();
+}
+
+/**
+ * Sincroniza todas las hojas de Google Sheets de los supervisores y las fusiona en una Quincena unificada
+ */
+export async function syncSupervisorSheets({
+  doctorsList = DOCTORES_EXCEL,
+  staffList = STAFF_EXCEL,
+  supervisoresList = SUPERVISORES_OFICIALES,
+  customConfigs = null,
+} = {}) {
+  const configs = customConfigs || getSupervisorSheetConfigs();
+  const results = [];
+  const mergedDiasMap = {};
+
+  for (const supKey of Object.keys(configs)) {
+    const conf = configs[supKey];
+    if (!conf?.sheetId && !conf?.url) continue;
+
+    try {
+      const csv = await fetchSupervisorSheetCsv(conf.sheetId || conf.url);
+      const parsed = parseQuincenaSpreadsheet(csv, doctorsList, staffList, supervisoresList);
+
+      if (parsed.success && parsed.dias && parsed.dias.length > 0) {
+        const actualSupId = parsed.supervisorId || parsed.supervisoresDetectados?.[0]?.id || conf.id;
+        const actualSupNombre = parsed.supervisorNombre || parsed.supervisoresDetectados?.[0]?.nombre || conf.nombre;
+
+        parsed.dias.forEach((dia) => {
+          if (!mergedDiasMap[dia.dateKey]) {
+            mergedDiasMap[dia.dateKey] = {
+              dateKey: dia.dateKey,
+              label: dia.label,
+              dayNum: dia.dayNum,
+              monthNum: dia.monthNum,
+              year: dia.year,
+              diaSemana: dia.diaSemana || "",
+              porSupervisor: {},
+            };
+          }
+
+          if (dia.porSupervisor && dia.porSupervisor[actualSupId]) {
+            mergedDiasMap[dia.dateKey].porSupervisor[actualSupId] = dia.porSupervisor[actualSupId];
+          }
+        });
+
+        results.push({
+          supId: actualSupId,
+          nombre: actualSupNombre,
+          success: true,
+          dias: parsed.dias.length,
+          estadisticas: parsed.estadisticas,
+        });
+      } else {
+        results.push({
+          supId: conf.id,
+          nombre: conf.nombre,
+          success: false,
+          error: parsed.error || "No se detectaron días válidos en la hoja.",
+        });
+      }
+    } catch (err) {
+      results.push({
+        supId: conf.id,
+        nombre: conf.nombre,
+        success: false,
+        error: err.message,
+      });
+    }
+  }
+
+  const mergedDias = Object.values(mergedDiasMap).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+  if (mergedDias.length === 0) {
+    return {
+      success: false,
+      error: "No se pudieron obtener datos de las hojas de Google Sheets. Verifica los permisos de acceso o la conexión a internet.",
+      results,
+    };
+  }
+
+  const totalAsignaciones = results.reduce((acc, r) => acc + (r.estadisticas?.totalLineasParseadas || 0), 0);
+  const totalReconocidos = results.reduce((acc, r) => acc + (r.estadisticas?.totalReconocidos || 0), 0);
+  const rate = totalAsignaciones > 0 ? ((totalReconocidos / totalAsignaciones) * 100).toFixed(1) : "100.0";
+
+  const quincena = {
+    id: `quincena_gs_${Date.now()}`,
+    titulo: `Nómina Oficial Google Sheets (${mergedDias[0]?.label || ""} – ${mergedDias[mergedDias.length - 1]?.label || ""})`,
+    source: "GOOGLE_SHEETS_LIVE",
+    dias: mergedDias,
+    diasDetectados: mergedDias.map((d) => d.dateKey),
+    supervisoresDetectados: results.filter((r) => r.success).map((r) => ({
+      id: r.supId,
+      nombre: r.nombre,
+      totalAsignaciones: r.estadisticas?.totalLineasParseadas || 0,
+    })),
+    estadisticas: {
+      totalDias: mergedDias.length,
+      totalSupervisores: results.filter((r) => r.success).length,
+      totalLineasParseadas: totalAsignaciones,
+      totalReconocidos,
+      tasaReconocimiento: `${rate}%`,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  return {
+    success: true,
+    quincena,
+    results,
+  };
 }

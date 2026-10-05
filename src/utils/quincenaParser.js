@@ -259,14 +259,24 @@ export function parseDoctorLine(line, doctorLookupMaps) {
   const finalName = canonicalDoctor ? canonicalDoctor.nombre : rawName.toUpperCase();
   const finalHorario = normalizeHorarioString(horarioRaw);
 
+  const finalDoctorObj = canonicalDoctor || {
+    id: `doc_sp_${token || finalName.slice(0, 8)}`,
+    nombre: finalName,
+    tcaUsuario: token || "",
+    rol: "Médico Servicios Profesionales",
+    categoria: "Servicios Profesionales",
+    tipo: "Servicios Profesionales",
+    horario: finalHorario,
+  };
+
   return {
     rawLine: trimmed,
     token: token || canonicalDoctor?.tcaUsuario || null,
     nombre: finalName,
     horario: finalHorario,
-    doctorObj: canonicalDoctor,
-    isMatched: !!canonicalDoctor,
-    matchMethod,
+    doctorObj: finalDoctorObj,
+    isMatched: !!canonicalDoctor || Boolean(token && finalName.length >= 6),
+    matchMethod: canonicalDoctor ? matchMethod : (token ? "AUTO_TOKEN_DISCOVERY" : "RAW_NAME"),
   };
 }
 

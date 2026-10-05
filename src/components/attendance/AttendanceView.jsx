@@ -5,11 +5,12 @@ import {
 } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
-import { DOCTORES_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES, getDefaultSupervisorRosters } from "../../constants/tokens";
+import { DOCTORES_EXCEL, STAFF_EXCEL, HORARIOS, ESTADOS, BRAND, SUPERVISORES_OFICIALES, getDefaultSupervisorRosters } from "../../constants/tokens";
 import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
 import { isSameDoctor, isSameHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 import { findDailyLotForSupervisor, findDailyLotsForSupervisor } from "../../utils/dailyLotsParser";
+import { syncSupervisorSheets } from "../../services/googleSheetsService";
 
 export default function AttendanceView({
   spaces,
@@ -79,6 +80,34 @@ export default function AttendanceView({
   });
 
   const [quincenaModalOpen, setQuincenaModalOpen] = useState(false);
+  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
+
+  async function handleQuickSyncGoogleSheets() {
+    setIsSyncingSheets(true);
+    try {
+      const res = await syncSupervisorSheets({
+        doctorsList: DOCTORES_EXCEL,
+        staffList: STAFF_EXCEL,
+        supervisoresList: supervisores,
+      });
+
+      if (res.success && res.quincena) {
+        if (onSaveQuincena) {
+          onSaveQuincena(res.quincena);
+        }
+        setSyncFeedback(
+          `✅ Sincronización exitosa desde Google Sheets: ${res.quincena.dias.length} días actualizados (${res.quincena.estadisticas.totalLineasParseadas} turnos cargados para Emerson, Alfredo y Salvador).`
+        );
+        setTimeout(() => setSyncFeedback(null), 8000);
+      } else {
+        alert(res.error || "No se pudo sincronizar la información desde Google Sheets.");
+      }
+    } catch (err) {
+      alert("Error al sincronizar con Google Sheets: " + err.message);
+    } finally {
+      setIsSyncingSheets(false);
+    }
+  }
 
   // Sincronizar filterHorario cuando cambia el supervisor o cuando se actualiza su franja activa
   useEffect(() => {
@@ -947,11 +976,22 @@ export default function AttendanceView({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleQuickSyncGoogleSheets}
+              disabled={isSyncingSheets}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-800 border border-emerald-300 text-[11.5px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+              title="Sincronizar las 3 hojas de Google Sheets de Emerson, Alfredo y Salvador"
+            >
+              <RefreshCw size={13} className={isSyncingSheets ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+              <span>{isSyncingSheets ? "Sincronizando Sheets..." : "Sincronizar Sheets"}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setQuincenaModalOpen(true)}
               className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-[#0048B5] border border-blue-200 text-[11.5px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
             >
               <FileSpreadsheet size={14} className="text-blue-600" />
-              <span>Gestor Quincenal / Pegar de Sheets</span>
+              <span>Gestor Quincenal / Hojas</span>
             </button>
           </div>
         </div>
