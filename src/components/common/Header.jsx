@@ -102,28 +102,47 @@ export default function Header({
         </div>
 
         {/* ============================================================== */}
-        {/* 2. PESTAÑAS CENTRADAS                                          */}
+        {/* 2. PESTAÑAS FLUIDAS TIPO GOTA DE AGUA (ANIMACIÓN EXPANSIVA)    */}
         {/* ============================================================== */}
         {!isDoctorRole ? (
-          <nav className="hidden lg:flex items-center gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70 shadow-inner">
+          <nav className="hidden lg:flex items-center gap-1.5 rounded-full bg-slate-100/90 p-1.5 border border-slate-200/80 shadow-inner backdrop-blur-md">
             {tabs.map((t) => {
               const isActive = tab === t.id;
               return (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-bold transition-all duration-150 cursor-pointer ${
+                  title={t.label}
+                  className={`group relative flex items-center justify-center h-9 rounded-full px-2.5 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] overflow-hidden cursor-pointer select-none ${
                     isActive
-                      ? "bg-white text-[#0048B5] shadow-xs font-black ring-1 ring-slate-200/90 scale-[1.01]"
-                      : "text-slate-600 hover:text-[#0048B5] hover:bg-white/60"
+                      ? "bg-gradient-to-r from-[#0048B5] via-[#0066E0] to-[#0095FF] text-white shadow-md shadow-blue-500/25 ring-2 ring-blue-300/40"
+                      : "text-slate-600 hover:text-[#0048B5] hover:bg-white hover:shadow-md hover:shadow-blue-500/10 hover:ring-1 hover:ring-blue-100"
                   }`}
                 >
+                  {/* Ícono de la gota de agua con micro-animación de rebote elástico */}
                   <t.icon
-                    size={13.5}
-                    className={`shrink-0 ${isActive ? "text-[#0095FF]" : "text-slate-400"}`}
+                    size={16}
+                    className={`shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-115 ${
+                      isActive ? "text-white" : "text-slate-500 group-hover:text-[#0048B5]"
+                    }`}
                   />
-                  <span className="whitespace-nowrap hidden xl:inline">{t.label}</span>
-                  <span className="whitespace-nowrap xl:hidden">{t.shortLabel}</span>
+
+                  {/* Nombre que se despliega fluidamente como gota de agua al pasar el mouse */}
+                  <span
+                    className={`whitespace-nowrap font-extrabold text-[12px] overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] max-w-0 opacity-0 group-hover:max-w-[200px] group-hover:opacity-100 group-hover:ml-2 ${
+                      isActive ? "text-white" : "text-[#0048B5]"
+                    }`}
+                  >
+                    {t.label}
+                  </span>
+
+                  {/* Reflejo acuático de superficie (brillo de gota de agua) */}
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/30 via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                  {/* Punto luminoso de la gota activa en reposo */}
+                  {isActive && (
+                    <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-cyan-300 shadow-[0_0_6px_#00E5FF]" />
+                  )}
                 </button>
               );
             })}
