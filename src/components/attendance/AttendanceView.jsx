@@ -35,6 +35,7 @@ export default function AttendanceView({
   onSetAttendance: propOnSetAttendance = null,
   onUpdateSupervisorFranja = null,
   onUpdateSupervisorOfficialShift = null,
+  quincena = null,
   onSaveQuincena = null,
   onSyncQuincenaDate = null,
   dailyLots = null,
