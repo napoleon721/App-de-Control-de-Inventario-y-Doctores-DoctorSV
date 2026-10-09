@@ -29,6 +29,8 @@ dist-ssr
 .env.*
 !.env.example
 
-# Sensitive or personal documents
+# Sensitive or personal documents & scratch
 *.pdf
-EstadoCuenta-Afiliado.pdf
+scratch/
+*.xlsx
+!public/*.xlsx

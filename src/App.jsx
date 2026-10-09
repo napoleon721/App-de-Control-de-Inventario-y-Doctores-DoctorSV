@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import Header from "./components/common/Header";
 import KpiCard from "./components/common/KpiCard";
+import DoctorSVLogo from "./components/common/DoctorSVLogo";
 import SpaceMap from "./components/map/SpaceMap";
 import SpaceDetailModal from "./components/map/SpaceDetailModal";
 import ClaimSpaceModal from "./components/map/ClaimSpaceModal";
@@ -190,7 +191,7 @@ export default function App() {
   // 3.1 Supervisores oficiales configurables dinámicamente por el Doctor Master
   const [supervisores, setSupervisores] = useState(() => {
     try {
-      const saved = localStorage.getItem("DOCTORSV_SUPERVISORES_CONFIG_V1");
+      const saved = localStorage.getItem("DOCTORSV_SUPERVISORES_CONFIG_V1") || localStorage.getItem("DOCTORSV_CONFIG_SUPERVISORES_V1");
       return saved ? JSON.parse(saved) : SUPERVISORES_OFICIALES;
     } catch {
       return SUPERVISORES_OFICIALES;
@@ -1130,6 +1131,12 @@ export default function App() {
       OCUPADO: 0,
     };
     spaces.forEach((s) => {
+      const isSupervisorPerson =
+        s.categoria === "Supervisores" ||
+        (supervisores || []).some(
+          (sup) => Number(sup.puesto) === Number(s.id) && Number(sup.puesto) > 0
+        );
+
       if (s.doctor) {
         const isNotWorking = (() => {
           if (!attendanceRecords || typeof attendanceRecords !== "object") return false;
@@ -1145,15 +1152,19 @@ export default function App() {
 
         if (isNotWorking) {
           res.DISPONIBLE++;
+        } else if (isSupervisorPerson) {
+          res.RESERVADO++;
         } else {
           res.OCUPADO++;
         }
+      } else if (isSupervisorPerson) {
+        res.RESERVADO++;
       } else if (res[s.estado] !== undefined) {
         res[s.estado]++;
       }
     });
     return res;
-  }, [spaces, attendanceRecords]);
+  }, [spaces, attendanceRecords, supervisores]);
 
   // Alertas activas
   const alerts = useMemo(() => {
@@ -1660,8 +1671,9 @@ export default function App() {
           return sup;
         });
         try {
-          localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(nextSup));
+          localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(nextSup));
         } catch {}
+        saveCloudSupervisores(nextSup, myClientId.current);
         return nextSup;
       });
     } else {
@@ -1677,8 +1689,9 @@ export default function App() {
         });
         if (changed) {
           try {
-            localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(nextSup));
+            localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(nextSup));
           } catch {}
+          saveCloudSupervisores(nextSup, myClientId.current);
           return nextSup;
         }
         return prev;
@@ -1745,7 +1758,9 @@ export default function App() {
         if (!unassignedSpaceId) unassignedSpaceId = Number(s.id);
         recentlyReleasedRef.current.set(Number(s.id), Date.now());
         const isSpecial = s.estado === "INHABILITADO" || s.estado === "REPARACION";
-        const isSupStation = [135, 136, 137, 138, 139].includes(Number(s.id));
+        const isSupStation = (supervisores || []).some(
+          (sup) => Number(sup.puesto) === Number(s.id) && Number(sup.puesto) > 0
+        );
         return {
           ...s,
           doctor: null,
@@ -1782,8 +1797,9 @@ export default function App() {
       });
       if (supChanged) {
         try {
-          localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(nextSup));
+          localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(nextSup));
         } catch {}
+        saveCloudSupervisores(nextSup, myClientId.current);
         return nextSup;
       }
       return prev;
@@ -1833,8 +1849,9 @@ export default function App() {
   function handleSaveSupervisores(newSupervisores) {
     setSupervisores(newSupervisores);
     try {
-      localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(newSupervisores));
+      localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(newSupervisores));
     } catch {}
+    saveCloudSupervisores(newSupervisores, myClientId.current);
 
     // Sincronizar puestos físicos en spaces
     setSpaces((prevSpaces) => {
@@ -1856,7 +1873,7 @@ export default function App() {
           }
         } else {
           // Si el puesto estaba asignado a un supervisor pero ya ningún supervisor lo tiene
-          const wasSup = sp.categoria === "Supervisores" || [135, 136, 137, 138, 139].includes(sid);
+          const wasSup = sp.categoria === "Supervisores" || newSupervisores.some((sup) => Number(sup.puesto) === sid);
           if (wasSup && sp.doctor && newSupervisores.some((sup) => isSameDoctor(sup.nombre, sp.doctor))) {
             changed = true;
             return {
@@ -3197,7 +3214,7 @@ export default function App() {
         {/* Footer institucional DoctorSV */}
         <footer className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-[12px] text-slate-500 shadow-2xs">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="DoctorSV" className="h-5 object-contain" />
+            <DoctorSVLogo className="h-5" showSubtext={false} />
             <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
               <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="font-medium">

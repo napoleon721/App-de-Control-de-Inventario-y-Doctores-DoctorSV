@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Monitor, AlertTriangle, Droplets, Wrench, Lock, XCircle, User, Shield, UserX } from "lucide-react";
+import { Monitor, AlertTriangle, Droplets, Wrench, Lock, XCircle, User, Shield, UserX, Briefcase } from "lucide-react";
 import { isSameDoctor } from "../../utils/safeHelpers";
 
 export default function ExactCubicle({ space, onClick, attendanceRecords = null, density = "normal" }) {
@@ -11,8 +11,9 @@ export default function ExactCubicle({ space, onClick, attendanceRecords = null,
   const isRevisado = space.estado === "REPARACION";
   const isReservado = space.estado === "RESERVADO";
   const isIncompleto = space.estado === "INCOMPLETO";
-  const isSupervisorStation = [135, 136, 137, 138, 139].includes(Number(space.id));
+  const isSupervisorStation = space.categoria === "Supervisores" || [135, 136, 137, 138, 139].includes(Number(space.id));
   const isSupervisor = (isSupervisorStation || space.categoria === "Supervisores") && space.estado !== "DISPONIBLE" && space.estado !== "VACIO";
+  const isAdministrativo = space.categoria === "Administrativos" && (space.estado === "OCUPADO" || Boolean(space.doctor));
 
   // Dimensiones y tipografía responsivas según la densidad seleccionada
   const dimClasses = density === "compact"
@@ -49,7 +50,16 @@ export default function ExactCubicle({ space, onClick, attendanceRecords = null,
   let tagText = space.marca || "DELL";
   let TagIcon = Monitor;
 
-  if (isOcupado) {
+  if (isAdministrativo && !isNotWorking) {
+    // Puesto asignado a personal administrativo (Índigo elegante corporativo)
+    bgGradient = "linear-gradient(180deg, #4F46E5 0%, #312E81 100%)";
+    textColor = "#FFFFFF";
+    borderColor = "#818CF8";
+    const cleanDoc = space.doctor ? String(space.doctor).replace(/^DR(A)?\.\s*/i, "").trim() : "";
+    const firstWord = cleanDoc.split(" ")[0] || "ADMIN";
+    tagText = firstWord.length > 7 ? firstWord.slice(0, 6) + "." : firstWord;
+    TagIcon = Briefcase;
+  } else if (isOcupado) {
     // Puesto ocupado por un médico en tiempo real (Azul institucional DoctorSV)
     bgGradient = "linear-gradient(180deg, #0048B5 0%, #002D7A 100%)";
     textColor = "#FFFFFF";
@@ -98,7 +108,9 @@ export default function ExactCubicle({ space, onClick, attendanceRecords = null,
   }
 
   const tooltipText = isDoctorAbsent && space.doctor
-    ? `Puesto #${space.id} · Dr(a). ${space.doctor} [AUSENTE / Inasistencia] · Puesto disponible para reasignar`
+    ? `Puesto #${space.id} · ${space.doctor} [AUSENTE / Inasistencia] · Puesto disponible para reasignar`
+    : isAdministrativo
+    ? `Puesto #${space.id} · Personal Administrativo: ${space.doctor} (${space.horario || 'Turno activo'}) · PC: ${space.marca || 'DELL'}`
     : isOcupado
     ? `Puesto #${space.id} · Ocupado por Dr(a). ${space.doctor} (${space.horario || 'Turno activo'})${space.supervisorNombre ? ` · Sup: ${space.supervisorNombre}` : ''} · PC: ${space.marca || 'DELL'}`
     : isSupervisor
