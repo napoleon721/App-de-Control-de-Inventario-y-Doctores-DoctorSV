@@ -1560,9 +1560,31 @@ export default function App() {
   function handleAssignDoctor(doctorName, spaceId, horario) {
     if (!doctorName) return;
     const cleanDoc = String(doctorName).trim();
-    const cleanSpaceId = Number(spaceId);
+    const cleanSpaceId = spaceId !== undefined && spaceId !== null && spaceId !== "" ? Number(spaceId) : null;
+
+    // Si spaceId es nulo o 0, el usuario seleccionó "Sin puesto" -> liberar puesto
+    if (!cleanSpaceId) {
+      handleUnassignDoctor(cleanDoc);
+      return;
+    }
+
     const assignedHorario = horario || "07:00 AM – 12:00 PM";
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+
+    // Determinar categoría del personal (Supervisores, Administrativos, Médicos)
+    const isSupervisor = (supervisores || SUPERVISORES_OFICIALES).some(
+      (s) => isSameDoctor(s.nombre, cleanDoc)
+    );
+    const isAdmin = (STAFF_EXCEL || []).some(
+      (st) => isSameDoctor(st.nombre, cleanDoc) && st.categoria === "Administrativos"
+    ) || (customStaff || []).some(
+      (cs) => isSameDoctor(cs.nombre, cleanDoc) && cs.categoria === "Administrativos"
+    );
+    const assignedCategoria = isSupervisor
+      ? "Supervisores"
+      : isAdmin
+      ? "Administrativos"
+      : null;
 
     // Determinar automáticamente el supervisor de este médico
     const supInfo = getDoctorSupervisorInfo({
@@ -1597,7 +1619,7 @@ export default function App() {
           horario: null,
           supervisorId: null,
           supervisorNombre: null,
-          categoria: Number(s.id) === 1 ? null : s.categoria,
+          categoria: null,
           estado: "DISPONIBLE",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
           modelo: s.modelo || "OptiPlex 3080",
@@ -1609,6 +1631,7 @@ export default function App() {
         return {
           ...s,
           doctor: cleanDoc,
+          categoria: Number(s.id) === 1 ? null : assignedCategoria,
           horario: assignedHorario,
           supervisorId: assignedSupId,
           supervisorNombre: assignedSupNombre,
@@ -1623,6 +1646,44 @@ export default function App() {
 
     setSpaces(nextSpaces);
     saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    // Si es supervisor, sincronizar su puesto en la lista oficial de supervisores
+    if (isSupervisor) {
+      setSupervisores((prev) => {
+        const nextSup = prev.map((sup) => {
+          if (isSameDoctor(sup.nombre, cleanDoc)) {
+            return { ...sup, puesto: cleanSpaceId };
+          }
+          if (Number(sup.puesto) === cleanSpaceId) {
+            return { ...sup, puesto: 0 };
+          }
+          return sup;
+        });
+        try {
+          localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(nextSup));
+        } catch {}
+        return nextSup;
+      });
+    } else {
+      // Si la persona NO es supervisor, asegurarse de que ningún supervisor tenga este puesto asignado
+      setSupervisores((prev) => {
+        let changed = false;
+        const nextSup = prev.map((sup) => {
+          if (Number(sup.puesto) === cleanSpaceId) {
+            changed = true;
+            return { ...sup, puesto: 0 };
+          }
+          return sup;
+        });
+        if (changed) {
+          try {
+            localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(nextSup));
+          } catch {}
+          return nextSup;
+        }
+        return prev;
+      });
+    }
 
     setAttendanceRecords((prev) => ({
       ...prev,
@@ -1665,7 +1726,7 @@ export default function App() {
 
   function handleUnassignDoctor(doctorName, spaceId, targetAttendanceStatus = "FINALIZADO") {
     const cleanDoc = doctorName ? safeLower(doctorName).trim() : null;
-    const cleanSpaceId = spaceId !== undefined && spaceId !== null ? Number(spaceId) : null;
+    const cleanSpaceId = spaceId !== undefined && spaceId !== null && spaceId !== "" ? Number(spaceId) : null;
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
     let unassignedSpaceId = cleanSpaceId;
@@ -1691,7 +1752,7 @@ export default function App() {
           horario: null,
           supervisorId: isSupStation ? s.supervisorId : null,
           supervisorNombre: isSupStation ? s.supervisorNombre : null,
-          categoria: Number(s.id) === 1 ? null : s.categoria,
+          categoria: null,
           estado: isSpecial ? s.estado : "DISPONIBLE",
           marca: (s.marca && s.marca !== "NO PC") ? s.marca : "DELL",
           modelo: s.modelo || "OptiPlex 3080",
@@ -1702,10 +1763,33 @@ export default function App() {
       return s;
     });
 
-    if (!hasChanges) return;
+    if (hasChanges) {
+      setSpaces(nextSpaces);
+      saveCloudSpaces(nextSpaces, myClientId.current, true);
+    }
 
-    setSpaces(nextSpaces);
-    saveCloudSpaces(nextSpaces, myClientId.current, true);
+    // Actualizar supervisores si doctorName era supervisor o unassignedSpaceId era el puesto oficial de un supervisor
+    setSupervisores((prev) => {
+      let supChanged = false;
+      const nextSup = prev.map((sup) => {
+        const isThisDoc = doctorName && isSameDoctor(sup.nombre, doctorName);
+        const isThisSpace = unassignedSpaceId && Number(sup.puesto) === Number(unassignedSpaceId);
+        if (isThisDoc || isThisSpace) {
+          supChanged = true;
+          return { ...sup, puesto: 0 };
+        }
+        return sup;
+      });
+      if (supChanged) {
+        try {
+          localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(nextSup));
+        } catch {}
+        return nextSup;
+      }
+      return prev;
+    });
+
+    if (!hasChanges && !doctorName) return;
 
     // Al liberar un médico del puesto, actualizar su asistencia respetando si ya estaba como AUSENTE o JUSTIFICADO
     if (targetAttendanceStatus !== null) {
@@ -1744,6 +1828,55 @@ export default function App() {
         monitor: unassignedSpace?.monitor,
       });
     }
+  }
+
+  function handleSaveSupervisores(newSupervisores) {
+    setSupervisores(newSupervisores);
+    try {
+      localStorage.setItem("DOCTORSV_CONFIG_SUPERVISORES_V1", JSON.stringify(newSupervisores));
+    } catch {}
+
+    // Sincronizar puestos físicos en spaces
+    setSpaces((prevSpaces) => {
+      let changed = false;
+      const nextSpaces = prevSpaces.map((sp) => {
+        const sid = Number(sp.id);
+        const matchSup = newSupervisores.find((sup) => Number(sup.puesto) === sid && Number(sup.puesto) > 0);
+
+        if (matchSup) {
+          if (!sp.doctor || !isSameDoctor(sp.doctor, matchSup.nombre)) {
+            changed = true;
+            return {
+              ...sp,
+              doctor: matchSup.nombre,
+              categoria: "Supervisores",
+              horario: matchSup.horario || sp.horario || "02:00 PM – 10:00 PM",
+              estado: "OCUPADO",
+            };
+          }
+        } else {
+          // Si el puesto estaba asignado a un supervisor pero ya ningún supervisor lo tiene
+          const wasSup = sp.categoria === "Supervisores" || [135, 136, 137, 138, 139].includes(sid);
+          if (wasSup && sp.doctor && newSupervisores.some((sup) => isSameDoctor(sup.nombre, sp.doctor))) {
+            changed = true;
+            return {
+              ...sp,
+              doctor: null,
+              horario: null,
+              categoria: null,
+              estado: "DISPONIBLE",
+            };
+          }
+        }
+        return sp;
+      });
+
+      if (changed) {
+        saveCloudSpaces(nextSpaces, myClientId.current, true);
+        return nextSpaces;
+      }
+      return prevSpaces;
+    });
   }
 
   // Asignación atómica en lote para supervisores
@@ -3192,9 +3325,10 @@ export default function App() {
         {supervisorConfigOpen && (
           <SupervisorConfigModal
             supervisores={supervisores}
-            onSaveSupervisores={(newSupervisores) => setSupervisores(newSupervisores)}
+            onSaveSupervisores={handleSaveSupervisores}
             onClose={() => setSupervisorConfigOpen(false)}
             horarios={horarios}
+            spaces={spaces}
           />
         )}
 

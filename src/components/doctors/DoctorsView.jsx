@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Stethoscope, ChevronRight, Search, Clock, Users, Shield, UserCheck, Briefcase, Building2, UserPlus, Trash2, Mail } from "lucide-react";
+import { Stethoscope, ChevronRight, Search, Clock, Users, Shield, UserCheck, Briefcase, Building2, UserPlus, Trash2, Mail, UserX } from "lucide-react";
 import SectionCard from "../common/SectionCard";
 import Pill from "../common/Pill";
 import DoctorAssignModal from "./DoctorAssignModal";
@@ -26,10 +26,26 @@ export default function DoctorsView({
   const itemsPerPage = 20;
 
   const availableSpaces = useMemo(() => {
-    return (spaces || []).filter(
-      (s) => (!s.doctor || (assigningDoctor && isSameDoctor(s.doctor, assigningDoctor))) && s.estado !== "INHABILITADO"
+    // Estaciones oficiales de otros supervisores (que no sean el actual)
+    const otherSupervisorStations = new Set(
+      (supervisores || [])
+        .filter((sup) => !assigningDoctor || !isSameDoctor(sup.nombre, assigningDoctor))
+        .map((sup) => Number(sup.puesto))
+        .filter((p) => p > 0)
     );
-  }, [spaces, assigningDoctor]);
+
+    return (spaces || []).filter((s) => {
+      const sid = Number(s.id);
+      if (s.estado === "INHABILITADO") return false;
+      // No permitir puestos reservados como estación oficial de otro supervisor
+      if (otherSupervisorStations.has(sid)) return false;
+      // No permitir puestos ocupados por otro médico o administrativo
+      if (s.doctor && (!assigningDoctor || !isSameDoctor(s.doctor, assigningDoctor))) {
+        return false;
+      }
+      return true;
+    });
+  }, [spaces, assigningDoctor, supervisores]);
 
   // Combine master doctor list with staff categories and include all supervisors & admin
   const fullDoctorsList = useMemo(() => {
@@ -353,15 +369,31 @@ export default function DoctorsView({
                           <Trash2 size={13} />
                         </button>
                       )}
+                      {/* Botón rápido para liberar puesto si ya tiene uno */}
+                      {(assignedSpace || (isSupervisor && d.puestoOficial)) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`¿Liberar el puesto de ${d.nombre}? Quedará sin cubículo asignado.`)) {
+                              onUnassignDoctor(d.nombre, assignedSpace?.id || d.puestoOficial);
+                            }
+                          }}
+                          className="flex h-7 px-2.5 items-center gap-1 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-[11px] font-semibold transition-all shadow-2xs cursor-pointer active:scale-95"
+                          title="Liberar puesto de este colaborador (dejar sin puesto)"
+                        >
+                          <UserX size={12} className="text-rose-500" />
+                          <span className="hidden sm:inline">Liberar</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => setAssigningDoctor(d.nombre)}
-                        className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-semibold transition-all shadow-2xs ${
-                          assignedSpace
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-semibold transition-all shadow-2xs cursor-pointer active:scale-95 ${
+                          assignedSpace || (isSupervisor && d.puestoOficial)
                             ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
                             : "text-white bg-[#0048B5] hover:bg-[#003487]"
                         }`}
                       >
-                        {assignedSpace ? "Reasignar" : "Asignar Puesto"} <ChevronRight size={13} />
+                        {(assignedSpace || (isSupervisor && d.puestoOficial)) ? "Reasignar / Liberar" : "Asignar Puesto"} <ChevronRight size={13} />
                       </button>
                     </div>
                   </td>
@@ -409,17 +441,29 @@ export default function DoctorsView({
       )}
 
       {/* Modal de Asignación */}
-      {assigningDoctor && (
-        <DoctorAssignModal
-          doctor={assigningDoctor}
-          currentSpace={spaces.find((s) => s.doctor && isSameDoctor(s.doctor, assigningDoctor))}
-          availableSpaces={availableSpaces}
-          onClose={() => setAssigningDoctor(null)}
-          onAssign={onAssignDoctor}
-          onUnassign={onUnassignDoctor}
-          horarios={horarios}
-        />
-      )}
+      {assigningDoctor && (() => {
+        const staffObj = fullDoctorsList.find((d) => isSameDoctor(d.nombre, assigningDoctor));
+        let curSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, assigningDoctor));
+        if (!curSpace && staffObj?.categoria === "Supervisores" && staffObj.puestoOficial) {
+          curSpace = (spaces || []).find((s) => Number(s.id) === Number(staffObj.puestoOficial)) || {
+            id: staffObj.puestoOficial,
+            horario: staffObj.horarioDefault,
+          };
+        }
+
+        return (
+          <DoctorAssignModal
+            doctor={assigningDoctor}
+            doctorCategory={staffObj?.categoria || "Personal"}
+            currentSpace={curSpace}
+            availableSpaces={availableSpaces}
+            onClose={() => setAssigningDoctor(null)}
+            onAssign={onAssignDoctor}
+            onUnassign={onUnassignDoctor}
+            horarios={horarios}
+          />
+        );
+      })()}
 
       {/* Modal de Alta de Personal */}
       {addStaffOpen && (

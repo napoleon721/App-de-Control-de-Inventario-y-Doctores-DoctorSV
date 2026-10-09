@@ -11,6 +11,7 @@ export default function SupervisorConfigModal({
   onSaveSupervisores,
   onClose,
   horarios = DEFAULT_HORARIOS,
+  spaces = [],
 }) {
   const [list, setList] = useState(() =>
     supervisores.map((s) => {
@@ -86,12 +87,30 @@ export default function SupervisorConfigModal({
   }
 
   function handleSave() {
-    // Validaciones flexibles (permitiendo 0 si no asiste hoy)
+    // Validaciones flexibles (permitiendo 0 si no asiste hoy o sin puesto físico)
     for (let i = 0; i < list.length; i++) {
       const s = list[i];
       const bIni = Number(s.bloqueInicio) || 0;
       const bFin = Number(s.bloqueFin) || 0;
       const pFis = Number(s.puesto) || 0;
+
+      // Validar que el puesto físico no esté asignado a otro supervisor
+      if (pFis > 0) {
+        const duplicateSup = list.find((other, otherIdx) => otherIdx !== i && Number(other.puesto) === pFis);
+        if (duplicateSup) {
+          setErrorMsg(`El puesto #${pFis} ya está configurado para ${duplicateSup.nombre}. Cada supervisor debe tener un puesto único.`);
+          return;
+        }
+
+        // Validar que el puesto no esté ocupado por otra persona (Administrativo o Médico)
+        if (spaces && Array.isArray(spaces)) {
+          const occupied = spaces.find((sp) => Number(sp.id) === pFis && sp.doctor && !isSameDoctor(sp.doctor, s.nombre));
+          if (occupied) {
+            setErrorMsg(`El puesto #${pFis} ya está ocupado por ${occupied.doctor} (${occupied.categoria || 'Personal'}). No se puede asignar como estación a ${s.nombre} sin antes liberarlo.`);
+            return;
+          }
+        }
+      }
 
       // Si el supervisor no asiste ese día (puestos en 0)
       if (bIni === 0 && bFin === 0) {
@@ -257,17 +276,33 @@ export default function SupervisorConfigModal({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 mb-2.5">
                   {/* Puesto Estación Física */}
                   <div>
-                    <label className="block text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
-                      <Lock size={11} className="text-sky-600" />
-                      <span>Estación Física</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                        <Lock size={11} className="text-sky-600" />
+                        <span>Estación Física</span>
+                      </label>
+                      {Number(sup.puesto) > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => handleChange(idx, "puesto", 0)}
+                          className="text-[10.5px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                          title="Liberar puesto físico (dejar en 0)"
+                        >
+                          Liberar (0)
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                          Sin puesto
+                        </span>
+                      )}
+                    </div>
                     <div className="relative">
                       <span className="absolute left-2.5 top-2 text-[12px] font-mono font-bold text-slate-400">#</span>
                       <input
                         type="number"
                         min="0"
                         max="170"
-                        value={sup.puesto}
+                        value={sup.puesto || 0}
                         onChange={(e) => handleChange(idx, "puesto", Number(e.target.value))}
                         className="w-full rounded-xl border border-slate-200 bg-white pl-6 pr-3 py-1.5 text-[12.5px] font-mono-data font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0095FF]/40"
                       />
