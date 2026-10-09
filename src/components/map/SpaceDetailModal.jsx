@@ -77,7 +77,17 @@ export default function SpaceDetailModal({
     setForm((prev) => {
       const next = { ...prev, ...patch };
 
-      // Si tiene médico asignado o estados administrativos bloqueados, mantenerlos
+      // Si el patch especifica explícitamente el estado, RESPETARLO:
+      if (patch.estado !== undefined) {
+        next.estado = patch.estado;
+        if (patch.estado === "VACIO") {
+          next.marca = "NO PC";
+          next.modelo = "";
+        }
+        return next;
+      }
+
+      // Si tiene médico asignado, mantenerlo en OCUPADO
       if (next.doctor) {
         next.estado = "OCUPADO";
         return next;
@@ -106,6 +116,79 @@ export default function SpaceDetailModal({
 
       return next;
     });
+  }
+
+  function handleImmediateAction(actionType) {
+    const todayStr = new Date().toLocaleDateString("es-SV");
+    const nowTimeStr = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+    let updated = { ...form, ultimoMovimiento: nowTimeStr };
+
+    if (actionType === "INHABILITAR_FILTRACION") {
+      const obs = form.observaciones
+        ? `${form.observaciones} | INHABILITADO POR FILTRACIÓN (${todayStr})`
+        : `INHABILITADO POR FILTRACIÓN (${todayStr})`;
+      updated = {
+        ...updated,
+        estado: "INHABILITADO",
+        doctor: null,
+        horario: null,
+        observaciones: obs,
+      };
+    } else if (actionType === "ENVIAR_REPARACION") {
+      const obs = form.observaciones
+        ? `${form.observaciones} | DAÑO / REPARACIÓN IT (${todayStr})`
+        : `EQUIPO EN REPARACIÓN IT (${todayStr})`;
+      updated = {
+        ...updated,
+        estado: "REPARACION",
+        doctor: null,
+        horario: null,
+        observaciones: obs,
+      };
+    } else if (actionType === "LIBERAR_TURNO") {
+      const obs = form.observaciones ? `${form.observaciones} | Turno liberado (${todayStr})` : "";
+      updated = {
+        ...updated,
+        estado: "DISPONIBLE",
+        doctor: null,
+        horario: null,
+        categoria: Number(form.id) === 1 ? null : form.categoria,
+        marca: form.marca && form.marca !== "NO PC" ? form.marca : "DELL",
+        modelo: form.modelo || "OptiPlex 3080",
+        observaciones: obs,
+      };
+    } else if (actionType === "MARCAR_DISPONIBLE") {
+      updated = {
+        ...updated,
+        estado: "DISPONIBLE",
+        doctor: null,
+        horario: null,
+        categoria: Number(form.id) === 1 ? null : form.categoria,
+        marca: form.marca && form.marca !== "NO PC" ? form.marca : "DELL",
+        modelo: form.modelo || "OptiPlex 3080",
+      };
+    } else if (actionType === "MARCAR_INCOMPLETO") {
+      updated = {
+        ...updated,
+        estado: "INCOMPLETO",
+        doctor: null,
+        horario: null,
+      };
+    } else if (actionType === "MARCAR_VACIO") {
+      updated = {
+        ...updated,
+        estado: "VACIO",
+        doctor: null,
+        horario: null,
+        marca: "NO PC",
+        modelo: null,
+      };
+    } else {
+      return;
+    }
+
+    onSave(updated);
+    onClose();
   }
 
   function handleSave() {
@@ -275,11 +358,11 @@ export default function SpaceDetailModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{ animation: "popIn .2s cubic-bezier(0.16, 1, 0.3, 1) both" }}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white shadow-2xl border border-slate-200"
+        className="flex flex-col max-h-[90vh] w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
       >
         {/* Header Modal in DoctorSV Gradient */}
         <div
-          className="flex items-center justify-between px-6 py-4 text-white"
+          className="shrink-0 flex items-center justify-between px-6 py-4 text-white"
           style={{ background: "linear-gradient(135deg, #003487 0%, #0048B5 60%, #0095FF 100%)" }}
         >
           <div className="flex items-center gap-3">
@@ -293,14 +376,14 @@ export default function SpaceDetailModal({
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/25"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/25 cursor-pointer"
           >
             <X size={16} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="space-y-5 p-6">
+        <div className="flex-1 overflow-y-auto space-y-4 p-5 sm:p-6">
           {/* Tarjeta de Estación Oficial de Supervisión (si este puesto es de un supervisor) */}
           {matchedSupervisor && (
             <div className="rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/90 p-3.5 space-y-2.5 shadow-xs">
@@ -360,21 +443,19 @@ export default function SpaceDetailModal({
             </div>
           )}
           {/* Quick Action Bar for instant incidents & shift change */}
-          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3">
-            <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
-              ⚡ Acciones Inmediatas (1 Clic)
-            </p>
+          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3.5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <span className="text-amber-500">⚡</span> Acciones Inmediatas (1 Clic)
+              </p>
+              <span className="text-[10px] text-slate-400 font-medium">Guarda y aplica al instante</span>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  updateField({
-                    estado: "INHABILITADO",
-                    doctor: null,
-                    observaciones: form.observaciones ? `${form.observaciones} | INHABILITADO POR FILTRACIÓN (${new Date().toLocaleDateString("es-SV")})` : `INHABILITADO POR FILTRACIÓN (${new Date().toLocaleDateString("es-SV")})`,
-                  });
-                }}
-                className="flex items-center gap-1.5 rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-[11.5px] font-bold text-blue-800 hover:bg-blue-100 transition shadow-2xs active:scale-95"
+                onClick={() => handleImmediateAction("INHABILITAR_FILTRACION")}
+                className="flex items-center gap-1.5 rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-[11.5px] font-bold text-blue-800 hover:bg-blue-100 transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Inhabilitar este puesto de inmediato por filtración de agua"
               >
                 <Droplets size={13} className="text-blue-600" />
                 <span>💧 Inhabilitar por Filtración</span>
@@ -382,14 +463,9 @@ export default function SpaceDetailModal({
 
               <button
                 type="button"
-                onClick={() => {
-                  updateField({
-                    estado: "REPARACION",
-                    doctor: null,
-                    observaciones: form.observaciones ? `${form.observaciones} | DAÑO / REPARACIÓN IT (${new Date().toLocaleDateString("es-SV")})` : `EQUIPO EN REPARACIÓN IT (${new Date().toLocaleDateString("es-SV")})`,
-                  });
-                }}
-                className="flex items-center gap-1.5 rounded-xl border border-purple-300 bg-purple-50 px-3 py-1.5 text-[11.5px] font-bold text-purple-800 hover:bg-purple-100 transition shadow-2xs active:scale-95"
+                onClick={() => handleImmediateAction("ENVIAR_REPARACION")}
+                className="flex items-center gap-1.5 rounded-xl border border-purple-300 bg-purple-50 px-3 py-1.5 text-[11.5px] font-bold text-purple-800 hover:bg-purple-100 transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Poner en estado de reparación y registrar daño en bitácora"
               >
                 <Wrench size={13} className="text-purple-600" />
                 <span>🔧 Enviar a Reparación</span>
@@ -397,29 +473,50 @@ export default function SpaceDetailModal({
 
               <button
                 type="button"
-                onClick={() => {
-                  updateField({
-                    estado: "DISPONIBLE",
-                    doctor: null,
-                    horario: null,
-                    categoria: Number(form.id) === 1 ? null : form.categoria,
-                    marca: form.marca && form.marca !== "NO PC" ? form.marca : "DELL",
-                    modelo: form.modelo || "OptiPlex 3080",
-                    observaciones: form.observaciones ? `${form.observaciones} | Turno liberado` : "",
-                  });
-                }}
-                className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[11.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs active:scale-95"
+                onClick={() => handleImmediateAction("LIBERAR_TURNO")}
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[11.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Desocupar el puesto, quitar médico y dejar disponible"
               >
                 <span>🔄 Liberar Turno (Desocupar)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleImmediateAction("MARCAR_DISPONIBLE")}
+                className="flex items-center gap-1.5 rounded-xl border border-teal-300 bg-teal-50 px-3 py-1.5 text-[11.5px] font-bold text-teal-800 hover:bg-teal-100 transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Dejar puesto disponible con equipamiento básico completo"
+              >
+                <span>✅ Marcar Disponible</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleImmediateAction("MARCAR_INCOMPLETO")}
+                className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-[11.5px] font-bold text-amber-800 hover:bg-amber-100 transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Marcar como incompleto (falta periférico o revisión)"
+              >
+                <span>⚠️ Marcar Incompleto</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleImmediateAction("MARCAR_VACIO")}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-[11.5px] font-bold text-rose-800 hover:bg-rose-100 transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Marcar puesto vacío sin computadora"
+              >
+                <span>🚫 Dejar Vacío (Sin PC)</span>
               </button>
             </div>
           </div>
 
           {/* Quick State Selector */}
           <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Estado Detallado del Puesto
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Estado Detallado del Puesto
+              </p>
+              <span className="text-[10px] text-slate-400 font-medium">Selecciona y confirma con "Guardar Cambios"</span>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {Object.keys(ESTADOS).map((k) => {
                 if (!isMaster && k === "OCUPADO" && !form.doctor) return null;
@@ -432,8 +529,8 @@ export default function SpaceDetailModal({
                     onClick={() => {
                       const newDoctor = k === "OCUPADO" ? (form.doctor || "") : null;
                       const newHorario = k === "OCUPADO" ? (form.horario || (horarios && horarios[0]) || "07:00 AM – 12:00 PM") : null;
-                      const newMarca = (k === "DISPONIBLE" && (!form.marca || form.marca === "NO PC")) ? "DELL" : form.marca;
-                      const newModelo = (k === "DISPONIBLE" && !form.modelo) ? "OptiPlex 3080" : form.modelo;
+                      const newMarca = (k === "DISPONIBLE" && (!form.marca || form.marca === "NO PC")) ? "DELL" : (k === "VACIO" ? "NO PC" : form.marca);
+                      const newModelo = (k === "DISPONIBLE" && !form.modelo) ? "OptiPlex 3080" : (k === "VACIO" ? "" : form.modelo);
                       updateField({
                         estado: k,
                         doctor: newDoctor,
@@ -443,7 +540,9 @@ export default function SpaceDetailModal({
                         categoria: Number(form.id) === 1 ? null : form.categoria,
                       });
                     }}
-                    className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 active:scale-95 shadow-2xs"
+                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 active:scale-95 shadow-2xs cursor-pointer ${
+                      isCurrent ? "ring-2 ring-offset-1 ring-slate-400 shadow-xs" : "hover:brightness-95"
+                    }`}
                     style={{
                       borderColor: isCurrent ? e.color : (e.border || "#E2E8F0"),
                       background: isCurrent ? e.color : e.soft,
@@ -919,30 +1018,30 @@ export default function SpaceDetailModal({
               )}
             </ul>
           </div>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <span className="text-[11px] text-slate-500 font-medium hidden sm:inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Sincroniza Firestore y Google Sheets</span>
-            </span>
-            <div className="flex items-center gap-2.5 ml-auto">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="flex items-center gap-1.5 rounded-xl px-5 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 shadow-sm active:scale-95 cursor-pointer"
-                style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
-              >
-                <Save size={14} /> Guardar Cambios
-              </button>
-            </div>
+        {/* Sticky Action Footer */}
+        <div className="shrink-0 flex items-center justify-between border-t border-slate-200 bg-slate-50/95 px-5 sm:px-6 py-3.5 backdrop-blur-md shadow-md z-10">
+          <span className="text-[11px] text-slate-500 font-medium hidden sm:inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Sincroniza Firestore y Google Sheets</span>
+          </span>
+          <div className="flex items-center gap-2.5 ml-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="flex items-center gap-1.5 rounded-xl px-5 py-2 text-[12.5px] font-bold text-white transition hover:brightness-110 shadow-sm active:scale-95 cursor-pointer ring-2 ring-[#0095FF]/30"
+              style={{ background: "linear-gradient(135deg, #0048B5 0%, #0095FF 100%)" }}
+            >
+              <Save size={14} /> Guardar Cambios
+            </button>
           </div>
         </div>
       </div>

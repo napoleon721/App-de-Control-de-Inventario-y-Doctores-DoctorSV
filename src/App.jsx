@@ -1234,16 +1234,20 @@ export default function App() {
           assignedSupNombre = matchSup.nombre;
         }
       }
-    } else if (
-      finalEstado !== "INHABILITADO" &&
-      finalEstado !== "REPARACION" &&
-      finalEstado !== "RESERVADO"
-    ) {
+    } else {
       if (![135, 136, 137, 138, 139].includes(cleanId)) {
         assignedSupId = null;
         assignedSupNombre = null;
       }
-      if (!hasPc) {
+      if (
+        finalEstado === "INHABILITADO" ||
+        finalEstado === "REPARACION" ||
+        finalEstado === "RESERVADO" ||
+        finalEstado === "INCOMPLETO" ||
+        finalEstado === "VACIO"
+      ) {
+        // Respetar estado explícito seleccionado por el usuario
+      } else if (!hasPc) {
         finalEstado = "VACIO";
       } else if (!hasMouse || !hasHeadset || !hasMonitor) {
         finalEstado = "INCOMPLETO";
@@ -1261,8 +1265,8 @@ export default function App() {
       supervisorId: assignedSupId,
       supervisorNombre: assignedSupNombre,
       categoria: cleanId === 1 ? null : updatedSpace.categoria,
-      marca: !hasPc ? "NO PC" : (updatedSpace.marca || "DELL"),
-      modelo: !hasPc ? null : (updatedSpace.modelo || "OptiPlex 3080"),
+      marca: (!hasPc || finalEstado === "VACIO") ? "NO PC" : (updatedSpace.marca || "DELL"),
+      modelo: (!hasPc || finalEstado === "VACIO") ? null : (updatedSpace.modelo || "OptiPlex 3080"),
       ultimoMovimiento: nowTimeStr,
     };
 
