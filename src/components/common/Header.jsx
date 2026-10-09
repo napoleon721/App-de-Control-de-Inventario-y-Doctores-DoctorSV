@@ -238,9 +238,18 @@ export default function Header({
                 <span className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-[#0048B5] text-white shrink-0">
                   <UserCheck size={12} />
                 </span>
-                <span className="font-extrabold text-slate-900 max-w-[80px] sm:max-w-[120px] truncate">
+                <span className="font-extrabold text-slate-900 max-w-[80px] sm:max-w-[120px] truncate" title={currentUser.name}>
                   {currentUser.name}
                 </span>
+                {Number(currentUser.puesto) > 0 ? (
+                  <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-sky-200/70 text-sky-900 text-[10px] font-mono-data font-black">
+                    #{currentUser.puesto}
+                  </span>
+                ) : (
+                  <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-[9.5px] font-bold">
+                    Sin puesto
+                  </span>
+                )}
               </div>
               <button
                 type="button"

@@ -172,7 +172,7 @@ export default function WarehouseView({ bodegaStock = [], spaces = [], onRegiste
       alert(`No hay existencias disponibles de ${itemKey} en Bodega para restar.`);
       return;
     }
-    if (confirm(`¿Confirmas descontar 1 unidad de ${itemKey} de la Bodega Central?`)) {
+    if (window.confirm(`¿Confirmas descontar 1 unidad de ${itemKey} de la Bodega Central?`)) {
       onRegisterMovement({
         equipo: itemKey,
         tipo: itemKey,

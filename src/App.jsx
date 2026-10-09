@@ -1676,6 +1676,10 @@ export default function App() {
         saveCloudSupervisores(nextSup, myClientId.current);
         return nextSup;
       });
+
+      if (currentUser?.role === "SUPERVISOR" && isSameDoctor(currentUser.name, cleanDoc)) {
+        setCurrentUser((prev) => (prev ? { ...prev, puesto: cleanSpaceId, spaceId: cleanSpaceId } : prev));
+      }
     } else {
       // Si la persona NO es supervisor, asegurarse de que ningún supervisor tenga este puesto asignado
       setSupervisores((prev) => {
@@ -1805,6 +1809,14 @@ export default function App() {
       return prev;
     });
 
+    if (currentUser?.role === "SUPERVISOR") {
+      const isThisDoc = doctorName && isSameDoctor(currentUser.name, doctorName);
+      const isThisSpace = unassignedSpaceId && Number(currentUser.puesto) === Number(unassignedSpaceId);
+      if (isThisDoc || isThisSpace) {
+        setCurrentUser((prev) => (prev ? { ...prev, puesto: 0, spaceId: null } : prev));
+      }
+    }
+
     if (!hasChanges && !doctorName) return;
 
     // Al liberar un médico del puesto, actualizar su asistencia respetando si ya estaba como AUSENTE o JUSTIFICADO
@@ -1852,6 +1864,13 @@ export default function App() {
       localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(newSupervisores));
     } catch {}
     saveCloudSupervisores(newSupervisores, myClientId.current);
+
+    if (currentUser?.role === "SUPERVISOR") {
+      const mySup = newSupervisores.find((s) => s.id === currentUser.supervisorId || isSameDoctor(s.nombre, currentUser.name));
+      if (mySup) {
+        setCurrentUser((prev) => (prev ? { ...prev, puesto: mySup.puesto, shift: mySup.horario || prev.shift } : prev));
+      }
+    }
 
     // Sincronizar puestos físicos en spaces
     setSpaces((prevSpaces) => {
@@ -2295,6 +2314,26 @@ export default function App() {
 
     setSpaces(nextSpaces);
     saveCloudSpaces(nextSpaces, myClientId.current, true);
+
+    // Evitar colisiones si este puesto estaba reservado como estación fija de un supervisor
+    setSupervisores((prev) => {
+      let changed = false;
+      const nextSup = prev.map((sup) => {
+        if (Number(sup.puesto) === cleanSpaceId && !isSameDoctor(sup.nombre, doctor)) {
+          changed = true;
+          return { ...sup, puesto: 0 };
+        }
+        return sup;
+      });
+      if (changed) {
+        try {
+          localStorage.setItem("DOCTORSV_SUPERVISORES_CONFIG_V1", JSON.stringify(nextSup));
+        } catch {}
+        saveCloudSupervisores(nextSup, myClientId.current);
+        return nextSup;
+      }
+      return prev;
+    });
 
     setAttendanceRecords((prev) => ({
       ...prev,

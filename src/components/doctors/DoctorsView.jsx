@@ -370,7 +370,7 @@ export default function DoctorsView({
                         </button>
                       )}
                       {/* Botón rápido para liberar puesto si ya tiene uno */}
-                      {(assignedSpace || (isSupervisor && d.puestoOficial)) && (
+                      {Boolean(assignedSpace || (isSupervisor && Number(d.puestoOficial) > 0)) && (
                         <button
                           type="button"
                           onClick={() => {
@@ -388,12 +388,12 @@ export default function DoctorsView({
                       <button
                         onClick={() => setAssigningDoctor(d.nombre)}
                         className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11.5px] font-semibold transition-all shadow-2xs cursor-pointer active:scale-95 ${
-                          assignedSpace || (isSupervisor && d.puestoOficial)
+                          assignedSpace || (isSupervisor && Number(d.puestoOficial) > 0)
                             ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
                             : "text-white bg-[#0048B5] hover:bg-[#003487]"
                         }`}
                       >
-                        {(assignedSpace || (isSupervisor && d.puestoOficial)) ? "Reasignar / Liberar" : "Asignar Puesto"} <ChevronRight size={13} />
+                        {(assignedSpace || (isSupervisor && Number(d.puestoOficial) > 0)) ? "Reasignar / Liberar" : "Asignar Puesto"} <ChevronRight size={13} />
                       </button>
                     </div>
                   </td>
@@ -444,9 +444,9 @@ export default function DoctorsView({
       {assigningDoctor && (() => {
         const staffObj = fullDoctorsList.find((d) => isSameDoctor(d.nombre, assigningDoctor));
         let curSpace = (spaces || []).find((s) => s.doctor && isSameDoctor(s.doctor, assigningDoctor));
-        if (!curSpace && staffObj?.categoria === "Supervisores" && staffObj.puestoOficial) {
+        if (!curSpace && staffObj?.categoria === "Supervisores" && Number(staffObj.puestoOficial) > 0) {
           curSpace = (spaces || []).find((s) => Number(s.id) === Number(staffObj.puestoOficial)) || {
-            id: staffObj.puestoOficial,
+            id: Number(staffObj.puestoOficial),
             horario: staffObj.horarioDefault,
           };
         }
