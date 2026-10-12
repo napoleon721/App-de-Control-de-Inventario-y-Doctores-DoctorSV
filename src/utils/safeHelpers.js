@@ -346,4 +346,68 @@ export function getDoctorSupervisorInfo({
   return null;
 }
 
+/**
+ * Determina el estado operacional efectivo de un espacio/cubículo
+ * garantizando coherencia 100% matemática entre contadores de KPI, filtros y visualización de cubículos.
+ */
+export function getEffectiveSpaceStatus(space, attendanceRecords = null, supervisores = []) {
+  if (!space) return "DISPONIBLE";
+
+  const sid = Number(space.id);
+  const isSupervisorPerson =
+    space.categoria === "Supervisores" ||
+    [135, 136, 137, 138, 139].includes(sid) ||
+    (supervisores || []).some(
+      (sup) =>
+        (Number(sup.puesto) === sid && Number(sup.puesto) > 0) ||
+        (space.doctor && isSameDoctor(space.doctor, sup.nombre))
+    );
+
+  // Estados críticos de hardware y mantenimiento tienen prioridad técnica si no están ocupados
+  if (space.estado === "INHABILITADO") return "INHABILITADO";
+  if (space.estado === "REPARACION") return "REPARACION";
+
+  if (space.doctor) {
+    let isNotWorking = false;
+    if (attendanceRecords && typeof attendanceRecords === "object") {
+      const cleanDoc = String(space.doctor).trim();
+      const direct = attendanceRecords[cleanDoc];
+      if (direct === "AUSENTE" || direct === "FINALIZADO" || direct === "JUSTIFICADO") {
+        isNotWorking = true;
+      } else {
+        const matchKey = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, cleanDoc));
+        if (matchKey) {
+          const st = attendanceRecords[matchKey];
+          if (st === "AUSENTE" || st === "FINALIZADO" || st === "JUSTIFICADO") {
+            isNotWorking = true;
+          }
+        }
+      }
+    }
+
+    if (isNotWorking) {
+      if (space.estado === "VACIO") return "VACIO";
+      if (space.estado === "INCOMPLETO") return "INCOMPLETO";
+      return "DISPONIBLE";
+    }
+
+    if (isSupervisorPerson) {
+      return "RESERVADO";
+    }
+
+    return "OCUPADO";
+  }
+
+  // Puesto sin médico asignado
+  if (isSupervisorPerson) {
+    return "RESERVADO";
+  }
+
+  if (space.estado === "VACIO") return "VACIO";
+  if (space.estado === "INCOMPLETO") return "INCOMPLETO";
+  if (space.estado === "RESERVADO") return "RESERVADO";
+
+  return "DISPONIBLE";
+}
+
 

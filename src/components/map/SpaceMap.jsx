@@ -5,8 +5,8 @@ import {
   Clock, RefreshCw, UserCheck, LogOut, Laptop, User, Shield, Maximize2, Minimize2
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
-import { ESTADOS, MARCAS, HORARIOS, SUPERVISORES_OFICIALES, BODEGA_TIPOS } from "../../constants/tokens";
-import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
+import { ESTADOS, MARCAS, HORARIOS, SUPERVISORES_OFICIALES, BODEGA_TIPOS, DOCTORES_EXCEL } from "../../constants/tokens";
+import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus } from "../../utils/safeHelpers";
 
 export default function SpaceMap({
   spaces,
@@ -71,65 +71,121 @@ export default function SpaceMap({
     return map;
   }, [spaces]);
 
+  // Conteo de puestos ocupados clínicos (excluyendo puestos físicos de supervisión) alineado canónicamente a getEffectiveSpaceStatus
+  const occupiedSpaces = useMemo(() => {
+    return spaces.filter((s) => getEffectiveSpaceStatus(s, attendanceRecords, supervisores) === "OCUPADO");
+  }, [spaces, attendanceRecords, supervisores]);
+
+  // Lista unificada y dinámica de franjas horarias
+  const availableShifts = useMemo(() => {
+    const list = [...(horarios || HORARIOS)];
+    occupiedSpaces.forEach((s) => {
+      if (s.horario && !list.some((h) => isSameHorario(h, s.horario))) {
+        list.push(s.horario);
+      }
+    });
+    return list;
+  }, [horarios, occupiedSpaces]);
+
+  // Mapa de conteo de puestos ocupados por franja normalizada
+  const shiftCounts = useMemo(() => {
+    const countsMap = {};
+    availableShifts.forEach((shift) => {
+      countsMap[shift] = occupiedSpaces.filter((s) => isSameHorario(s.horario, shift)).length;
+    });
+    return countsMap;
+  }, [availableShifts, occupiedSpaces]);
+
+  // Set de IDs coincidentes con los filtros activos para O(1) lookup instantáneo y conteo en tiempo real
+  const matchedSpaceIds = useMemo(() => {
+    const set = new Set();
+    const q = query.trim().toLowerCase();
+    const targetSup =
+      filterSupervisor !== "TODOS"
+        ? (supervisores || SUPERVISORES_OFICIALES).find((s) => s.id === filterSupervisor)
+        : null;
+
+    spaces.forEach((space) => {
+      // 1. Buscador (query)
+      if (q) {
+        const matchesQuery =
+          String(space.id).includes(q) ||
+          (space.doctor && String(space.doctor).toLowerCase().includes(q)) ||
+          (space.marca && String(space.marca).toLowerCase().includes(q)) ||
+          (space.supervisor && String(space.supervisor).toLowerCase().includes(q)) ||
+          (space.supervisorNombre && String(space.supervisorNombre).toLowerCase().includes(q));
+        if (!matchesQuery) return;
+      }
+
+      // 2. Filtro de Estado (con getEffectiveSpaceStatus para coincidencia 100% con los contadores de los KPI y del dropdown)
+      if (filterEstado !== "TODOS") {
+        const effectiveStatus = getEffectiveSpaceStatus(space, attendanceRecords, supervisores);
+        if (effectiveStatus !== filterEstado) return;
+      }
+
+      // 3. Filtro de Turno / Franja
+      if (filterTurno !== "TODOS") {
+        const matchesTurno =
+          (space.horario && isSameHorario(space.horario, filterTurno)) ||
+          (space.doctor &&
+            (DOCTORES_EXCEL || []).some(
+              (d) => isSameDoctor(d.nombre, space.doctor) && d.horario && isSameHorario(d.horario, filterTurno)
+            ));
+        if (!matchesTurno) return;
+      }
+
+      // 4. Filtro de Supervisor / Lote
+      if (targetSup) {
+        const sid = Number(space.id);
+        const isSupervisorOwnStation =
+          (Number(targetSup.puesto) > 0 && Number(targetSup.puesto) === sid) ||
+          (space.doctor && isSameDoctor(space.doctor, targetSup.nombre)) ||
+          (space.supervisor && isSameDoctor(space.supervisor, targetSup.nombre)) ||
+          space.supervisorId === targetSup.id;
+
+        const bIni = Number(targetSup.bloqueInicio);
+        const bFin = Number(targetSup.bloqueFin);
+        const isInPhysicalLote = bIni > 0 && bFin > 0 && sid >= bIni && sid <= bFin;
+
+        const isSupervisedDoctor =
+          Boolean(space.doctor) &&
+          (space.supervisorId === targetSup.id ||
+            (Array.isArray(rosterBySupervisor?.[targetSup.id]) &&
+              rosterBySupervisor[targetSup.id].some((n) => isSameDoctor(n, space.doctor))) ||
+            Object.entries(rosterBySupervisor || {}).some(
+              ([k, list]) => k.startsWith(targetSup.id) && Array.isArray(list) && list.some((n) => isSameDoctor(n, space.doctor))
+            ) ||
+            getDoctorSupervisorInfo({
+              docName: space.doctor,
+              rosters: rosterBySupervisor,
+              supervisores,
+              spaces,
+            })?.supervisorId === targetSup.id);
+
+        if (!isSupervisorOwnStation && !isInPhysicalLote && !isSupervisedDoctor) {
+          return;
+        }
+      }
+
+      set.add(Number(space.id));
+    });
+
+    return set;
+  }, [spaces, query, filterEstado, filterTurno, filterSupervisor, supervisores, rosterBySupervisor, attendanceRecords]);
+
+  const hasActiveFilter = Boolean(
+    query.trim() !== "" ||
+    filterEstado !== "TODOS" ||
+    filterTurno !== "TODOS" ||
+    filterSupervisor !== "TODOS"
+  );
+
   function renderCubicle(id) {
     const space = spaceMap[id];
     const fallbackH = density === "compact" ? "h-[37px]" : density === "wide" ? "h-[48px]" : "h-[44px]";
     if (!space) return <div className={`${fallbackH} w-full`} />;
 
-    const matchesQuery =
-      query.trim() === "" ||
-      String(space.id).includes(query) ||
-      (space.doctor && String(space.doctor).toLowerCase().includes(query.toLowerCase())) ||
-      (space.marca && String(space.marca).toLowerCase().includes(query.toLowerCase()));
-    const matchesEstado = filterEstado === "TODOS" || space.estado === filterEstado;
-    const matchesTurno =
-      filterTurno === "TODOS" ||
-      (space.horario && isSameHorario(space.horario, filterTurno));
-
-    const matchesSupervisor = (() => {
-      if (filterSupervisor === "TODOS") return true;
-      const targetSup = (supervisores || SUPERVISORES_OFICIALES).find((s) => s.id === filterSupervisor);
-      if (!targetSup) return true;
-
-      // 1. Si el cubículo está ocupado por un médico, verificar si el médico pertenece a la base de este supervisor
-      if (space.doctor) {
-        if (space.supervisorId) {
-          return space.supervisorId === targetSup.id;
-        }
-        // Revisar nómina directa en rosters
-        if (rosterBySupervisor) {
-          if (Array.isArray(rosterBySupervisor[targetSup.id]) && rosterBySupervisor[targetSup.id].some((n) => isSameDoctor(n, space.doctor))) {
-            return true;
-          }
-          const hasInFranja = Object.entries(rosterBySupervisor).some(([k, list]) =>
-            k.startsWith(targetSup.id) && Array.isArray(list) && list.some((n) => isSameDoctor(n, space.doctor))
-          );
-          if (hasInFranja) return true;
-        }
-        // Resolución canónica de pertenencia de supervisor
-        const docSup = getDoctorSupervisorInfo({
-          docName: space.doctor,
-          rosters: rosterBySupervisor,
-          supervisores,
-          spaces,
-        });
-        if (docSup?.supervisorId) {
-          return docSup.supervisorId === targetSup.id;
-        }
-        // Si el médico pertenece comprobadamente a otro supervisor, no incluirlo
-        return false;
-      }
-
-      // 2. Si el espacio tiene supervisorId explícito asignado
-      if (space.supervisorId) return space.supervisorId === targetSup.id;
-
-      // 3. Si el cubículo está disponible / sin médico, verificar si pertenece al lote físico del supervisor
-      if (Number(targetSup.bloqueInicio) === 0 && Number(targetSup.bloqueFin) === 0) return false;
-      const sid = Number(space.id);
-      return sid >= Number(targetSup.bloqueInicio) && sid <= Number(targetSup.bloqueFin);
-    })();
-
-    const isMatch = matchesQuery && matchesEstado && matchesTurno && matchesSupervisor;
+    const isMatch = matchedSpaceIds.has(Number(space.id));
 
     // Para el rol Doctor: determinar si este puesto le pertenece actualmente con médico sentado
     const isOwnSpace = Boolean(
@@ -146,37 +202,37 @@ export default function SpaceMap({
       Number(space.id) >= Number(currentDoctorSup.bloqueInicio) &&
       Number(space.id) <= Number(currentDoctorSup.bloqueFin);
 
-    const isSupervisorStation = [135, 136, 137, 138, 139].includes(Number(space.id));
     const isSelectableForDoctor = !space.doctor && space.estado === "DISPONIBLE";
     const isBlockedForDoctor = isDoctorRole && !isOwnSpace && !isSelectableForDoctor;
 
-    const isDocNotWorking = (() => {
-      if (!space.doctor || !attendanceRecords) return false;
-      const direct = attendanceRecords[space.doctor];
-      if (direct === "AUSENTE" || direct === "FINALIZADO" || direct === "JUSTIFICADO") return true;
-      const match = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, space.doctor));
-      if (match) {
-        const st = attendanceRecords[match];
-        return st === "AUSENTE" || st === "FINALIZADO" || st === "JUSTIFICADO";
-      }
-      return false;
-    })();
-
-    // Para el rol Master y Supervisor: destacar visualmente los espacios ocupados por médicos
-    const isOccupiedByDoctor = !isDoctorRole && (space.estado === "OCUPADO" || !!space.doctor) && !isDocNotWorking;
+    // Conteo / indicación de médico ocupado activo
+    const effectiveStatus = getEffectiveSpaceStatus(space, attendanceRecords, supervisores);
+    const isOccupiedByDoctor = !isDoctorRole && effectiveStatus === "OCUPADO";
 
     return (
       <div
         className={`transition-all duration-200 relative w-full flex justify-center ${
-          isMatch ? "opacity-100 scale-100" : "opacity-15 scale-95 grayscale"
-        } ${isMyAssignedSpace ? "ring-4 ring-amber-400 ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md" : ""} ${
+          isMatch ? "opacity-100 scale-100" : "opacity-20 scale-95 grayscale pointer-events-none"
+        } ${
+          isMyAssignedSpace
+            ? "ring-4 ring-amber-400 ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md"
+            : ""
+        } ${
           isInMyDoctorSupLote && isDoctorRole && !isMyAssignedSpace && !space.doctor
             ? "ring-2 ring-blue-500/80 ring-offset-1 rounded-[7px]"
             : ""
         } ${
-          isMySupervisorStation ? "ring-4 ring-[#0095FF] ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md" : ""
+          isMySupervisorStation
+            ? "ring-4 ring-[#0095FF] ring-offset-2 z-20 rounded-[7px] scale-105 shadow-md"
+            : ""
         } ${
-          isOccupiedByDoctor && !isMySupervisorStation ? "ring-2 ring-[#0095FF] ring-offset-1 z-10 rounded-[6px] shadow-sm" : ""
+          isMatch && isOccupiedByDoctor && !isMySupervisorStation
+            ? "ring-2 ring-[#0095FF] ring-offset-1 z-10 rounded-[6px] shadow-sm"
+            : ""
+        } ${
+          hasActiveFilter && isMatch && !isOccupiedByDoctor && !isMySupervisorStation && !isMyAssignedSpace
+            ? "ring-2 ring-indigo-500/80 ring-offset-1 rounded-[6px] shadow-xs"
+            : ""
         } ${
           isBlockedForDoctor ? "opacity-40 grayscale-[60%] cursor-not-allowed" : ""
         }`}
@@ -212,12 +268,6 @@ export default function SpaceMap({
   const totalRes = dellRes + lenovoRes + hpRes;
   const grandTotalPc = dellTotal + lenovoTotal + hpTotal;
 
-  // Conteo de puestos ocupados clínicos (excluyendo puestos físicos de supervisión)
-  const occupiedSpaces = spaces.filter((s) => {
-    const isSup = ([135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores") && s.estado !== "DISPONIBLE";
-    return (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSup;
-  });
-
   // Conteo de puestos ocupados en el lote a cargo del supervisor actual (excluye estaciones reservadas de supervisores)
   const occupiedInSupervisorLote = useMemo(() => {
     if (currentUser?.role !== "SUPERVISOR" || !currentUser?.bloqueInicio || !currentUser?.bloqueFin) return 0;
@@ -226,30 +276,9 @@ export default function SpaceMap({
     const isSupStation = (sid) => [135, 136, 137, 138, 139].includes(Number(sid));
     return spaces.filter((s) => {
       const sid = Number(s.id);
-      return sid >= bIni && sid <= bFin && (s.estado === "OCUPADO" || Boolean(s.doctor)) && !isSupStation(sid);
+      return sid >= bIni && sid <= bFin && getEffectiveSpaceStatus(s, attendanceRecords, supervisores) === "OCUPADO" && !isSupStation(sid);
     }).length;
-  }, [spaces, currentUser]);
-
-  // Lista unificada y dinámica de franjas horarias:
-  // Combina las franjas configuradas con cualquier franja presente en espacios ocupados (ej. rotativos o personalizados)
-  const availableShifts = useMemo(() => {
-    const list = [...(horarios || HORARIOS)];
-    occupiedSpaces.forEach((s) => {
-      if (s.horario && !list.some((h) => isSameHorario(h, s.horario))) {
-        list.push(s.horario);
-      }
-    });
-    return list;
-  }, [horarios, occupiedSpaces]);
-
-  // Mapa de conteo de puestos ocupados por franja normalizada
-  const shiftCounts = useMemo(() => {
-    const countsMap = {};
-    availableShifts.forEach((shift) => {
-      countsMap[shift] = occupiedSpaces.filter((s) => isSameHorario(s.horario, shift)).length;
-    });
-    return countsMap;
-  }, [availableShifts, occupiedSpaces]);
+  }, [spaces, currentUser, attendanceRecords, supervisores]);
 
   return (
     <div className="flex flex-col gap-6 select-none">
@@ -349,8 +378,14 @@ export default function SpaceMap({
             <h2 className="font-heading text-[16px] font-bold text-slate-800 leading-tight">
               Plano de Telemedicina · Sede San Miguel
             </h2>
-            <p className="text-[11.5px] text-slate-500 font-medium">
-              {spaces.length} puestos · {occupiedSpaces.length} ocupados en tiempo real
+            <p className="text-[11.5px] text-slate-500 font-medium flex items-center gap-2 flex-wrap">
+              <span>{spaces.length} puestos · {occupiedSpaces.length} ocupados en tiempo real</span>
+              {hasActiveFilter && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                  {matchedSpaceIds.size} {matchedSpaceIds.size === 1 ? "puesto coincidente" : "puestos coincidentes"}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -428,12 +463,18 @@ export default function SpaceMap({
           </div>
 
           {/* Filtro por Franja Horaria / Turno */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
-            <Clock size={13} className="text-[#0048B5]" />
+          <div
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 shadow-2xs transition-all ${
+              filterTurno !== "TODOS"
+                ? "border-blue-400 bg-blue-50/70 ring-1 ring-blue-300 text-blue-900"
+                : "border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            <Clock size={13} className={filterTurno !== "TODOS" ? "text-blue-600" : "text-[#0048B5]"} />
             <select
               value={filterTurno}
               onChange={(e) => setFilterTurno(e.target.value)}
-              className="bg-transparent text-[12px] outline-none font-bold text-slate-700 cursor-pointer"
+              className="bg-transparent text-[12px] outline-none font-bold cursor-pointer"
             >
               <option value="TODOS">Todos los turnos ({occupiedSpaces.length})</option>
               {availableShifts.map((h) => {
@@ -445,15 +486,31 @@ export default function SpaceMap({
                 );
               })}
             </select>
+            {filterTurno !== "TODOS" && (
+              <button
+                type="button"
+                onClick={() => setFilterTurno("TODOS")}
+                className="ml-0.5 text-blue-500 hover:text-rose-600 font-bold text-[13px] leading-none"
+                title="Limpiar filtro de turno"
+              >
+                ×
+              </button>
+            )}
           </div>
 
           {/* Selector de Estado */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
-            <Filter size={13} className="text-slate-400" />
+          <div
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 shadow-2xs transition-all ${
+              filterEstado !== "TODOS"
+                ? "border-emerald-400 bg-emerald-50/70 ring-1 ring-emerald-300 text-emerald-900"
+                : "border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            <Filter size={13} className={filterEstado !== "TODOS" ? "text-emerald-600" : "text-slate-400"} />
             <select
               value={filterEstado}
               onChange={(e) => setFilterEstado(e.target.value)}
-              className="bg-transparent text-[12px] outline-none font-semibold text-slate-700 cursor-pointer"
+              className="bg-transparent text-[12px] outline-none font-bold cursor-pointer"
             >
               <option value="TODOS">Todos los estados ({spaces.length})</option>
               {Object.keys(ESTADOS).map((k) => (
@@ -462,15 +519,31 @@ export default function SpaceMap({
                 </option>
               ))}
             </select>
+            {filterEstado !== "TODOS" && (
+              <button
+                type="button"
+                onClick={() => setFilterEstado("TODOS")}
+                className="ml-0.5 text-emerald-600 hover:text-rose-600 font-bold text-[13px] leading-none"
+                title="Limpiar filtro de estado"
+              >
+                ×
+              </button>
+            )}
           </div>
 
           {/* Selector de Supervisor / Lote */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-2xs">
+          <div
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 shadow-2xs transition-all ${
+              filterSupervisor !== "TODOS"
+                ? "border-indigo-400 bg-indigo-50/70 ring-1 ring-indigo-300 text-indigo-900"
+                : "border-slate-200 bg-white text-slate-700"
+            }`}
+          >
             <Shield size={13} className="text-indigo-600" />
             <select
               value={filterSupervisor}
               onChange={(e) => setFilterSupervisor(e.target.value)}
-              className="bg-transparent text-[12px] outline-none font-semibold text-slate-700 cursor-pointer"
+              className="bg-transparent text-[12px] outline-none font-bold cursor-pointer"
             >
               <option value="TODOS">Todos los supervisores / lotes</option>
               {(supervisores || SUPERVISORES_OFICIALES).map((sup) => (
@@ -483,7 +556,7 @@ export default function SpaceMap({
               <button
                 type="button"
                 onClick={() => setFilterSupervisor("TODOS")}
-                className="ml-0.5 text-slate-400 hover:text-rose-500 font-bold text-[13px] leading-none"
+                className="ml-0.5 text-indigo-600 hover:text-rose-600 font-bold text-[13px] leading-none"
                 title="Limpiar filtro de supervisor"
               >
                 ×
@@ -492,7 +565,7 @@ export default function SpaceMap({
           </div>
 
           {/* Botón para Limpiar Todos los Filtros si hay alguno activo */}
-          {(query || filterEstado !== "TODOS" || filterTurno !== "TODOS" || filterSupervisor !== "TODOS") && (
+          {hasActiveFilter && (
             <button
               type="button"
               onClick={() => {
@@ -501,9 +574,10 @@ export default function SpaceMap({
                 setFilterTurno("TODOS");
                 setFilterSupervisor("TODOS");
               }}
-              className="text-[11.5px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl border border-rose-200 transition shadow-2xs"
+              className="text-[11.5px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl border border-rose-200 transition shadow-2xs cursor-pointer flex items-center gap-1 active:scale-95"
             >
-              Limpiar filtros
+              <span>✕</span>
+              <span>Limpiar filtros</span>
             </button>
           )}
 

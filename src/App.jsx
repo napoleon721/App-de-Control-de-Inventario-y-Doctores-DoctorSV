@@ -82,7 +82,7 @@ import {
   syncAllSupervisorSheets,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, isRelatedHorario, getDoctorSupervisorInfo } from "./utils/safeHelpers";
+import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, isRelatedHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -1119,7 +1119,7 @@ export default function App() {
     }
   }, [spaces, currentUser?.name, currentUser?.role]);
 
-  // Conteos calculados reactivamente
+  // Conteos calculados reactivamente garantizando 100% coherencia con el plano y filtros
   const counts = useMemo(() => {
     const res = {
       DISPONIBLE: 0,
@@ -1131,36 +1131,9 @@ export default function App() {
       OCUPADO: 0,
     };
     spaces.forEach((s) => {
-      const isSupervisorPerson =
-        s.categoria === "Supervisores" ||
-        (supervisores || []).some(
-          (sup) => Number(sup.puesto) === Number(s.id) && Number(sup.puesto) > 0
-        );
-
-      if (s.doctor) {
-        const isNotWorking = (() => {
-          if (!attendanceRecords || typeof attendanceRecords !== "object") return false;
-          const direct = attendanceRecords[s.doctor];
-          if (direct === "AUSENTE" || direct === "FINALIZADO" || direct === "JUSTIFICADO") return true;
-          const matchKey = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, s.doctor));
-          if (matchKey) {
-            const st = attendanceRecords[matchKey];
-            return st === "AUSENTE" || st === "FINALIZADO" || st === "JUSTIFICADO";
-          }
-          return false;
-        })();
-
-        if (isNotWorking) {
-          res.DISPONIBLE++;
-        } else if (isSupervisorPerson) {
-          res.RESERVADO++;
-        } else {
-          res.OCUPADO++;
-        }
-      } else if (isSupervisorPerson) {
-        res.RESERVADO++;
-      } else if (res[s.estado] !== undefined) {
-        res[s.estado]++;
+      const status = getEffectiveSpaceStatus(s, attendanceRecords, supervisores);
+      if (res[status] !== undefined) {
+        res[status]++;
       }
     });
     return res;
