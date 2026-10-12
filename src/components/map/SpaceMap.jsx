@@ -1091,7 +1091,7 @@ export default function SpaceMap({
           </div>
 
           {/* ================= TABLAS INFERIORES RESUMEN CON DISEÑO PREMIUM ================= */}
-          <div className={`mt-8 pt-6 border-t-2 border-slate-200/80 ${!isDoctorRole ? "grid grid-cols-1 md:grid-cols-3 gap-6" : "max-w-md"} text-[12px]`}>
+          <div className={`mt-8 pt-6 border-t-2 border-slate-200/80 ${currentUser?.role === "MASTER" ? "grid grid-cols-1 md:grid-cols-3 gap-6" : "max-w-md"} text-[12px]`}>
 
             {/* TABLA 1: CÓDIGO DE COLOR & RESUMEN DE DISPONIBILIDAD (Visible para Médicos, Supervisores y Master) */}
             <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200 shadow-2xs">
@@ -1154,8 +1154,8 @@ export default function SpaceMap({
               </div>
             </div>
 
-            {/* TABLA 2 Y TABLA 3: VISIBLES PARA SUPERVISOR Y MASTER (Ocultas solo para Doctor) */}
-            {!isDoctorRole && (
+            {/* TABLA 2 Y TABLA 3: SOLO PARA MASTER (ocultas para Supervisor y Doctor) */}
+            {currentUser?.role === "MASTER" && (
               <>
                 {/* TABLA 2: INVENTARIO BODEGA */}
                 <div className="flex flex-col gap-2.5 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">

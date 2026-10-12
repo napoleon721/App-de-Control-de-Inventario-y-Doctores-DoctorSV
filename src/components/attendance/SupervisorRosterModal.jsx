@@ -199,6 +199,21 @@ export default function SupervisorRosterModal({
   const countSelected = selectedNames.size;
 
   // Bloques oficiales segmentados de Servicios Profesionales (SP)
+  // Pool de candidatos: padrón de médicos + personal (SSM/administrativo) + supervisores, sin duplicados
+  const poolDoctors = useMemo(() => {
+    const list = [...DOCTORES_EXCEL];
+    const seen = new Set(list.map((d) => String(d.nombre).trim().toUpperCase()));
+    const addExtra = (nombre, extra) => {
+      const key = String(nombre || "").trim().toUpperCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      list.push({ id: extra.id, nombre: String(nombre).trim(), correo: extra.correo || "", jvpm: "", grupo: extra.grupo, horario: extra.horario || "Turno Rotativo" });
+    };
+    (STAFF_EXCEL || []).forEach((st, i) => addExtra(st.nombre, { id: `ST-${i + 1}`, grupo: st.categoria || "Personal" }));
+    (supervisores || []).forEach((sup, i) => addExtra(sup.nombre, { id: `SUP-${i + 1}`, correo: sup.correo, grupo: "Supervisores", horario: sup.horario }));
+    return list;
+  }, [supervisores]);
+
   const spBlocks = useMemo(() => getSPBlocks(DOCTORES_EXCEL), []);
   const mySPBlock = spBlocks[supervisor?.id] || null;
 
@@ -215,6 +230,8 @@ export default function SupervisorRosterModal({
       { key: "Servicios Profesionales", label: "Todos SP (136)" },
       { key: "Grupo 3", label: "Grupo 3" },
       { key: "Grupo General", label: "General" },
+      { key: "Supervisores", label: "Supervisores" },
+      { key: "Administrativos", label: "Administrativos" },
     ];
   }, []);
 
@@ -223,7 +240,7 @@ export default function SupervisorRosterModal({
   // Mapa memoizado de información de supervisor para cada médico
   const doctorSupInfoMap = useMemo(() => {
     const map = new Map();
-    DOCTORES_EXCEL.forEach((d) => {
+    poolDoctors.forEach((d) => {
       const info = getDoctorSupervisorInfo({
         docName: d.nombre,
         rosters: allRosters,
@@ -240,7 +257,7 @@ export default function SupervisorRosterModal({
   const filteredDoctors = useMemo(() => {
     const q = search.toLowerCase().trim();
 
-    return DOCTORES_EXCEL.filter((d) => {
+    return poolDoctors.filter((d) => {
       const isChecked = selectedNames.has(d.nombre);
       const supInfo = doctorSupInfoMap.get(d.nombre.toLowerCase().trim());
       const isOtherSup = supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id;
@@ -335,7 +352,7 @@ export default function SupervisorRosterModal({
     const franjaTarget = activeFranja || selectedFranja;
     setSelectedNames((prev) => {
       const next = new Set(prev);
-      DOCTORES_EXCEL.forEach((d) => {
+      poolDoctors.forEach((d) => {
         const supInfo = doctorSupInfoMap.get(d.nombre.toLowerCase().trim());
         const isOtherSup = supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id;
         // Solo agregar médicos no tomados por otro supervisor
@@ -359,7 +376,7 @@ export default function SupervisorRosterModal({
   function handleSelectGroup(groupName) {
     setSelectedNames((prev) => {
       const next = new Set(prev);
-      DOCTORES_EXCEL.forEach((d) => {
+      poolDoctors.forEach((d) => {
         if (d.grupo === groupName) {
           const supInfo = doctorSupInfoMap.get(d.nombre.toLowerCase().trim());
           const isOtherSup = supInfo?.supervisorId && supInfo.supervisorId !== supervisor?.id;
@@ -639,7 +656,7 @@ export default function SupervisorRosterModal({
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                Todos ({DOCTORES_EXCEL.length})
+                Todos ({poolDoctors.length})
               </button>
               <button
                 type="button"

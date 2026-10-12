@@ -317,13 +317,46 @@ export default function SpaceDetailModal({
   // Médicos filtrados por búsqueda
   const filteredDoctors = useMemo(() => {
     if (!doctorSearch.trim()) return allDoctors;
-    const q = doctorSearch.trim().toUpperCase();
-    return allDoctors.filter(
-      (d) =>
-        d.nombre.toUpperCase().includes(q) ||
-        (d.categoria && d.categoria.toUpperCase().includes(q))
-    );
+    const strip = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const tokens = strip(doctorSearch).split(/\s+/).filter(Boolean);
+    return allDoctors.filter((d) => {
+      const hay = `${strip(d.nombre)} ${strip(d.categoria)}`;
+      return tokens.every((t) => hay.includes(t));
+    });
   }, [allDoctors, doctorSearch]);
+
+  // Asigna un médico al puesto (usado por la lista desplegable y por los resultados del buscador)
+  function handleSelectDoctor(docName) {
+    if (docName) {
+      const foundDoc = allDoctors.find((d) => d.nombre.toUpperCase() === docName.toUpperCase());
+      const shiftToSet =
+        form.horario ||
+        foundDoc?.horarioDefault ||
+        (horarios && horarios[0]) ||
+        "07:00 AM – 12:00 PM";
+      const supInfo = getDoctorSupervisorInfo({
+        docName: foundDoc ? foundDoc.nombre : docName,
+        rosters,
+        supervisores,
+        spaces,
+        filterHorario: shiftToSet,
+      });
+      updateField({
+        doctor: foundDoc ? foundDoc.nombre : docName,
+        horario: shiftToSet,
+        supervisorId: supInfo?.supervisorId || form.supervisorId || (userSup ? userSup.id : null),
+        supervisorNombre: supInfo?.supervisorNombre || form.supervisorNombre || (userSup ? userSup.nombre : null),
+        estado: "OCUPADO",
+      });
+    } else {
+      updateField({
+        doctor: null,
+        horario: null,
+        supervisorId: null,
+        supervisorNombre: null,
+      });
+    }
+  }
 
   const hasPc = Boolean(form.marca && form.marca !== "NO PC");
   const hasMonitor = Boolean(form.monitor && (form.monitor.marca || form.monitor.activo || form.monitor === true));
@@ -614,6 +647,33 @@ export default function SpaceDetailModal({
                     </button>
                   )}
                 </div>
+                {doctorSearch.trim() && (
+                  <div className="mt-1.5 max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm divide-y divide-slate-100">
+                    {filteredDoctors.length === 0 ? (
+                      <p className="px-3 py-2 text-[11.5px] text-slate-400 italic">Sin resultados para “{doctorSearch}”.</p>
+                    ) : (
+                      filteredDoctors.slice(0, 12).map((doc) => {
+                        const otherSpace = occupiedDoctorsMap.get(doc.nombre.toUpperCase());
+                        return (
+                          <button
+                            key={doc.nombre}
+                            type="button"
+                            onClick={() => {
+                              handleSelectDoctor(doc.nombre);
+                              setDoctorSearch("");
+                            }}
+                            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-blue-50 transition-colors cursor-pointer"
+                          >
+                            <span className="text-[11.5px] font-bold text-slate-800 truncate">{doc.nombre}</span>
+                            <span className="text-[10px] font-semibold text-slate-500 shrink-0">
+                              {doc.categoria}{otherSpace ? ` · Puesto #${otherSpace}` : ""}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -623,40 +683,7 @@ export default function SpaceDetailModal({
                   </label>
                   <select
                     value={form.doctor || ""}
-                    onChange={(e) => {
-                      const docName = e.target.value;
-                      if (docName) {
-                        const foundDoc = allDoctors.find(
-                          (d) => d.nombre.toUpperCase() === docName.toUpperCase()
-                        );
-                        const shiftToSet =
-                          form.horario ||
-                          foundDoc?.horarioDefault ||
-                          (horarios && horarios[0]) ||
-                          "07:00 AM – 12:00 PM";
-                        const supInfo = getDoctorSupervisorInfo({
-                          docName: foundDoc ? foundDoc.nombre : docName,
-                          rosters,
-                          supervisores,
-                          spaces,
-                          filterHorario: shiftToSet,
-                        });
-                        updateField({
-                          doctor: foundDoc ? foundDoc.nombre : docName,
-                          horario: shiftToSet,
-                          supervisorId: supInfo?.supervisorId || form.supervisorId || (userSup ? userSup.id : null),
-                          supervisorNombre: supInfo?.supervisorNombre || form.supervisorNombre || (userSup ? userSup.nombre : null),
-                          estado: "OCUPADO",
-                        });
-                      } else {
-                        updateField({
-                          doctor: null,
-                          horario: null,
-                          supervisorId: null,
-                          supervisorNombre: null,
-                        });
-                      }
-                    }}
+                    onChange={(e) => handleSelectDoctor(e.target.value)}
                     className={`w-full rounded-xl border bg-white px-3 py-2 text-[12px] font-medium shadow-2xs transition-all ${
                       form.doctor
                         ? "border-rose-300 text-rose-950 font-bold focus:ring-2 focus:ring-rose-400"

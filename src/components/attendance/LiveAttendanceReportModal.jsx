@@ -4,7 +4,7 @@ import {
   Clock, Laptop, Search, Filter, X, Check, FileText, ArrowUpDown, Shield
 } from "lucide-react";
 import { HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
-import { isSameHorario, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
+import { isSameHorario, isSameDoctor, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
 
 export default function LiveAttendanceReportModal({
   spaces,
@@ -13,6 +13,8 @@ export default function LiveAttendanceReportModal({
   horarios = HORARIOS,
   supervisores = SUPERVISORES_OFICIALES,
   rosterBySupervisor = {},
+  quincena = null,
+  attendanceRecords = {},
 }) {
   const [query, setQuery] = useState("");
   const [filterTurno, setFilterTurno] = useState("TODOS");
@@ -53,6 +55,44 @@ export default function LiveAttendanceReportModal({
         };
       });
   }, [spaces, supervisores, rosterBySupervisor]);
+
+  // Médicos programados hoy (nómina oficial de la quincena) que aún no tienen puesto: ausentes, pendientes, finalizados, etc.
+  const unseatedProgrammed = useMemo(() => {
+    const todayISO = new Date().toLocaleDateString("en-CA");
+    const dia = quincena?.dias?.find((d) => d.dateKey === todayISO);
+    if (!dia?.porSupervisor) return [];
+    const rows = [];
+    (supervisores || SUPERVISORES_OFICIALES).forEach((sup) => {
+      const docs = dia.porSupervisor[sup.id]?.doctores || [];
+      docs.forEach((d) => {
+        if (!d?.nombre) return;
+        if (activeAssignments.some((a) => isSameDoctor(a.doctor, d.nombre))) return;
+        if (rows.some((r) => isSameDoctor(r.doctor, d.nombre))) return;
+        const key = Object.keys(attendanceRecords || {}).find((k) => isSameDoctor(k, d.nombre));
+        const status = (key && attendanceRecords[key]) || "PENDIENTE";
+        rows.push({
+          puesto: null,
+          doctor: d.nombre,
+          horario: d.horario || "Sin franja",
+          marca: "",
+          modelo: "",
+          activoPc: "",
+          horaIngreso: "—",
+          categoria: "Médico",
+          supervisorId: sup.id,
+          supervisorNombre: sup.nombre,
+          loteInfo: sup.bloqueInicio ? `#${sup.bloqueInicio}-#${sup.bloqueFin}` : "",
+          status,
+        });
+      });
+    });
+    return rows;
+  }, [quincena, attendanceRecords, supervisores, activeAssignments]);
+
+  const allRows = useMemo(
+    () => [...activeAssignments.map((a) => ({ ...a, status: "EN_TURNO" })), ...unseatedProgrammed],
+    [activeAssignments, unseatedProgrammed]
+  );
 
   // Count per franja (all horarios, even if 0)
   const countPerFranja = useMemo(() => {
@@ -96,18 +136,18 @@ export default function LiveAttendanceReportModal({
   }, [countPerFranja, horarios, activeAssignments]);
 
   const filteredAssignments = useMemo(() => {
-    return activeAssignments.filter((a) => {
+    return allRows.filter((a) => {
       const matchQuery =
         !query.trim() ||
         a.doctor.toLowerCase().includes(query.toLowerCase()) ||
-        String(a.puesto).includes(query) ||
-        a.activoPc.toLowerCase().includes(query.toLowerCase()) ||
+        String(a.puesto ?? "").includes(query) ||
+        String(a.activoPc || "").toLowerCase().includes(query.toLowerCase()) ||
         a.supervisorNombre.toLowerCase().includes(query.toLowerCase());
       const matchTurno = filterTurno === "TODOS" || isSameHorario(a.horario, filterTurno);
       const matchSupervisor = filterSupervisor === "TODOS" || a.supervisorId === filterSupervisor;
       return matchQuery && matchTurno && matchSupervisor;
     });
-  }, [activeAssignments, query, filterTurno, filterSupervisor]);
+  }, [allRows, query, filterTurno, filterSupervisor]);
 
   // Export to CSV for Excel / Google Sheets
   function handleDownloadCSV() {
@@ -121,9 +161,10 @@ export default function LiveAttendanceReportModal({
       "Marca",
       "Activo PC",
       "Categoría",
+      "Estado",
     ];
     const rows = filteredAssignments.map((a) => [
-      `#${a.puesto}`,
+      a.puesto ? `#${a.puesto}` : "Sin puesto",
       `"${a.doctor}"`,
       `"${a.supervisorNombre}"`,
       `"${a.loteInfo}"`,
@@ -132,6 +173,7 @@ export default function LiveAttendanceReportModal({
       `"${a.marca}"`,
       `"${a.activoPc}"`,
       `"${a.categoria}"`,
+      `"${a.status === "EN_TURNO" ? "En Turno" : a.status}"`,
     ]);
 
     const csvContent = [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
@@ -171,7 +213,9 @@ export default function LiveAttendanceReportModal({
     text += `*DETALLE DE MÉDICOS Y PUESTOS:*\n`;
 
     filteredAssignments.forEach((a, i) => {
-      text += `${i + 1}. *Puesto #${a.puesto}* · ${a.doctor} | Sup: *${a.supervisorNombre}* (${a.horario}) [Check-in: ${a.horaIngreso}]\n`;
+      text += a.puesto
+        ? `${i + 1}. *Puesto #${a.puesto}* · ${a.doctor} | Sup: *${a.supervisorNombre}* (${a.horario}) [Check-in: ${a.horaIngreso}]\n`
+        : `${i + 1}. *Sin puesto* · ${a.doctor} | Sup: *${a.supervisorNombre}* (${a.horario}) [${a.status}]\n`;
     });
 
     navigator.clipboard.writeText(text);
@@ -472,11 +516,15 @@ export default function LiveAttendanceReportModal({
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {filteredAssignments.map((a) => (
-                  <tr key={a.puesto} className="hover:bg-blue-50/40 transition-colors">
+                  <tr key={a.puesto ? `p-${a.puesto}` : `np-${a.doctor}`} className="hover:bg-blue-50/40 transition-colors">
                     <td className="px-4 py-3 font-mono-data font-extrabold text-[#0048B5]">
-                      <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg">
-                        #{a.puesto}
-                      </span>
+                      {a.puesto ? (
+                        <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg">
+                          #{a.puesto}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-semibold text-[11px]">Sin puesto</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-bold text-slate-800">
                       <div className="flex items-center gap-2">
@@ -509,13 +557,29 @@ export default function LiveAttendanceReportModal({
                       {a.horaIngreso}
                     </td>
                     <td className="px-4 py-3 text-slate-600 text-[11.5px]">
-                      <span className="font-semibold text-slate-700">{a.marca}</span> · {a.activoPc}
+                      {a.puesto ? (<><span className="font-semibold text-slate-700">{a.marca}</span> · {a.activoPc}</>) : "—"}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        En Turno
-                      </span>
+                      {a.status === "EN_TURNO" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          En Turno
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold border ${
+                          a.status === "AUSENTE"
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : a.status === "JUSTIFICADO"
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : a.status === "FINALIZADO"
+                            ? "bg-slate-100 text-slate-600 border-slate-200"
+                            : a.status === "PRESENTE"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                        }`}>
+                          {a.status === "PENDIENTE" ? "Programado" : a.status.charAt(0) + a.status.slice(1).toLowerCase()}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -535,7 +599,7 @@ export default function LiveAttendanceReportModal({
         {/* Footer */}
         <div className="border-t border-slate-100 bg-slate-50/80 px-6 py-3 flex items-center justify-between text-[11.5px] text-slate-500 shrink-0">
           <span>
-            Mostrando <b>{filteredAssignments.length}</b> de <b>{activeAssignments.length}</b> puestos ocupados
+            Mostrando <b>{filteredAssignments.length}</b> de <b>{allRows.length}</b> médicos programados o en turno
           </span>
           <button
             type="button"

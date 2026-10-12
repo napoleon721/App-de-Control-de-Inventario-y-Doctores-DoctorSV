@@ -52,6 +52,7 @@ import {
   subscribeToCloudSpaces,
   saveCloudSpaces,
   setCloudSpacesMergeListener,
+  setCloudAttendanceMergeListener,
   subscribeToCloudBodega,
   saveCloudBodega,
   subscribeToCloudHistorial,
@@ -825,8 +826,14 @@ export default function App() {
     });
   }, [quincena, supervisores, dailyLots, attendanceRecords]);
 
-  // Sincronizar automáticamente con Google Sheets (Planilla Mensual y SP) al iniciar
+  // Sincronizar automáticamente con Google Sheets (Planilla Mensual y SP) una sola vez por sesión.
+  // Solo para Master y Supervisor (los médicos reciben la quincena desde la nube) y diferido para no frenar la carga inicial.
+  const didAutoSyncSheetsRef = React.useRef(false);
   useEffect(() => {
+    const role = currentUser?.role;
+    if (didAutoSyncSheetsRef.current || (role !== "MASTER" && role !== "SUPERVISOR")) return;
+    didAutoSyncSheetsRef.current = true;
+    setTimeout(() => {
     syncAllSupervisorSheets({
       doctorsList: DOCTORES_EXCEL,
       staffList: STAFF_EXCEL,
@@ -843,7 +850,8 @@ export default function App() {
         handleSyncQuincenaWithSpaces(quincena);
       }
     });
-  }, []);
+    }, 1200);
+  }, [currentUser?.role]);
 
   // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo sin bucles
   useEffect(() => {
@@ -923,6 +931,13 @@ export default function App() {
       }
     }, null, myClientId.current);
 
+    setCloudAttendanceMergeListener((mergedAttendance) => {
+      setAttendanceRecords((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(mergedAttendance)) return prev;
+        isRemoteAttendanceRef.current = true;
+        return mergedAttendance;
+      });
+    });
     const unsubAttendance = subscribeToCloudAttendance((cloudAttendance) => {
       if (cloudAttendance && typeof cloudAttendance === "object" && Object.keys(cloudAttendance).length > 0) {
         setAttendanceRecords((prev) => {
@@ -955,6 +970,7 @@ export default function App() {
 
     return () => {
       setCloudSpacesMergeListener(null);
+      setCloudAttendanceMergeListener(null);
       if (unsubSpaces) unsubSpaces();
       if (unsubBodega) unsubBodega();
       if (unsubHistorial) unsubHistorial();
@@ -1235,7 +1251,9 @@ export default function App() {
 
   function handleSaveSpace(updatedSpace) {
     const cleanId = Number(updatedSpace.id);
-    recentlyReleasedRef.current.set(cleanId, Date.now());
+    // Solo se blinda contra ecos de Sheets cuando el puesto queda libre; si se asigna un médico se limpia el blindaje
+    if (updatedSpace.doctor) recentlyReleasedRef.current.delete(cleanId);
+    else recentlyReleasedRef.current.set(cleanId, Date.now());
 
     // 1. Obtener estado previo del puesto para cálculo de deltas
     const prevSpace = spaces.find((s) => Number(s.id) === cleanId) || {};
@@ -1607,6 +1625,7 @@ export default function App() {
       return;
     }
 
+    recentlyReleasedRef.current.delete(Number(cleanSpaceId));
     const assignedHorario = horario || "07:00 AM – 12:00 PM";
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
@@ -1946,6 +1965,7 @@ export default function App() {
   // Asignación atómica en lote para supervisores
   function handleAssignBatch(assignments, horario) {
     if (!Array.isArray(assignments) || assignments.length === 0) return;
+    assignments.forEach((a) => { if (a?.spaceId) recentlyReleasedRef.current.delete(Number(a.spaceId)); });
     const nowTime = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
     const assignedHorario = horario || "07:00 AM – 12:00 PM";
 
@@ -2068,7 +2088,7 @@ export default function App() {
   }
 
   // Guardar nómina personalizada de un supervisor y sincronizarla en la nube
-  function handleSaveSupervisorRoster(supId, newNames, franja = null, transferredDocs = []) {
+  function handleSaveSupervisorRoster(supId, newNames, franja = null, transferredDocs = [], dayExtras = null) {
     if (!supId) return;
     const targetSup = (supervisores || SUPERVISORES_OFICIALES).find((s) => s.id === supId);
     const supNombre = targetSup?.nombre || "Supervisor";
@@ -2080,6 +2100,10 @@ export default function App() {
       };
       if (franja && franja !== "TODOS") {
         next[`${supId}__${franja}`] = newNames;
+      }
+      // Médicos agregados manualmente sobre la nómina oficial de la quincena de un día concreto
+      if (dayExtras?.dateKey && Array.isArray(dayExtras.extras)) {
+        next[`${supId}__${dayExtras.dateKey}__extras`] = dayExtras.extras;
       }
       // Si algún médico fue transferido desde otro supervisor en esta misma franja, removerlo del otro
       if (Array.isArray(transferredDocs) && transferredDocs.length > 0) {
@@ -2138,6 +2162,7 @@ export default function App() {
     const docName = currentUser.name;
     const shift = currentUser.shift;
     const cleanSpaceId = Number(space.id);
+    recentlyReleasedRef.current.delete(cleanSpaceId);
     const timeNow = new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
 
     let previousSpaceId = null;
@@ -2310,6 +2335,7 @@ export default function App() {
 
   function handleConfirmCheckIn({ doctor, spaceId, horario, timestamp }) {
     const cleanSpaceId = Number(spaceId);
+    recentlyReleasedRef.current.delete(cleanSpaceId);
     let previousSpaceId = null;
 
     const nextSpaces = spaces.map((s) => {
@@ -2492,12 +2518,17 @@ export default function App() {
     const targetDoctorNames = Array.isArray(options?.targetDoctorNames) ? options.targetDoctorNames : [];
     const supId = options?.supervisorId || null;
 
-    const isSup = (s) => ([135, 136, 137, 138, 139].includes(Number(s.id)) || s.categoria === "Supervisores") && s.estado !== "DISPONIBLE";
+    // Con objetivos explícitos (supervisor), solo se liberan esos puestos y médicos; nunca estaciones de supervisores
+    const isScoped = targetSpaceIds.length > 0 || targetDoctorNames.length > 0;
 
     const isOccupiedInShift = (s) => {
       const sid = Number(s.id);
       const isOccupied = s.estado === "OCUPADO" || Boolean(s.doctor);
       if (!isOccupied) return false;
+      if (isScoped) {
+        if (isSupervisorStationSpace(s, supervisores)) return false;
+        return targetSpaceIds.includes(sid) || Boolean(s.doctor && targetDoctorNames.some((dn) => isSameDoctor(dn, s.doctor)));
+      }
 
       // 1. Puestos explícitos pasados para liberación
       if (targetSpaceIds.includes(sid)) return true;
@@ -2591,17 +2622,18 @@ export default function App() {
           next[s.doctor] = "FINALIZADO";
         }
       });
-      // 2. Médicos pasados en la nómina del lote/franja
+      // 2. Médicos presentes de la nómina del supervisor en la franja (aunque no tengan puesto)
       targetDoctorNames.forEach((docName) => {
-        if (next[docName] === "PRESENTE") {
-          Object.keys(next).forEach((k) => {
-            if (isSameDoctor(k, docName)) next[k] = "FINALIZADO";
-          });
-          next[docName] = "FINALIZADO";
-        }
+        const cur = Object.keys(next).find((k) => isSameDoctor(k, docName));
+        const curStatus = cur ? next[cur] : null;
+        if (curStatus === "AUSENTE" || curStatus === "JUSTIFICADO" || curStatus === "FINALIZADO") return;
+        Object.keys(next).forEach((k) => {
+          if (isSameDoctor(k, docName)) delete next[k];
+        });
+        next[docName] = "FINALIZADO";
       });
-      // 3. Médicos con horario coincidente en DOCTORES_EXCEL o quincena
-      Object.keys(next).forEach((docName) => {
+      // 3. Médicos con horario coincidente en DOCTORES_EXCEL o quincena (solo liberación general sin objetivos)
+      if (!isScoped) Object.keys(next).forEach((docName) => {
         if (next[docName] === "PRESENTE") {
           const docObj = DOCTORES_EXCEL.find((d) => isSameDoctor(d.nombre, docName));
           if (docObj && (isSameHorario(docObj.horario, horario) || isRelatedHorario(docObj.horario, horario))) {
@@ -2656,10 +2688,12 @@ export default function App() {
     const targetSpaceIds = Array.isArray(extraOptions?.targetSpaceIds) ? extraOptions.targetSpaceIds.map(Number) : [];
 
     const isSupStation = (sid) => [135, 136, 137, 138, 139].includes(sid);
+    const isStationSpace = (s) => isSupervisorStationSpace(s, supervisores);
     const spacesToRelease = spaces.filter((s) => {
       const sid = Number(s.id);
       const isOccupied = s.estado === "OCUPADO" || Boolean(s.doctor);
       if (!isOccupied) return false;
+      if (isStationSpace(s)) return false;
       if (targetSpaceIds.length > 0 && targetSpaceIds.includes(sid)) return true;
       if (isNaN(bIni) || isNaN(bFin)) return false;
       return sid >= bIni && sid <= bFin && !isSupStation(sid);
@@ -2686,12 +2720,19 @@ export default function App() {
       }
     }
 
-    const presentRemanents = Object.keys(attendanceRecords).filter((docName) => {
+    const presentFromRecords = Object.keys(attendanceRecords).filter((docName) => {
       if (attendanceRecords[docName] !== "PRESENTE") return false;
       const isInRoster = supervisorRosterNames.some((rn) => isSameDoctor(rn, docName));
       const isInLotSpaces = spacesToRelease.some((s) => s.doctor && isSameDoctor(s.doctor, docName));
       return isInRoster || isInLotSpaces;
     });
+    // Médicos listados explícitamente como presentes por el supervisor (aunque no tengan registro de asistencia)
+    const presentFromList = (Array.isArray(targetDoctorNames) ? targetDoctorNames : []).filter((name) => {
+      const key = Object.keys(attendanceRecords).find((k) => isSameDoctor(k, name));
+      const st = key ? attendanceRecords[key] : null;
+      return st !== "AUSENTE" && st !== "JUSTIFICADO" && st !== "FINALIZADO" && !presentFromRecords.some((n) => isSameDoctor(n, name));
+    });
+    const presentRemanents = [...presentFromRecords, ...presentFromList];
 
     if (spacesToRelease.length === 0 && presentRemanents.length === 0) {
       alert(`No hay cubículos ocupados ni médicos con asistencia activa pendientes en el lote #${bIni} al #${bFin}.`);
@@ -2717,7 +2758,7 @@ export default function App() {
     const nextSpaces = spaces.map((s) => {
       const sid = Number(s.id);
       const isTarget = targetSpaceIds.includes(sid) || (!isNaN(bIni) && !isNaN(bFin) && sid >= bIni && sid <= bFin && !isSupStation(sid));
-      if (isTarget && (s.estado === "OCUPADO" || Boolean(s.doctor))) {
+      if (isTarget && !isStationSpace(s) && (s.estado === "OCUPADO" || Boolean(s.doctor))) {
         return {
           ...s,
           doctor: null,
@@ -2757,7 +2798,7 @@ export default function App() {
       // 2. Médicos remanentes en PRESENTE de este supervisor
       presentRemanents.forEach((name) => {
         Object.keys(next).forEach((k) => {
-          if (isSameDoctor(k, name)) next[k] = "FINALIZADO";
+          if (isSameDoctor(k, name)) delete next[k];
         });
         next[name] = "FINALIZADO";
       });
@@ -3443,6 +3484,8 @@ export default function App() {
             horarios={horarios}
             supervisores={supervisores}
             rosterBySupervisor={rosters}
+            quincena={quincena}
+            attendanceRecords={attendanceRecords}
           />
         )}
 

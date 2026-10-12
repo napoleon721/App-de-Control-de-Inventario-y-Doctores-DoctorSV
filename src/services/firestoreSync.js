@@ -488,6 +488,7 @@ export function subscribeToCloudAttendance(onUpdate, onError, myClientId = "") {
         if (snapshot.metadata && snapshot.metadata.hasPendingWrites) return;
         if (snapshot.exists()) {
           const data = snapshot.data();
+          if (data && data.records && typeof data.records === "object") attendanceBaseline = { ...data.records };
           if (myClientId && data?.updatedBy === myClientId) return;
           if (data && data.records && typeof data.records === "object") {
             onUpdate(data.records);
@@ -508,6 +509,9 @@ export function subscribeToCloudAttendance(onUpdate, onError, myClientId = "") {
 /**
  * Guarda los estados de asistencia en Firestore con debounce
  */
+// Última versión conocida de la asistencia en la nube (para enviar solo diferencias y propagar eliminaciones)
+let attendanceBaseline = null;
+
 export function saveCloudAttendance(attendanceRecords, clientId = "") {
   if (!isFirestoreAvailable) return;
   if (!attendanceRecords || typeof attendanceRecords !== "object") return;
@@ -515,15 +519,44 @@ export function saveCloudAttendance(attendanceRecords, clientId = "") {
   if (attendanceTimer) clearTimeout(attendanceTimer);
 
   attendanceTimer = setTimeout(async () => {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "attendance");
     try {
-      const docRef = doc(db, "sedes", SEDE_ID, "estado", "attendance");
-      await setDoc(docRef, {
-        records: attendanceRecords,
-        updatedBy: clientId || "anon",
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-    } catch (error) {}
+      const merged = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(docRef);
+        const remote = snap.exists() && snap.data()?.records && typeof snap.data().records === "object" ? { ...snap.data().records } : null;
+        // Sin línea base no se pisa lo que ya hay en la nube: se adopta
+        if (remote && attendanceBaseline === null) return { adopt: remote };
+        const base = attendanceBaseline || {};
+        const next = remote ? { ...remote } : {};
+        Object.keys(attendanceRecords).forEach((k) => {
+          if (base[k] !== attendanceRecords[k]) next[k] = attendanceRecords[k];
+        });
+        Object.keys(base).forEach((k) => {
+          if (!(k in attendanceRecords)) delete next[k];
+        });
+        // Sin merge: las claves eliminadas deben desaparecer realmente de la nube
+        tx.set(docRef, { records: next, updatedBy: clientId || "anon", updatedAt: new Date().toISOString() });
+        return { saved: next };
+      });
+      if (merged.adopt) {
+        attendanceBaseline = merged.adopt;
+        if (onAttendanceMerged) onAttendanceMerged(merged.adopt);
+      } else {
+        attendanceBaseline = merged.saved;
+        if (onAttendanceMerged && JSON.stringify(merged.saved) !== JSON.stringify(attendanceRecords)) onAttendanceMerged(merged.saved);
+      }
+    } catch (error) {
+      try {
+        await setDoc(docRef, { records: attendanceRecords, updatedBy: clientId || "anon", updatedAt: new Date().toISOString() });
+        attendanceBaseline = { ...attendanceRecords };
+      } catch {}
+    }
   }, 400);
+}
+
+let onAttendanceMerged = null;
+export function setCloudAttendanceMergeListener(fn) {
+  onAttendanceMerged = typeof fn === "function" ? fn : null;
 }
 
 let dailyLotsTimer = null;

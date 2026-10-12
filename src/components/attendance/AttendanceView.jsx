@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   UserCheck, Users, CheckCircle2, XCircle, AlertCircle, Sparkles, Search,
   Filter, MapPin, Laptop, Clock, ArrowRight, Share2, FileSpreadsheet, ShieldAlert, Check, RefreshCw, Settings2, UserX, X, AlertTriangle, Calendar, LogOut, RotateCcw, Copy,
@@ -11,31 +11,31 @@ import SupervisorRosterModal from "./SupervisorRosterModal";
 import QuincenaManagerModal from "./QuincenaManagerModal";
 import PlanillaManagerModal from "./PlanillaManagerModal";
 import JustifyAbsenceModal from "./JustifyAbsenceModal";
-import { isSameDoctor, isSameHorario, isRelatedHorario, normalizeDocName, getDoctorSupervisorInfo } from "../../utils/safeHelpers";
+import { isSameDoctor, isSameHorario, isRelatedHorario, normalizeDocName, getDoctorSupervisorInfo, isSupervisorStationSpace } from "../../utils/safeHelpers";
 import { findDailyLotForSupervisor, findDailyLotsForSupervisor } from "../../utils/dailyLotsParser";
 import { syncSupervisorSheets, syncPlanillaSupervisorSheets, mergeQuincenas } from "../../services/googleSheetsService";
 
 export default function AttendanceView({
   spaces,
-  onAssignDoctor,
-  onAssignBatch = null,
-  onUnassignDoctor,
+  onAssignDoctor: rawOnAssignDoctor,
+  onAssignBatch: rawOnAssignBatch = null,
+  onUnassignDoctor: rawOnUnassignDoctor,
   onOpenCheckIn,
   onOpenLiveReport,
   initialSupId = null,
-  onReleaseByHorario,
-  onReleaseLote = null,
+  onReleaseByHorario: rawOnReleaseByHorario,
+  onReleaseLote: rawOnReleaseLote = null,
   onSyncLote = null,
   onSync = null,
   isSyncing = false,
   rosterBySupervisor: propRosters = null,
-  onSaveRoster = null,
+  onSaveRoster: rawOnSaveRoster = null,
   horarios = HORARIOS,
   supervisores = SUPERVISORES_OFICIALES,
   onOpenSupervisorConfig = null,
   currentUser = null,
   attendanceRecords: propAttendanceRecords = null,
-  onSetAttendance: propOnSetAttendance = null,
+  onSetAttendance: rawPropOnSetAttendance = null,
   onUpdateSupervisorFranja = null,
   onUpdateSupervisorOfficialShift = null,
   quincena = null,
@@ -82,6 +82,31 @@ export default function AttendanceView({
     }
     return quincena?.dias?.[0]?.dateKey || todayISO;
   });
+
+  // Solo se permiten cambios (asistencia, asignaciones, liberaciones, nómina) en el día de hoy;
+  // los días anteriores o futuros son de consulta porque la asistencia y los puestos reflejan el día en curso
+  const isToday = selectedDate === todayISO;
+  const lastDayAlertRef = useRef(0);
+  const guardDay = (fn) => {
+    if (typeof fn !== "function") return fn;
+    return (...args) => {
+      if (selectedDate !== todayISO) {
+        if (Date.now() - lastDayAlertRef.current > 1500) {
+          lastDayAlertRef.current = Date.now();
+          alert("Solo se pueden hacer cambios en el día de hoy. Los días anteriores o futuros son de consulta.");
+        }
+        return undefined;
+      }
+      return fn(...args);
+    };
+  };
+  const onAssignDoctor = guardDay(rawOnAssignDoctor);
+  const onAssignBatch = guardDay(rawOnAssignBatch);
+  const onUnassignDoctor = guardDay(rawOnUnassignDoctor);
+  const onReleaseByHorario = guardDay(rawOnReleaseByHorario);
+  const onReleaseLote = guardDay(rawOnReleaseLote);
+  const onSaveRoster = guardDay(rawOnSaveRoster);
+  const propOnSetAttendance = guardDay(rawPropOnSetAttendance);
 
   const [quincenaModalOpen, setQuincenaModalOpen] = useState(false);
   const [planillaModalOpen, setPlanillaModalOpen] = useState(false);
@@ -275,7 +300,7 @@ export default function AttendanceView({
         if (key.startsWith(`${currentSupervisor?.id}__`)) {
           const parts = key.split("__");
           const franjaPart = parts.length === 3 ? parts[2] : parts[1];
-          if (franjaPart && franjaPart !== "undefined" && franjaPart !== "null") {
+          if (franjaPart && franjaPart !== "undefined" && franjaPart !== "null" && franjaPart !== "extras" && !/^\d{4}-\d{2}-\d{2}$/.test(franjaPart)) {
             addFranja(franjaPart);
           }
         }
@@ -324,7 +349,7 @@ export default function AttendanceView({
   }, [spaces, isMultiLot, dynamicLots, activeBloqueInicio, activeBloqueFin]);
 
   // Lista de nombres de médicos asignados al supervisor actual (con soporte multi-franja)
-  const currentRosterNames = useMemo(() => {
+  const baseRosterNames = useMemo(() => {
     // 1. PRIORIDAD ABSOLUTA: Quincena Oficial de Google Sheets para esta fecha y supervisor
     if (quincena && quincena.dias && selectedDate) {
       const diaObj = quincena.dias.find((d) => d.dateKey === selectedDate);
@@ -375,6 +400,25 @@ export default function AttendanceView({
     return [];
   }, [quincena, selectedDate, currentSupervisor, filterHorario, activeRosters, supervisorSpaces]);
 
+  // Médicos agregados manualmente a la nómina del día (se suman a la nómina oficial de la quincena)
+  const extraRosterKey = selectedDate && currentSupervisor?.id ? `${currentSupervisor.id}__${selectedDate}__extras` : null;
+  const currentRosterNames = useMemo(() => {
+    const extras = extraRosterKey && Array.isArray(activeRosters[extraRosterKey]) ? activeRosters[extraRosterKey] : [];
+    if (extras.length === 0) return baseRosterNames;
+    const merged = [...baseRosterNames];
+    extras.forEach((n) => {
+      if (!merged.some((m) => isSameDoctor(m, n))) merged.push(n);
+    });
+    return merged;
+  }, [baseRosterNames, activeRosters, extraRosterKey]);
+
+  // Médicos de la nómina oficial de la quincena para el día y supervisor activos (sin agregados manuales)
+  const quincenaDayNames = useMemo(() => {
+    const dia = quincena?.dias?.find((d) => d.dateKey === selectedDate);
+    const sup = dia?.porSupervisor?.[currentSupervisor?.id];
+    return sup && Array.isArray(sup.doctores) ? sup.doctores.map((d) => d.nombre) : null;
+  }, [quincena, selectedDate, currentSupervisor?.id]);
+
   function handleSaveSupervisorRoster(newNames, franja = null, transferredDocs = []) {
     const franjaTarget = franja || (filterHorario !== "TODOS" ? filterHorario : null);
     setLocalRosters((prev) => {
@@ -388,7 +432,9 @@ export default function AttendanceView({
       return next;
     });
     if (onSaveRoster) {
-      onSaveRoster(currentSupervisor.id, newNames, franjaTarget, transferredDocs);
+      // Con nómina oficial de quincena para el día: se guardan solo los médicos agregados manualmente
+      const extras = quincenaDayNames ? newNames.filter((n) => !quincenaDayNames.some((q) => isSameDoctor(q, n))) : null;
+      onSaveRoster(currentSupervisor.id, newNames, franjaTarget, transferredDocs, extras ? { dateKey: selectedDate, extras } : null);
     }
   }
 
@@ -407,6 +453,7 @@ export default function AttendanceView({
   }, [localAttendance, propAttendanceRecords]);
 
   function handleSetAttendance(docName, status) {
+    if (!isToday) return;
     if (propOnSetAttendance) {
       propOnSetAttendance(docName, status);
     }
@@ -547,7 +594,7 @@ export default function AttendanceView({
     const addedNames = new Set();
 
     function getStatusForDoctor(docName) {
-      if (!docName) return null;
+      if (!docName || !isToday) return null;
       const clean = String(docName).toLowerCase().trim();
       const direct = attendanceMap.get(clean) || attendanceMap.get(docName);
       if (direct) return direct;
@@ -556,7 +603,7 @@ export default function AttendanceView({
     }
 
     function getSpaceForDoctor(docName) {
-      if (!docName) return null;
+      if (!docName || !isToday) return null;
       const clean = String(docName).toLowerCase().trim();
       const direct = spacesByDoctor.get(clean) || spacesByDoctor.get(docName);
       if (direct) return direct;
@@ -672,7 +719,7 @@ export default function AttendanceView({
       )
     );
 
-    if (!hasQuincenaData) {
+    if (!hasQuincenaData && isToday) {
       // 2. Incluir cualquier médico sentado físicamente en este lote O(1)
       (supervisorSpaces || []).forEach((s) => {
       if (s.doctor) {
@@ -768,7 +815,7 @@ export default function AttendanceView({
     }
 
     return list;
-  }, [currentRosterNames, doctorsMap, spacesByDoctor, attendanceMap, currentSupervisor, supervisorSpaces, filterHorario, quincena, selectedDate]);
+  }, [currentRosterNames, doctorsMap, spacesByDoctor, attendanceMap, currentSupervisor, supervisorSpaces, filterHorario, quincena, selectedDate, isToday]);
 
   // Médicos filtrados
   const filteredBatch = useMemo(() => {
@@ -802,7 +849,16 @@ export default function AttendanceView({
     const q = searchQuery.toLowerCase().trim();
     const batchNames = new Set(batchDoctors.map((d) => d.nombre.toLowerCase().trim()));
 
-    return DOCTORES_EXCEL.filter((d) => {
+    // Padrón de médicos + personal (supervisores y administrativos) para poder sumarlos a la nómina
+    const pool = [...DOCTORES_EXCEL];
+    const seenPool = new Set(pool.map((d) => d.nombre.toLowerCase().trim()));
+    [...(STAFF_EXCEL || []), ...(supervisores || [])].forEach((p, i) => {
+      const key = String(p.nombre || "").toLowerCase().trim();
+      if (!key || seenPool.has(key)) return;
+      seenPool.add(key);
+      pool.push({ id: `X-${i}`, nombre: p.nombre, correo: p.correo || "", jvpm: "" });
+    });
+    return pool.filter((d) => {
       if (batchNames.has(d.nombre.toLowerCase().trim())) return false;
       return (
         d.nombre.toLowerCase().includes(q) ||
@@ -1265,6 +1321,8 @@ export default function AttendanceView({
           </div>
         </div>
 
+        {/* Título, sincronización y gestor de la nómina quincenal: solo Master (el supervisor mantiene los botones de grupo) */}
+        {isMaster && (
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex items-start sm:items-center gap-3">
             <span className={`flex h-10 w-10 items-center justify-center rounded-2xl shrink-0 shadow-2xs border ${
@@ -1350,6 +1408,7 @@ export default function AttendanceView({
             )}
           </div>
         </div>
+        )}
 
         {/* Tira interactiva de días de la quincena en contenedor estilizado */}
         <div className="bg-slate-50/80 p-2 rounded-2xl border border-slate-200/60 flex items-center gap-2 overflow-x-auto scrollbar-thin">
@@ -1397,6 +1456,13 @@ export default function AttendanceView({
           })}
         </div>
       </div>
+
+      {!isToday && (
+        <div className="w-full rounded-2xl bg-amber-50 border border-amber-300 p-3 text-[12px] font-bold text-amber-900 flex items-center gap-2.5 shadow-2xs">
+          <AlertCircle size={16} className="text-amber-600 shrink-0" />
+          <span>Estás consultando un día distinto a hoy: solo lectura. Los cambios de asistencia y puestos solo se permiten en el día actual.</span>
+        </div>
+      )}
 
       {/* Banner de Sincronización de Lote en Vivo */}
       {syncFeedback && (
@@ -1681,7 +1747,7 @@ export default function AttendanceView({
                     activeBloqueFin,
                     currentSupervisor.nombre,
                     currentSupervisor.id,
-                    batchDoctors.map((d) => d.nombre),
+                    batchDoctors.filter((d) => d.status === "PRESENTE").map((d) => d.nombre),
                     {
                       targetSpaceIds: supervisorSpaces.map((s) => Number(s.id)),
                     }
@@ -1709,36 +1775,22 @@ export default function AttendanceView({
                 ? filterHorario
                 : (currentSupervisor.activeFranja || currentSupervisor.horarios?.[0] || currentSupervisor.horario);
 
+              const matchesFranja = (h) =>
+                filterHorario === "TODOS" || (h && (isSameHorario(h, franjaTarget) || isRelatedHorario(h, franjaTarget)));
+              // Solo médicos de la nómina del supervisor en esta franja y puestos de su lote (nunca estaciones de supervisores)
+              const franjaDoctors = batchDoctors.filter((d) => matchesFranja(d.horario));
+              const presentFranjaNames = franjaDoctors.filter((d) => d.status === "PRESENTE").map((d) => d.nombre);
+
               const spacesToFree = (spaces || []).filter((s) => {
                 const sid = Number(s.id);
                 const isOccupied = s.estado === "OCUPADO" || Boolean(s.doctor);
-                if (!isOccupied) return false;
-
-                // 1. Si el médico asignado está en la nómina activa de este turno
-                if (s.doctor && batchDoctors.some((d) => isSameDoctor(d.nombre, s.doctor))) return true;
-
-                // 2. Si el puesto pertenece a los cubículos del lote del supervisor
-                if (supervisorSpaces.some((sp) => Number(sp.id) === sid)) return true;
-
-                // 3. Coincidencia directa o relacionada de franja horaria
-                if (s.horario && (isSameHorario(s.horario, franjaTarget) || isRelatedHorario(s.horario, franjaTarget))) return true;
-
-                // 4. Salvaguarda explícita para cubículos 38 y 39
-                if (sid === 38 || sid === 39) {
-                  if (
-                    isRelatedHorario(franjaTarget, "02:00 PM – 10:00 PM") ||
-                    isRelatedHorario(franjaTarget, "04:00 PM – 10:00 PM") ||
-                    isRelatedHorario(franjaTarget, "06:00 PM – 10:00 PM") ||
-                    /10:00\s*PM|22:00/i.test(franjaTarget)
-                  ) {
-                    return true;
-                  }
-                }
-
+                if (!isOccupied || isSupervisorStationSpace(s, supervisores)) return false;
+                if (s.doctor && franjaDoctors.some((d) => isSameDoctor(d.nombre, s.doctor))) return true;
+                if (supervisorSpaces.some((sp) => Number(sp.id) === sid) && matchesFranja(s.horario)) return true;
                 return false;
               });
 
-              const ocupadosEnFranja = spacesToFree.length;
+              const ocupadosEnFranja = spacesToFree.length + presentFranjaNames.filter((n) => !spacesToFree.some((sp) => sp.doctor && isSameDoctor(sp.doctor, n))).length;
 
               return ocupadosEnFranja > 0 ? (
                 <button
@@ -1750,7 +1802,7 @@ export default function AttendanceView({
                       onReleaseByHorario(franjaTarget, {
                         supervisorId: currentSupervisor?.id,
                         targetSpaceIds: spacesToFree.map((s) => Number(s.id)),
-                        targetDoctorNames: batchDoctors.map((d) => d.nombre),
+                        targetDoctorNames: presentFranjaNames,
                       });
                     }
                   }}
@@ -2100,10 +2152,10 @@ export default function AttendanceView({
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="overflow-auto max-h-[62vh] rounded-2xl border border-slate-200 shadow-2xs">
             <table className="w-full text-left text-[12.5px]">
-              <thead>
-                <tr className="bg-slate-50/90 border-b border-slate-200 text-[10.5px] font-bold uppercase tracking-wider text-slate-600">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-slate-100 border-b border-slate-200 text-[10.5px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgb(226,232,240)]">
                   <th className="px-3.5 py-3">#</th>
                   <th className="px-3.5 py-3">Médico Programado</th>
                   <th className="px-3.5 py-3">Puesto Asignado</th>
