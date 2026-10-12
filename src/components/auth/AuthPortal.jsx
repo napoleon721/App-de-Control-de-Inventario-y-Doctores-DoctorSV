@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
-  Shield, Stethoscope, KeyRound, Check, ArrowRight, AlertCircle,
-  Eye, EyeOff, Sparkles, RefreshCw, X, UserCheck, Mail
+  Stethoscope, AlertCircle, RefreshCw, UserCheck
 } from "lucide-react";
 import logoPng from "../../assets/doctorsv_logo.png";
 import { DOCTORES_EXCEL, HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
@@ -18,9 +17,6 @@ export default function AuthPortal({
   supervisores = SUPERVISORES_OFICIALES,
 }) {
   // Input states
-  const [emailInput, setEmailInput] = useState("");
-  const [pinInput, setPinInput] = useState("");
-  const [showPin, setShowPin] = useState(false);
   const [authError, setAuthError] = useState("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -170,66 +166,6 @@ export default function AuthPortal({
     return null;
   }
 
-  // Previsualización en tiempo real del rol según el correo escrito
-  const detectedPreview = useMemo(() => {
-    if (!emailInput.trim()) return null;
-    return resolveUserPermissions(emailInput);
-  }, [emailInput, supervisores]);
-
-  // Sugerencias rápidas mientras escribe
-  const quickSuggestions = useMemo(() => {
-    const q = emailInput.toLowerCase().trim();
-    if (!q || q.length < 2) return [];
-
-    const suggestions = [];
-
-    // Master y Jefaturas Administrativas
-    JEFATURA_ADMINISTRATIVOS.forEach((j) => {
-      const jMail = (j.correo || "").toLowerCase();
-      const jName = (j.nombre || "").toLowerCase();
-      if (jMail.includes(q) || jName.includes(q) || (q.length >= 3 && ("jefa".includes(q) || "master".includes(q)))) {
-        suggestions.push({
-          email: j.correo,
-          name: j.titulo || j.nombre,
-          role: "MASTER",
-          desc: `${j.cargo || "Jefatura de Sede"} · Control Total`,
-        });
-      }
-    });
-
-    // Supervisores
-    (supervisores || SUPERVISORES_OFICIALES).forEach((s) => {
-      const sMail = (s.correo || "").toLowerCase();
-      const sName = (s.nombre || "").toLowerCase();
-      if (sMail.includes(q) || sName.includes(q)) {
-        suggestions.push({
-          email: s.correo,
-          name: s.nombre,
-          role: "SUPERVISOR",
-          desc: `Supervisor · Estación #${s.puesto}`,
-        });
-      }
-    });
-
-    // Doctores (primeras 3 coincidencias)
-    (DOCTORES_EXCEL || []).forEach((d) => {
-      if (suggestions.length >= 5) return;
-      const dMail = (d.correo || "").toLowerCase();
-      const dName = (d.nombre || "").toLowerCase();
-      if ((dMail && dMail.includes(q)) || dName.includes(q)) {
-        suggestions.push({
-          email: d.correo || `${d.nombre.toLowerCase().replace(/\s+/g, ".")}@doctorsv.gob.sv`,
-          name: d.nombre,
-          role: "DOCTOR",
-          desc: `Médico · ${d.horario || "Turno"}`,
-        });
-      }
-    });
-
-    return suggestions.slice(0, 4);
-  }, [emailInput, supervisores]);
-
-  // Ejecución de login centralizada según el rol resuelto
   function executeLogin(authInfo, provider = "email_pin") {
     const loginTime = new Date().toLocaleTimeString("es-SV", {
       hour: "2-digit",
@@ -272,7 +208,7 @@ export default function AuthPortal({
             "Tu navegador bloqueó la ventana emergente de Google. Permite ventanas emergentes para este sitio."
           );
         } else {
-          setAuthError(`No se pudo conectar con Google (${errStr}). Ingresa con tu correo abajo.`);
+          setAuthError(`No se pudo conectar con Google (${errStr}). Intenta nuevamente.`);
         }
         setIsGoogleLoading(false);
         return;
@@ -290,54 +226,10 @@ export default function AuthPortal({
       executeLogin(detected, "google");
     } catch (err) {
       console.error("Error en Google Sign-In:", err);
-      setAuthError("Error de autenticación con Google. Intenta nuevamente o usa tu correo.");
+      setAuthError("Error de autenticación con Google. Intenta nuevamente.");
     } finally {
       setIsGoogleLoading(false);
     }
-  }
-
-  // Envío del formulario unificado
-  function handleFormSubmit(e) {
-    e.preventDefault();
-    setAuthError("");
-
-    const cleanEmail = emailInput.trim();
-    const cleanPin = pinInput.trim().toLowerCase();
-
-    // Si no ingresó correo pero puso PIN 2026, asumimos Doctor Master por defecto
-    let targetEmail = cleanEmail;
-    if (!targetEmail && (cleanPin === "2026" || cleanPin === "master2026")) {
-      targetEmail = "usuario@ejemplo.com";
-    }
-
-    if (!targetEmail) {
-      setAuthError(
-        "Por favor ingresa tu correo electrónico institucional (ej: tu.nombre@doctorsv.gob.sv)."
-      );
-      return;
-    }
-
-    // Validar PIN: se acepta 2026, master2026, sup2026, admin, 1234, doctorsv, o en blanco
-    const isValidPin =
-      !cleanPin ||
-      ["2026", "master2026", "sup2026", "admin", "1234", "doctorsv"].includes(cleanPin);
-
-    if (!isValidPin) {
-      setAuthError(
-        "PIN o Contraseña incorrecta. El PIN predeterminado es: 2026 (o puedes dejarlo en blanco)."
-      );
-      return;
-    }
-
-    const detected = resolveUserPermissions(targetEmail);
-    if (!detected) {
-      setAuthError(
-        "No se encontró ningún usuario con este correo. Verifica que esté bien escrito o continúa con Google."
-      );
-      return;
-    }
-
-    executeLogin(detected, cleanPin ? "pin" : "direct");
   }
 
   return (
@@ -424,182 +316,9 @@ export default function AuthPortal({
             </span>
           </button>
 
-          <div className="relative flex items-center justify-center my-3">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200" />
-            </div>
-            <span className="relative bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              o ingresa con tu correo y PIN
-            </span>
-          </div>
-
-          <form onSubmit={handleFormSubmit} className="space-y-4">
-            {/* Campo: Correo Institucional */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-slate-700">
-                  Correo Electrónico Institucional
-                </label>
-                {detectedPreview && (
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold ${
-                      detectedPreview.role === "MASTER"
-                        ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
-                        : detectedPreview.role === "SUPERVISOR"
-                        ? "bg-cyan-100 text-cyan-800 border border-cyan-200"
-                        : "bg-blue-100 text-blue-800 border border-blue-200"
-                    }`}
-                  >
-                    <Check size={11} /> {detectedPreview.label}
-                  </span>
-                )}
-              </div>
-
-              <div className="relative flex items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF] focus-within:bg-white transition-all">
-                <Mail size={17} className="text-[#0048B5] mr-2.5 shrink-0" />
-                <input
-                  type="text"
-                  value={emailInput}
-                  onChange={(e) => {
-                    setEmailInput(e.target.value);
-                    setAuthError("");
-                  }}
-                  placeholder="ej: usuario@ejemplo.com"
-                  className="w-full bg-transparent text-[13.5px] font-semibold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
-                  autoFocus
-                />
-              </div>
-
-              {/* Sugerencias contextuales mientras escribe */}
-              {quickSuggestions.length > 0 && (
-                <div className="mt-1.5 rounded-xl border border-slate-200 bg-white p-1.5 shadow-md space-y-1">
-                  {quickSuggestions.map((sug) => (
-                    <button
-                      key={sug.email}
-                      type="button"
-                      onClick={() => {
-                        setEmailInput(sug.email);
-                        setAuthError("");
-                      }}
-                      className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-slate-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold ${
-                            sug.role === "MASTER"
-                              ? "bg-indigo-100 text-indigo-700"
-                              : sug.role === "SUPERVISOR"
-                              ? "bg-cyan-100 text-cyan-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {sug.role === "MASTER" ? (
-                            <Shield size={12} />
-                          ) : sug.role === "SUPERVISOR" ? (
-                            <UserCheck size={12} />
-                          ) : (
-                            <Stethoscope size={12} />
-                          )}
-                        </span>
-                        <div>
-                          <p className="text-[12px] font-bold text-slate-800 leading-tight">
-                            {sug.name}
-                          </p>
-                          <p className="text-[10.5px] text-slate-400 font-mono leading-tight">
-                            {sug.email}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                        {sug.desc}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Campo: PIN / Contraseña */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-slate-700">
-                  PIN o Contraseña
-                </label>
-                <span className="text-[11px] text-slate-400">
-                  Predeterminado: <strong className="text-[#0048B5]">2026</strong>
-                </span>
-              </div>
-
-              <div className="relative flex items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0095FF] focus-within:bg-white transition-all">
-                <KeyRound size={17} className="text-[#0048B5] mr-2.5 shrink-0" />
-                <input
-                  type={showPin ? "text" : "password"}
-                  value={pinInput}
-                  onChange={(e) => {
-                    setPinInput(e.target.value);
-                    setAuthError("");
-                  }}
-                  placeholder="PIN de acceso (ej: 2026)"
-                  className="w-full bg-transparent text-[13.5px] font-bold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  className="text-slate-400 hover:text-slate-600 ml-2 p-1"
-                >
-                  {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Accesos rápidos de 1 clic */}
-            <div className="pt-1">
-              <p className="text-[11px] font-semibold text-slate-500 mb-1.5">
-                O selecciona tu perfil institucional para autocompletar:
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmailInput("usuario@ejemplo.com");
-                    setPinInput("2026");
-                    setAuthError("");
-                  }}
-                  className="inline-flex items-center gap-1 rounded-xl bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
-                >
-                  <Shield size={12} /> Usuario Master (Ejemplo)
-                </button>
-                {(supervisores || SUPERVISORES_OFICIALES).slice(0, 3).map((sup) => (
-                  <button
-                    key={sup.id}
-                    type="button"
-                    onClick={() => {
-                      setEmailInput(sup.correo);
-                      setPinInput("2026");
-                      setAuthError("");
-                    }}
-                    className="inline-flex items-center gap-1 rounded-xl bg-cyan-50 border border-cyan-200 px-2 py-1 text-[11px] font-bold text-cyan-800 hover:bg-cyan-100 transition shadow-2xs cursor-pointer"
-                  >
-                    <UserCheck size={12} /> {sup.nombre.split(" ")[0]} ({sup.nombre.split(" ")[1] || ""})
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Botón de Ingreso Principal */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2.5 rounded-2xl py-3.5 text-[14px] font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer"
-                style={{
-                  background: "linear-gradient(135deg, #0048B5 0%, #0077D4 50%, #0095FF 100%)",
-                }}
-              >
-                <span>Ingresar al Sistema</span>
-                <ArrowRight size={17} />
-              </button>
-            </div>
-          </form>
+          <p className="text-center text-[11.5px] text-slate-500">
+            Tu perfil (Master, Supervisor o Médico) se detecta automáticamente con tu correo de Google.
+          </p>
         </div>
       </div>
     </div>
