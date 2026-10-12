@@ -82,7 +82,7 @@ import {
   syncAllSupervisorSheets,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, isRelatedHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus } from "./utils/safeHelpers";
+import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, isRelatedHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus, isMasterUser, getMasterUserInfo } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -134,9 +134,24 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const sessionUser = sessionStorage.getItem("DOCTORSV_ACTIVE_USER_SESSION");
-      if (sessionUser) return JSON.parse(sessionUser);
+      if (sessionUser) {
+        const parsed = JSON.parse(sessionUser);
+        if (parsed && isMasterUser({ email: parsed.email, name: parsed.name })) {
+          const masterInfo = getMasterUserInfo({ email: parsed.email, name: parsed.name });
+          return { ...parsed, ...masterInfo, role: "MASTER" };
+        }
+        return parsed;
+      }
       const saved = localStorage.getItem("DOCTORSV_ACTIVE_USER_V2");
-      return saved ? JSON.parse(saved) : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && isMasterUser({ email: parsed.email, name: parsed.name })) {
+          const masterInfo = getMasterUserInfo({ email: parsed.email, name: parsed.name });
+          return { ...parsed, ...masterInfo, role: "MASTER" };
+        }
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -280,33 +295,21 @@ export default function App() {
 
       if (firebaseUser && !currentUser) {
         const email = safeLower(firebaseUser.email);
-        const envMaster = safeLower(import.meta.env.VITE_MASTER_EMAIL || "");
-        const allowedMasters = [
-          "elmer.andrade@doctorsv.gob.sv",
-          "cccalixo1998@gmail.com",
-          ...(envMaster ? envMaster.split(",").map((e) => e.trim()) : []),
-        ];
-        const isMaster = allowedMasters.includes(email) || email.startsWith("elmer.andrade@");
+        const displayName = firebaseUser.displayName || "";
 
-        if (isMaster) {
-          let name = "Dr. Elmer Andrade (Master Admin)";
-          if (firebaseUser.displayName && !email.startsWith("elmer.andrade")) {
-            name = `${firebaseUser.displayName} (Master Admin)`;
-          }
+        // 1. Master y Jefaturas Administrativas
+        if (isMasterUser({ email, name: displayName, user: firebaseUser })) {
+          const masterInfo = getMasterUserInfo({ email, name: displayName, user: firebaseUser });
           setCurrentUser({
-            role: "MASTER",
-            name,
-            email,
-            photoURL: firebaseUser.photoURL || null,
-            shift: "Turno Completo",
+            ...masterInfo,
             authProvider: "google",
             loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
           });
           return;
         }
 
-        // Supervisor
-        const sup = supervisores.find((s) => safeLower(s.correo) === email);
+        // 2. Supervisor
+        const sup = supervisores.find((s) => safeLower(s.correo) === email || isSameDoctor(s.nombre, displayName));
         if (sup) {
           setCurrentUser({
             name: sup.nombre,
@@ -326,8 +329,22 @@ export default function App() {
           return;
         }
 
-        // Doctor
-        const doc = DOCTORES_EXCEL.find((d) => safeLower(d.correo) === email);
+        // 3. Doctor o Personal Administrativo en Padrón
+        const doc = DOCTORES_EXCEL.find((d) => safeLower(d.correo) === email || isSameDoctor(d.nombre, displayName));
+        if (
+          doc?.categoria === "Administrativos" ||
+          doc?.rol === "Personal Administrativo" ||
+          isMasterUser({ email, name: doc?.nombre, user: firebaseUser })
+        ) {
+          const masterInfo = getMasterUserInfo({ email, name: doc?.nombre || displayName, user: firebaseUser });
+          setCurrentUser({
+            ...masterInfo,
+            authProvider: "google",
+            loginTime: new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+          });
+          return;
+        }
+
         setCurrentUser({
           name: doc?.nombre || firebaseUser.displayName || email.split("@")[0],
           role: "DOCTOR",
@@ -347,6 +364,20 @@ export default function App() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
+  }, [currentUser]);
+
+  // Corrección reactiva: Si una jefa o personal administrativo tiene guardada o activa una sesión con rol DOCTOR, elevarla de inmediato a MASTER
+  useEffect(() => {
+    if (currentUser && currentUser.role !== "MASTER") {
+      if (isMasterUser({ email: currentUser.email, name: currentUser.name })) {
+        const masterInfo = getMasterUserInfo({ email: currentUser.email, name: currentUser.name });
+        setCurrentUser((prev) => ({
+          ...prev,
+          ...masterInfo,
+          role: "MASTER",
+        }));
+      }
+    }
   }, [currentUser]);
 
   // Sincronizador en Segundo Plano con Google Sheets (moderado para no saturar cuota)
@@ -3293,6 +3324,13 @@ export default function App() {
             setTab("mapa");
           }}
           onLoginDoctor={(doctorData) => {
+            if (isMasterUser({ email: doctorData?.email, name: doctorData?.name })) {
+              const masterInfo = getMasterUserInfo({ email: doctorData?.email, name: doctorData?.name });
+              setCurrentUser({ ...doctorData, ...masterInfo, role: "MASTER" });
+              setAuthPortalOpen(false);
+              setTab("mapa");
+              return;
+            }
             setCurrentUser(doctorData);
             if (doctorData?.supervisorId && doctorData?.name) {
               setRosters((prev) => {

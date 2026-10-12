@@ -410,4 +410,153 @@ export function getEffectiveSpaceStatus(space, attendanceRecords = null, supervi
   return "DISPONIBLE";
 }
 
+/**
+ * Lista oficial de Personal Administrativo / Jefatura de Sede con privilegios de Doctor Master.
+ */
+export const JEFATURA_ADMINISTRATIVOS = [
+  {
+    nombre: "MONICA GISSEL CARRILLO ZELAYA",
+    correo: "monica.carrillo@doctorsv.gob.sv",
+    rol: "Personal Administrativo",
+    titulo: "Dra. Monica Gissel Carrillo Zelaya",
+    cargo: "Jefa de Sede",
+  },
+  {
+    nombre: "MARCELA FLORITA ARGUETA SOLORZANO",
+    correo: "marcela.argueta@doctorsv.gob.sv",
+    rol: "Personal Administrativo",
+    titulo: "Dra. Marcela Florita Argueta Solórzano",
+    cargo: "Jefa de Sede",
+  },
+  {
+    nombre: "LUISA CAROLINA BARRIOS",
+    correo: "luisa.barrios@doctorsv.gob.sv",
+    rol: "Personal Administrativo",
+    titulo: "Dra. Luisa Carolina Barrios",
+    cargo: "Jefa de Sede",
+  },
+  {
+    nombre: "ALEJANDRA EMPERATRIZ PARADA VILLEGAS",
+    correo: "alejandra.parada@doctorsv.gob.sv",
+    rol: "Personal Administrativo",
+    titulo: "Dra. Alejandra Emperatriz Parada Villegas",
+    cargo: "Jefa de Sede",
+  },
+  {
+    nombre: "ELMER ALEXANDER ANDRADE GALVEZ",
+    correo: "elmer.andrade@doctorsv.gob.sv",
+    rol: "Personal Administrativo",
+    titulo: "Dr. Elmer Andrade",
+    cargo: "Master Admin",
+  },
+];
+
+/**
+ * Determina con máxima precisión y tolerancia si un usuario tiene rol MASTER.
+ * Reconoce a las Jefas tanto por su correo como si inician sesión con su cuenta personal de Google (Gmail).
+ */
+export function isMasterUser({ email = "", name = "", user = null, staffList = [] } = {}) {
+  const cleanEmail = safeLower(email || user?.email);
+  const cleanName = safeTrim(name || user?.displayName);
+  const envMaster = safeLower(import.meta.env?.VITE_MASTER_EMAIL || "");
+  const envList = envMaster ? envMaster.split(",").map((e) => e.trim()) : [];
+
+  const masterEmails = [
+    "elmer.andrade@doctorsv.gob.sv",
+    "monica.carrillo@doctorsv.gob.sv",
+    "marcela.argueta@doctorsv.gob.sv",
+    "luisa.barrios@doctorsv.gob.sv",
+    "alejandra.parada@doctorsv.gob.sv",
+    "cccalixo1998@gmail.com",
+    "admin",
+    "master",
+    ...envList,
+  ];
+
+  // 1. Verificación directa por correo o prefijo
+  if (cleanEmail) {
+    if (masterEmails.includes(cleanEmail)) return true;
+    if (cleanEmail.startsWith("elmer.andrade@") || cleanEmail === "elmer.andrade") return true;
+    if (cleanEmail.startsWith("monica.carrillo@") || cleanEmail.startsWith("monica.zelaya@")) return true;
+    if (cleanEmail.startsWith("marcela.argueta@")) return true;
+    if (cleanEmail.startsWith("luisa.barrios@")) return true;
+    if (cleanEmail.startsWith("alejandra.parada@")) return true;
+  }
+
+  // 2. Verificación por nombre de Google (displayName) o nombre en perfil
+  if (cleanName) {
+    for (const jefa of JEFATURA_ADMINISTRATIVOS) {
+      if (isSameDoctor(jefa.nombre, cleanName)) return true;
+    }
+  }
+
+  // 3. Verificación de coincidencia en el usuario del correo (ej. monica.carrillo@gmail.com -> monica carrillo)
+  if (cleanEmail) {
+    const userPart = cleanEmail.split("@")[0].replace(/[^a-z0-9]/g, " ");
+    for (const jefa of JEFATURA_ADMINISTRATIVOS) {
+      if (isSameDoctor(jefa.nombre, userPart)) return true;
+    }
+  }
+
+  // 4. Verificación en la lista de staff o padrón oficial por categoría Administrativos
+  const listToSearch = (staffList && staffList.length > 0) ? staffList : (DOCTORES_EXCEL || []);
+  if (Array.isArray(listToSearch)) {
+    const matched = listToSearch.find((d) => {
+      if (d.categoria !== "Administrativos" && d.rol !== "Personal Administrativo") return false;
+      const dMail = safeLower(d.correo);
+      const dName = safeTrim(d.nombre);
+      if (cleanEmail && dMail && cleanEmail === dMail) return true;
+      if (cleanName && isSameDoctor(dName, cleanName)) return true;
+      if (cleanEmail && isSameDoctor(dName, cleanEmail.split("@")[0].replace(/[^a-z0-9]/g, " "))) return true;
+      return false;
+    });
+    if (matched) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Genera el objeto de usuario y sesión con rol MASTER para Jefaturas y Master Admin.
+ */
+export function getMasterUserInfo({ email = "", name = "", user = null } = {}) {
+  const cleanEmail = safeLower(email || user?.email);
+  const cleanName = safeTrim(name || user?.displayName);
+
+  let formattedName = cleanName || "Master Admin";
+  let roleTitle = "Jefatura · Control Total de Sede";
+
+  for (const jefa of JEFATURA_ADMINISTRATIVOS) {
+    if (
+      (cleanName && isSameDoctor(jefa.nombre, cleanName)) ||
+      (cleanEmail && (cleanEmail === safeLower(jefa.correo) || isSameDoctor(jefa.nombre, cleanEmail.split("@")[0].replace(/[^a-z0-9]/g, " "))))
+    ) {
+      formattedName = jefa.titulo || cleanName || jefa.nombre;
+      roleTitle = `${jefa.cargo || "Jefa de Sede"} · Control Total de Sede`;
+      break;
+    }
+  }
+
+  // Si el nombre no tiene prefijo, agregárselo según corresponda
+  const lowerFmt = formattedName.toLowerCase();
+  if (lowerFmt.includes("monica") || lowerFmt.includes("marcela") || lowerFmt.includes("luisa") || lowerFmt.includes("alejandra")) {
+    if (!lowerFmt.startsWith("dra.") && !lowerFmt.startsWith("lic.")) {
+      formattedName = `Dra. ${formattedName}`;
+    }
+  } else if (lowerFmt.includes("elmer") && !lowerFmt.startsWith("dr.")) {
+    formattedName = `Dr. ${formattedName}`;
+  }
+
+  return {
+    role: "MASTER",
+    name: `${formattedName} (Master)`,
+    email: cleanEmail || "administracion@doctorsv.gob.sv",
+    photoURL: user?.photoURL || null,
+    shift: "Turno Completo",
+    label: roleTitle,
+    badgeColor: "indigo",
+  };
+}
+
+
 

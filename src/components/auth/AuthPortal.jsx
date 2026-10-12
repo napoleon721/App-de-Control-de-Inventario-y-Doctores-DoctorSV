@@ -6,6 +6,7 @@ import {
 import logoPng from "../../assets/doctorsv_logo.png";
 import { DOCTORES_EXCEL, HORARIOS, SUPERVISORES_OFICIALES } from "../../constants/tokens";
 import { loginWithGoogle } from "../../services/firebaseAuth";
+import { isMasterUser, getMasterUserInfo, JEFATURA_ADMINISTRATIVOS, isSameDoctor } from "../../utils/safeHelpers";
 
 export default function AuthPortal({
   onLoginMaster,
@@ -23,24 +24,9 @@ export default function AuthPortal({
   const [authError, setAuthError] = useState("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Helper para verificar si un correo tiene privilegios de Doctor Master
-  function isMasterEmail(email = "") {
-    if (!email) return false;
-    const norm = email.toLowerCase().trim();
-    const envMaster = (import.meta.env.VITE_MASTER_EMAIL || "").toLowerCase().trim();
-    const envList = envMaster ? envMaster.split(",").map((e) => e.trim()) : [];
-    const masterList = [
-      "elmer.andrade@doctorsv.gob.sv",
-      "cccalixo1998@gmail.com",
-      "admin",
-      "master",
-      ...envList,
-    ];
-    return (
-      masterList.includes(norm) ||
-      norm.startsWith("elmer.andrade@") ||
-      norm === "elmer.andrade"
-    );
+  // Helper para verificar si un correo tiene privilegios de Doctor Master o Jefatura
+  function isMasterEmail(email = "", user = null) {
+    return isMasterUser({ email, user });
   }
 
   // Resolver automáticamente rol y permisos a partir del correo o identificador
@@ -56,22 +42,9 @@ export default function AuthPortal({
       clean = "elmer.andrade@doctorsv.gob.sv";
     }
 
-    // 1. DOCTOR MASTER
-    if (isMasterEmail(clean)) {
-      let name = "Dr. Elmer Andrade (Master Admin)";
-      if (displayName && !clean.startsWith("elmer.andrade")) {
-        name = `${displayName} (Master Admin)`;
-      }
-      return {
-        role: "MASTER",
-        name,
-        email: clean.includes("@") ? clean : "elmer.andrade@doctorsv.gob.sv",
-        photoURL: user?.photoURL || null,
-        shift: "Turno Completo",
-        label: "Doctor Master · Control Total de Sede",
-        badgeColor: "indigo",
-        icon: Shield,
-      };
+    // 1. DOCTOR MASTER Y JEFATURAS ADMINISTRATIVAS
+    if (isMasterUser({ email: clean, name: displayName, user })) {
+      return getMasterUserInfo({ email: clean, name: displayName, user });
     }
 
     // 2. SUPERVISOR OFICIAL
@@ -86,7 +59,7 @@ export default function AuthPortal({
       if (clean && sName.includes(clean)) return true;
       if (
         displayName &&
-        (displayName.toLowerCase().includes(sName) || sName.includes(displayName.toLowerCase()))
+        (displayName.toLowerCase().includes(sName) || sName.includes(displayName.toLowerCase()) || isSameDoctor(sName, displayName))
       ) {
         return true;
       }
@@ -123,7 +96,7 @@ export default function AuthPortal({
       if (clean && dName.includes(clean)) return true;
       if (
         displayName &&
-        (displayName.toLowerCase().includes(dName) || dName.includes(displayName.toLowerCase()))
+        (displayName.toLowerCase().includes(dName) || dName.includes(displayName.toLowerCase()) || isSameDoctor(dName, displayName))
       ) {
         return true;
       }
@@ -131,6 +104,15 @@ export default function AuthPortal({
     });
 
     if (matchedDoc) {
+      // Si el registro pertenece a Personal Administrativo o Jefatura, garantizar rol MASTER
+      if (
+        matchedDoc.categoria === "Administrativos" ||
+        matchedDoc.rol === "Personal Administrativo" ||
+        isMasterUser({ email: clean, name: matchedDoc.nombre, user })
+      ) {
+        return getMasterUserInfo({ email: clean, name: matchedDoc.nombre, user });
+      }
+
       return {
         role: "DOCTOR",
         name: matchedDoc.nombre,
@@ -150,6 +132,9 @@ export default function AuthPortal({
     // 4. Correo institucional o genérico
     if (clean.includes("@")) {
       const userPart = clean.split("@")[0].replace(/\./g, " ");
+      if (isMasterUser({ email: clean, name: displayName || userPart, user })) {
+        return getMasterUserInfo({ email: clean, name: displayName || userPart, user });
+      }
       const formattedName = userPart
         .split(" ")
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -186,15 +171,19 @@ export default function AuthPortal({
 
     const suggestions = [];
 
-    // Master
-    if ("elmer.andrade@doctorsv.gob.sv".includes(q) || "elmer andrade".includes(q)) {
-      suggestions.push({
-        email: "elmer.andrade@doctorsv.gob.sv",
-        name: "Dr. Elmer Andrade",
-        role: "MASTER",
-        desc: "Master Admin · Control Total",
-      });
-    }
+    // Master y Jefaturas Administrativas
+    JEFATURA_ADMINISTRATIVOS.forEach((j) => {
+      const jMail = (j.correo || "").toLowerCase();
+      const jName = (j.nombre || "").toLowerCase();
+      if (jMail.includes(q) || jName.includes(q) || (q.length >= 3 && ("jefa".includes(q) || "master".includes(q)))) {
+        suggestions.push({
+          email: j.correo,
+          name: j.titulo || j.nombre,
+          role: "MASTER",
+          desc: `${j.cargo || "Jefatura de Sede"} · Control Total`,
+        });
+      }
+    });
 
     // Supervisores
     (supervisores || SUPERVISORES_OFICIALES).forEach((s) => {
