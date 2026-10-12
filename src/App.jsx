@@ -369,6 +369,18 @@ export default function App() {
     };
   }, [currentUser]);
 
+  // Vincular al médico con su supervisor/lote (nómina, puesto sentado) para ofrecerle solo los puestos de su lote
+  useEffect(() => {
+    if (currentUser?.role !== "DOCTOR" || !currentUser?.name) return;
+    const info = getDoctorSupervisorInfo({ docName: currentUser.name, rosters, supervisores, spaces });
+    const nextId = info?.supervisorId || null;
+    if (nextId && nextId !== currentUser.supervisorId) {
+      setCurrentUser((prev) =>
+        prev && prev.role === "DOCTOR" ? { ...prev, supervisorId: nextId, supervisorNombre: info.supervisorNombre || prev.supervisorNombre } : prev
+      );
+    }
+  }, [currentUser?.role, currentUser?.name, currentUser?.supervisorId, rosters, supervisores, spaces]);
+
   // Corrección reactiva: Si una jefa o personal administrativo tiene guardada o activa una sesión con rol DOCTOR, elevarla de inmediato a MASTER
   useEffect(() => {
     if (currentUser && currentUser.role !== "MASTER") {

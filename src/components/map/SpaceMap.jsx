@@ -180,6 +180,16 @@ export default function SpaceMap({
     filterSupervisor !== "TODOS"
   );
 
+  // ¿El lote del supervisor del médico aún tiene puestos libres para ofrecer?
+  const doctorLoteHasFree = useMemo(() => {
+    if (!isDoctorRole || !currentDoctorSup || !(Number(currentDoctorSup.bloqueInicio) > 0)) return false;
+    const ini = Number(currentDoctorSup.bloqueInicio);
+    const fin = Number(currentDoctorSup.bloqueFin);
+    return spaces.some(
+      (s) => Number(s.id) >= ini && Number(s.id) <= fin && !s.doctor && s.estado === "DISPONIBLE" && !isSupervisorStationSpace(s, supervisores)
+    );
+  }, [isDoctorRole, currentDoctorSup, spaces, supervisores]);
+
   function renderCubicle(id) {
     const space = spaceMap[id];
     const fallbackH = density === "compact" ? "h-[37px]" : density === "wide" ? "h-[48px]" : "h-[44px]";
@@ -204,6 +214,8 @@ export default function SpaceMap({
 
     const isSelectableForDoctor = !space.doctor && space.estado === "DISPONIBLE" && !isSupervisorStationSpace(space, supervisores);
     const isBlockedForDoctor = isDoctorRole && !isOwnSpace && !isSelectableForDoctor;
+    // Puesto libre pero fuera del lote ofertado al médico (solo cuando su lote tiene cupo)
+    const isOutsideMyLote = isDoctorRole && isSelectableForDoctor && doctorLoteHasFree && !isInMyDoctorSupLote;
 
     // Conteo / indicación de médico ocupado activo
     const effectiveStatus = getEffectiveSpaceStatus(space, attendanceRecords, supervisores);
@@ -234,9 +246,17 @@ export default function SpaceMap({
             ? "ring-2 ring-indigo-500/80 ring-offset-1 rounded-[6px] shadow-xs"
             : ""
         } ${
-          isBlockedForDoctor ? "opacity-40 grayscale-[60%] cursor-not-allowed" : ""
+          isBlockedForDoctor ? "opacity-70 cursor-not-allowed" : ""
+        } ${
+          isOutsideMyLote ? "opacity-50 saturate-50" : ""
         }`}
-        title={isBlockedForDoctor ? `Puesto ${space.estado} — No disponible para asignación` : undefined}
+        title={
+          isBlockedForDoctor
+            ? `Puesto ${space.doctor ? "OCUPADO" : space.estado} — No disponible para asignación`
+            : isOutsideMyLote
+            ? "Fuera de tu lote asignado"
+            : undefined
+        }
       >
         <ExactCubicle space={space} onClick={onSelectSpace} attendanceRecords={attendanceRecords} density={density} supervisores={supervisores} />
         {/* Indicador visual de bloqueo en modo Doctor */}
