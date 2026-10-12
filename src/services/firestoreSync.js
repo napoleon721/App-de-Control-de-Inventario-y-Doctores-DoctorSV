@@ -112,7 +112,9 @@ export function saveCloudSpaces(spaces, clientId = "", immediate = false) {
       const merged = await runTransaction(db, async (tx) => {
         const snap = await tx.get(docRef);
         const remoteList = snap.exists() && Array.isArray(snap.data()?.list) && snap.data().list.length > 0 ? snap.data().list : null;
-        const next = remoteList && spacesBaseline.size > 0 ? mergeSpacesChanges(remoteList, changed) : spaces;
+        // Sin línea base (aún no se recibió el estado de la nube) no se sobrescribe: se adopta el estado remoto
+        if (remoteList && spacesBaseline.size === 0) return remoteList;
+        const next = remoteList ? mergeSpacesChanges(remoteList, changed) : spaces;
         tx.set(docRef, {
           list: next,
           updatedBy: clientId || "anon",
