@@ -1514,7 +1514,7 @@ export default function AttendanceView({
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                   <MapPin size={13} className="text-[#0048B5]" />
-                  Lote Asignado
+                  Puesto Asignado
                 </label>
                 <div className="flex items-center gap-1">
                   {dynamicLot && (
@@ -1645,7 +1645,7 @@ export default function AttendanceView({
                 title="Todos los médicos de este lote ya tienen su cubículo asignado"
               >
                 <CheckCircle2 size={13} className="text-emerald-600" />
-                <span>✓ Lote Asignado ({totalConPuesto})</span>
+                <span>✓ Puesto Asignado ({totalConPuesto})</span>
               </div>
             ) : totalSinPuesto > 0 && puestosLibresLote === 0 ? (
               <div

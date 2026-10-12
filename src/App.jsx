@@ -51,6 +51,7 @@ import {
 import {
   subscribeToCloudSpaces,
   saveCloudSpaces,
+  setCloudSpacesMergeListener,
   subscribeToCloudBodega,
   saveCloudBodega,
   subscribeToCloudHistorial,
@@ -82,7 +83,7 @@ import {
   syncAllSupervisorSheets,
 } from "./services/googleSheetsService";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, isRelatedHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus, isMasterUser, getMasterUserInfo } from "./utils/safeHelpers";
+import { safeLower, safeStr, isSameDoctor, normalizeDocName, isSameHorario, isRelatedHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus, isMasterUser, getMasterUserInfo, dedupeDoctorSpaces, isSupervisorStationSpace } from "./utils/safeHelpers";
 
 export default function App() {
   // 1. Estado persistente en localStorage alineado a los archivos Excel oficiales
@@ -225,6 +226,8 @@ export default function App() {
   const isRemoteHorariosRef = React.useRef(false);
   const isRemoteSupervisoresRef = React.useRef(false);
   const isRemoteAttendanceRef = React.useRef(false);
+  const currentUserRef = React.useRef(null);
+  currentUserRef.current = currentUser;
   const recentlyReleasedRef = React.useRef(new Map()); // Map de spaceId -> timestamp de liberación
 
   const isInitialMountHorarios = React.useRef(true);
@@ -832,10 +835,18 @@ export default function App() {
 
   // Suscripción en tiempo real a Cloud Firestore para sincronización multi-dispositivo sin bucles
   useEffect(() => {
+    setCloudSpacesMergeListener((mergedSpaces) => {
+      setSpaces((prev) => {
+        const fullList = dedupeDoctorSpaces(ensureAllSpaces(mergedSpaces), prev, currentUserRef.current);
+        if (JSON.stringify(prev) === JSON.stringify(fullList)) return prev;
+        isRemoteSpacesRef.current = true;
+        return fullList;
+      });
+    });
     const unsubSpaces = subscribeToCloudSpaces((cloudSpaces) => {
       if (cloudSpaces && Array.isArray(cloudSpaces) && cloudSpaces.length > 0) {
         setSpaces((prev) => {
-          const fullList = ensureAllSpaces(cloudSpaces);
+          const fullList = dedupeDoctorSpaces(ensureAllSpaces(cloudSpaces), prev, currentUserRef.current);
           if (JSON.stringify(prev) === JSON.stringify(fullList)) return prev;
           isRemoteSpacesRef.current = true;
           return fullList;
@@ -931,6 +942,7 @@ export default function App() {
     }, null, myClientId.current);
 
     return () => {
+      setCloudSpacesMergeListener(null);
       if (unsubSpaces) unsubSpaces();
       if (unsubBodega) unsubBodega();
       if (unsubHistorial) unsubHistorial();
@@ -2110,6 +2122,7 @@ export default function App() {
   // Flujo exclusivo de Doctor: Asignación interactiva al hacer clic en un puesto del mapa
   function handleClaimSpace(space) {
     if (!currentUser) return;
+    if (isSupervisorStationSpace(space, supervisores)) return;
     const docName = currentUser.name;
     const shift = currentUser.shift;
     const cleanSpaceId = Number(space.id);

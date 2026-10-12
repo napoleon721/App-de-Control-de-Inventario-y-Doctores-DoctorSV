@@ -320,7 +320,7 @@ export default function SpaceDetailModal({
     const q = doctorSearch.trim().toUpperCase();
     return allDoctors.filter(
       (d) =>
-        d.nombre.includes(q) ||
+        d.nombre.toUpperCase().includes(q) ||
         (d.categoria && d.categoria.toUpperCase().includes(q))
     );
   }, [allDoctors, doctorSearch]);

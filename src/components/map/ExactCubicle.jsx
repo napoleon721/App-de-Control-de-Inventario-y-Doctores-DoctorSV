@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { Monitor, AlertTriangle, Droplets, Wrench, Lock, XCircle, User, Shield, UserX, Briefcase } from "lucide-react";
 import { isSameDoctor } from "../../utils/safeHelpers";
 
-export default function ExactCubicle({ space, onClick, attendanceRecords = null, density = "normal" }) {
+export default function ExactCubicle({ space, onClick, attendanceRecords = null, density = "normal", supervisores = [] }) {
   const fallbackH = density === "compact" ? "h-[37px]" : density === "wide" ? "h-[48px]" : "h-[44px]";
   if (!space) return <div className={`${fallbackH} w-full`} />;
 
@@ -11,7 +11,10 @@ export default function ExactCubicle({ space, onClick, attendanceRecords = null,
   const isRevisado = space.estado === "REPARACION";
   const isReservado = space.estado === "RESERVADO";
   const isIncompleto = space.estado === "INCOMPLETO";
-  const isSupervisorStation = space.categoria === "Supervisores" || [135, 136, 137, 138, 139].includes(Number(space.id));
+  const isAssignedToSupervisor = (supervisores || []).some(
+    (sup) => Number(sup.puesto) > 0 && Number(sup.puesto) === Number(space.id)
+  );
+  const isSupervisorStation = space.categoria === "Supervisores" || [135, 136, 137, 138, 139].includes(Number(space.id)) || isAssignedToSupervisor;
   const isSupervisor = (isSupervisorStation || space.categoria === "Supervisores") && space.estado !== "DISPONIBLE" && space.estado !== "VACIO";
   const isAdministrativo = space.categoria === "Administrativos" && (space.estado === "OCUPADO" || Boolean(space.doctor));
 

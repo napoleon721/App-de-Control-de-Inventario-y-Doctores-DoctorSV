@@ -1,10 +1,57 @@
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
+import { isSameDoctor } from "../utils/safeHelpers";
 
 const SEDE_ID = "san-miguel";
 
 let isFirestoreAvailable = true;
 let spacesTimer = null;
+// Última versión conocida de cada puesto en la nube (id -> JSON); permite enviar solo los puestos modificados
+const spacesBaseline = new Map();
+let onSpacesMerged = null;
+
+const isStationSpace = (s) =>
+  s?.categoria === "Supervisores" || s?.categoria === "Administrativos" || [135, 136, 137, 138, 139].includes(Number(s?.id));
+
+function updateSpacesBaseline(list) {
+  spacesBaseline.clear();
+  list.forEach((s) => spacesBaseline.set(Number(s.id), JSON.stringify(s)));
+}
+
+/**
+ * Registra un callback que recibe la lista fusionada cuando la nube tenía cambios de otros clientes al guardar
+ */
+export function setCloudSpacesMergeListener(fn) {
+  onSpacesMerged = typeof fn === "function" ? fn : null;
+}
+
+/**
+ * Aplica solo los puestos modificados por este cliente sobre la lista actual de la nube.
+ * Si un médico se asigna a un puesto, se libera cualquier otro puesto en el que la nube aún lo tuviera.
+ */
+function mergeSpacesChanges(remoteList, changed) {
+  const changedIds = new Set(changed.map((s) => Number(s.id)));
+  const byId = new Map(remoteList.map((s) => [Number(s.id), s]));
+  changed.forEach((s) => byId.set(Number(s.id), s));
+  changed.forEach((s) => {
+    if (!s.doctor || isStationSpace(s)) return;
+    byId.forEach((r, id) => {
+      if (changedIds.has(id) || isStationSpace(r) || !r.doctor || !isSameDoctor(r.doctor, s.doctor)) return;
+      byId.set(id, { ...r, doctor: null, horario: null, estado: "DISPONIBLE" });
+    });
+  });
+  const merged = [];
+  const seen = new Set();
+  remoteList.forEach((r) => {
+    const id = Number(r.id);
+    merged.push(byId.get(id));
+    seen.add(id);
+  });
+  byId.forEach((s, id) => {
+    if (!seen.has(id)) merged.push(s);
+  });
+  return merged;
+}
 let bodegaTimer = null;
 let historialTimer = null;
 
@@ -22,6 +69,7 @@ export function subscribeToCloudSpaces(onUpdate, onError, myClientId = "") {
 
         if (snapshot.exists()) {
           const data = snapshot.data();
+          if (data && Array.isArray(data.list) && data.list.length > 0) updateSpacesBaseline(data.list);
           // Si el cambio fue originado por este mismo cliente, ignorar
           if (myClientId && data?.updatedBy === myClientId) return;
 
@@ -55,15 +103,36 @@ export function saveCloudSpaces(spaces, clientId = "", immediate = false) {
   }
 
   const persist = async () => {
+    const docRef = doc(db, "sedes", SEDE_ID, "estado", "spaces");
+    const changed = spacesBaseline.size > 0
+      ? spaces.filter((s) => spacesBaseline.get(Number(s.id)) !== JSON.stringify(s))
+      : spaces;
+    if (changed.length === 0) return;
     try {
-      const docRef = doc(db, "sedes", SEDE_ID, "estado", "spaces");
-      await setDoc(docRef, {
-        list: spaces,
-        updatedBy: clientId || "anon",
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      const merged = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(docRef);
+        const remoteList = snap.exists() && Array.isArray(snap.data()?.list) && snap.data().list.length > 0 ? snap.data().list : null;
+        const next = remoteList && spacesBaseline.size > 0 ? mergeSpacesChanges(remoteList, changed) : spaces;
+        tx.set(docRef, {
+          list: next,
+          updatedBy: clientId || "anon",
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+        return next;
+      });
+      updateSpacesBaseline(merged);
+      if (onSpacesMerged && JSON.stringify(merged) !== JSON.stringify(spaces)) onSpacesMerged(merged);
     } catch (error) {
-      // Ignorar fallos transitorios de red para no interrumpir la experiencia local
+      try {
+        await setDoc(docRef, {
+          list: spaces,
+          updatedBy: clientId || "anon",
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+        updateSpacesBaseline(spaces);
+      } catch {
+        // Ignorar fallos transitorios de red para no interrumpir la experiencia local
+      }
     }
   };
 

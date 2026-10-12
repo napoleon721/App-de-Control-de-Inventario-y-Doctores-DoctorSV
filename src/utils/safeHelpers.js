@@ -411,6 +411,52 @@ export function getEffectiveSpaceStatus(space, attendanceRecords = null, supervi
 }
 
 /**
+ * Indica si un puesto es la estación física de un supervisor (no asignable a médicos).
+ */
+export function isSupervisorStationSpace(space, supervisores = []) {
+  if (!space) return false;
+  const sid = Number(space.id);
+  if (([135, 136, 137, 138, 139].includes(sid) || space.categoria === "Supervisores") && space.estado !== "DISPONIBLE") return true;
+  return (supervisores || []).some((sup) => Number(sup.puesto) > 0 && Number(sup.puesto) === sid);
+}
+
+/**
+ * Garantiza que un mismo médico ocupe un solo puesto. Si una lista remota desactualizada trae al médico
+ * en dos puestos, conserva el puesto vigente (el del usuario actual, o el que no estaba en la lista local previa)
+ * y libera los demás.
+ */
+export function dedupeDoctorSpaces(nextSpaces, prevSpaces = [], current = null) {
+  if (!Array.isArray(nextSpaces)) return nextSpaces;
+  const isStation = (s) => s.categoria === "Supervisores" || s.categoria === "Administrativos" || [135, 136, 137, 138, 139].includes(Number(s.id));
+  const groups = [];
+  nextSpaces.forEach((s) => {
+    if (!s?.doctor || isStation(s)) return;
+    const g = groups.find((x) => isSameDoctor(x.name, s.doctor));
+    if (g) g.items.push(s);
+    else groups.push({ name: s.doctor, items: [s] });
+  });
+  const toRelease = new Set();
+  groups.forEach(({ name, items }) => {
+    if (items.length < 2) return;
+    let winner = null;
+    if (current?.name && isSameDoctor(current.name, name) && current.spaceId) {
+      winner = items.find((s) => Number(s.id) === Number(current.spaceId)) || null;
+    }
+    if (!winner) {
+      const fresh = items.filter((s) => !(prevSpaces || []).some((p) => Number(p.id) === Number(s.id) && p.doctor && isSameDoctor(p.doctor, name)));
+      winner = fresh.length ? fresh[fresh.length - 1] : items[items.length - 1];
+    }
+    items.forEach((s) => { if (s !== winner) toRelease.add(Number(s.id)); });
+  });
+  if (toRelease.size === 0) return nextSpaces;
+  return nextSpaces.map((s) =>
+    toRelease.has(Number(s.id))
+      ? { ...s, doctor: null, horario: null, estado: "DISPONIBLE", marca: s.marca && s.marca !== "NO PC" ? s.marca : "DELL" }
+      : s
+  );
+}
+
+/**
  * Lista oficial de Personal Administrativo / Jefatura de Sede con privilegios de Doctor Master.
  */
 export const JEFATURA_ADMINISTRATIVOS = [

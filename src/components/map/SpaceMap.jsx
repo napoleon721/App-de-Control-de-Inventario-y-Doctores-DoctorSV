@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import ExactCubicle from "./ExactCubicle";
 import { ESTADOS, MARCAS, HORARIOS, SUPERVISORES_OFICIALES, BODEGA_TIPOS, DOCTORES_EXCEL } from "../../constants/tokens";
-import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus } from "../../utils/safeHelpers";
+import { isSameDoctor, isSameHorario, getDoctorSupervisorInfo, getEffectiveSpaceStatus, isSupervisorStationSpace } from "../../utils/safeHelpers";
 
 export default function SpaceMap({
   spaces,
@@ -202,7 +202,7 @@ export default function SpaceMap({
       Number(space.id) >= Number(currentDoctorSup.bloqueInicio) &&
       Number(space.id) <= Number(currentDoctorSup.bloqueFin);
 
-    const isSelectableForDoctor = !space.doctor && space.estado === "DISPONIBLE";
+    const isSelectableForDoctor = !space.doctor && space.estado === "DISPONIBLE" && !isSupervisorStationSpace(space, supervisores);
     const isBlockedForDoctor = isDoctorRole && !isOwnSpace && !isSelectableForDoctor;
 
     // Conteo / indicación de médico ocupado activo
@@ -238,7 +238,7 @@ export default function SpaceMap({
         }`}
         title={isBlockedForDoctor ? `Puesto ${space.estado} — No disponible para asignación` : undefined}
       >
-        <ExactCubicle space={space} onClick={onSelectSpace} attendanceRecords={attendanceRecords} density={density} />
+        <ExactCubicle space={space} onClick={onSelectSpace} attendanceRecords={attendanceRecords} density={density} supervisores={supervisores} />
         {/* Indicador visual de bloqueo en modo Doctor */}
         {isBlockedForDoctor && isMatch && (
           <div className="pointer-events-none absolute inset-0 rounded-[6px] bg-slate-900/10 flex items-end justify-center pb-0.5">

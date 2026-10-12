@@ -39,7 +39,7 @@ export default function AuthPortal({
     }
 
     if (clean === "elmer" || clean === "elmer.andrade") {
-      clean = "elmer.andrade@doctorsv.gob.sv";
+      clean = "usuario@ejemplo.com";
     }
 
     // 1. DOCTOR MASTER Y JEFATURAS ADMINISTRATIVAS
@@ -87,6 +87,18 @@ export default function AuthPortal({
 
     // 3. DOCTOR EN PADRÓN
     const docList = DOCTORES_EXCEL || [];
+    // Respaldo por tokens del correo (ej. "isaac.flores@..." -> ISAAC FLORES HERNANDEZ) cuando el correo del padrón no coincide con el nombre
+    const emailTokens = clean.includes("@")
+      ? clean.split("@")[0].split(/[._\-\s]+/).map((t) => t.replace(/\d+/g, "")).filter((t) => t.length > 1)
+      : [];
+    const tokenMatches = emailTokens.length >= 2
+      ? docList.filter((d) => {
+          const words = String(d.nombre || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/\s+/);
+          return emailTokens.every((t) => words.includes(t.normalize("NFD").replace(/[̀-ͯ]/g, "")));
+        })
+      : [];
+    const tokenMatchedDoc = tokenMatches.length === 1 ? tokenMatches[0] : null;
+
     const matchedDoc = docList.find((d) => {
       const dEmail = (d.correo || "").toLowerCase().trim();
       const dName = (d.nombre || "").toLowerCase().trim();
@@ -101,7 +113,7 @@ export default function AuthPortal({
         return true;
       }
       return false;
-    });
+    }) || tokenMatchedDoc;
 
     if (matchedDoc) {
       // Si el registro pertenece a Personal Administrativo o Jefatura, garantizar rol MASTER
@@ -295,7 +307,7 @@ export default function AuthPortal({
     // Si no ingresó correo pero puso PIN 2026, asumimos Doctor Master por defecto
     let targetEmail = cleanEmail;
     if (!targetEmail && (cleanPin === "2026" || cleanPin === "master2026")) {
-      targetEmail = "elmer.andrade@doctorsv.gob.sv";
+      targetEmail = "usuario@ejemplo.com";
     }
 
     if (!targetEmail) {
@@ -452,7 +464,7 @@ export default function AuthPortal({
                     setEmailInput(e.target.value);
                     setAuthError("");
                   }}
-                  placeholder="ej: elmer.andrade@doctorsv.gob.sv"
+                  placeholder="ej: usuario@ejemplo.com"
                   className="w-full bg-transparent text-[13.5px] font-semibold text-slate-900 outline-none placeholder:text-slate-400 placeholder:font-normal"
                   autoFocus
                 />
@@ -549,13 +561,13 @@ export default function AuthPortal({
                 <button
                   type="button"
                   onClick={() => {
-                    setEmailInput("elmer.andrade@doctorsv.gob.sv");
+                    setEmailInput("usuario@ejemplo.com");
                     setPinInput("2026");
                     setAuthError("");
                   }}
                   className="inline-flex items-center gap-1 rounded-xl bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
                 >
-                  <Shield size={12} /> Dr. Elmer Andrade (Master)
+                  <Shield size={12} /> Usuario Master (Ejemplo)
                 </button>
                 {(supervisores || SUPERVISORES_OFICIALES).slice(0, 3).map((sup) => (
                   <button
